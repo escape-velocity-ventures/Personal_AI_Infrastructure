@@ -72,6 +72,7 @@ kpis:
     target: 30
     frequency: daily
     unit: minutes
+    apple_health_id: exercise_minutes
 
   - id: steps_count
     name: Daily Steps
@@ -81,6 +82,7 @@ kpis:
     target: 8000
     frequency: daily
     unit: steps
+    apple_health_id: steps
 
   # G4: Cultivate social relationships
   - id: social_activities
@@ -148,6 +150,7 @@ kpis:
     target: 7
     frequency: daily
     unit: hours
+    apple_health_id: sleep_hours
 
 # Streak bonuses - rewards for consistency
 streaks:

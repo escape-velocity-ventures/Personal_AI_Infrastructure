@@ -1,0 +1,19 @@
+{
+  "name": "pai-unified-calendar",
+  "version": "1.0.0",
+  "description": "Unified calendar aggregation across Google, Apple, iCal feeds, and web calendars",
+  "type": "module",
+  "scripts": {
+    "calendar": "bun run src/cli/index.ts",
+    "mcp": "bun run src/mcp/server.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.71.2",
+    "ical.js": "^2.0.1",
+    "yaml": "^2.3.4"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5.0.0"
+  }
+}

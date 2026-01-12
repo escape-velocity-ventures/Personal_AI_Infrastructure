@@ -1,0 +1,19 @@
+{
+  "name": "pai-google-workspace",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "auth": "bun src/cli/auth.ts",
+    "gmail": "bun src/cli/gmail.ts",
+    "calendar": "bun src/cli/calendar.ts",
+    "drive": "bun src/cli/drive.ts",
+    "mcp": "bun src/mcp/server.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5.8.3"
+  }
+}

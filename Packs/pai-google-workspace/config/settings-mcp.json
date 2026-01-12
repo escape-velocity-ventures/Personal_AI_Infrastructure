@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "pai-google-workspace": {
+      "command": "bun",
+      "args": ["run", "$PACK_DIR/src/mcp/server.ts"],
+      "env": {
+        "PAI_DIR": "$PAI_DIR",
+        "GOOGLE_CLIENT_ID": "$GOOGLE_CLIENT_ID",
+        "GOOGLE_CLIENT_SECRET": "$GOOGLE_CLIENT_SECRET"
+      }
+    }
+  }
+}

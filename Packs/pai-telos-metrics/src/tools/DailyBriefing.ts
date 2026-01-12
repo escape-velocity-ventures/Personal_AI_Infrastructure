@@ -20,7 +20,8 @@ import {
   getProgress,
   getMetricsForDate,
   calculateStreak,
-  calculateAverage
+  calculateAverage,
+  getUniqueMachines
 } from "./MetricsLogger";
 
 // Types
@@ -201,9 +202,17 @@ export function generateBriefing(): string {
       const kpi = config.kpis.find(k => k.id === m.kpi_id);
       const name = kpi?.name || m.kpi_id;
       const note = m.note ? ` - ${m.note}` : "";
-      briefing += `- ${name}: ${m.value} ${kpi?.unit || ""}${note}\n`;
+      const machine = (m as any).machine ? ` [${(m as any).machine}]` : "";
+      briefing += `- ${name}: ${m.value} ${kpi?.unit || ""}${machine}${note}\n`;
     }
     briefing += "\n";
+  }
+
+  // Multi-machine info
+  const machines = getUniqueMachines();
+  if (machines.length > 1) {
+    briefing += `### Sync Status\n\n`;
+    briefing += `Metrics from ${machines.length} machines: ${machines.join(", ")}\n\n`;
   }
 
   // Streaks section

@@ -13,6 +13,22 @@
 import { readFileSync, appendFileSync, existsSync, mkdirSync } from "fs";
 import { parse as parseYaml } from "yaml";
 import { dirname } from "path";
+import { hostname, platform } from "os";
+import { execSync } from "child_process";
+
+/**
+ * Get machine identifier - prefers macOS LocalHostName for uniqueness
+ */
+function getMachineId(): string {
+  if (platform() === "darwin") {
+    try {
+      return execSync("scutil --get LocalHostName", { encoding: "utf-8" }).trim();
+    } catch {
+      // Fall back to hostname if scutil fails
+    }
+  }
+  return hostname();
+}
 
 // Types
 interface KpiConfig {
@@ -31,7 +47,9 @@ interface MetricEntry {
   kpi_id: string;
   value: number | boolean;
   goal_ref: string | null;
+  machine?: string;
   note?: string;
+  source?: string;
 }
 
 interface KpiConfigFile {
@@ -106,7 +124,8 @@ export function logMetric(
     timestamp: new Date().toISOString(),
     kpi_id: kpiId,
     value,
-    goal_ref: kpi.goal_ref
+    goal_ref: kpi.goal_ref,
+    machine: getMachineId()
   };
 
   if (note) {
@@ -133,6 +152,22 @@ export function getMetricsForDate(date: Date): MetricEntry[] {
   const dateStr = date.toISOString().split("T")[0];
 
   return metrics.filter(m => m.timestamp.startsWith(dateStr));
+}
+
+/**
+ * Get unique machines that have contributed metrics
+ */
+export function getUniqueMachines(): string[] {
+  const metrics = loadMetrics();
+  const machines = new Set<string>();
+
+  for (const m of metrics) {
+    if (m.machine) {
+      machines.add(m.machine);
+    }
+  }
+
+  return Array.from(machines);
 }
 
 /**

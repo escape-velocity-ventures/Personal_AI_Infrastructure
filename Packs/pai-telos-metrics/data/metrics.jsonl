@@ -1,1 +1,7 @@
 {"timestamp":"2026-01-10T17:48:48.120Z","kpi_id":"pai_commits","value":3,"goal_ref":"G2","note":"Initial pai-telos-metrics pack creation"}
+{"timestamp":"2026-01-09T12:00:00.000Z","kpi_id":"steps_count","value":8432,"goal_ref":"G3","source":"apple_health"}
+{"timestamp":"2026-01-09T12:00:00.000Z","kpi_id":"exercise_minutes","value":45,"goal_ref":"G3","source":"apple_health"}
+{"timestamp":"2026-01-09T12:00:00.000Z","kpi_id":"sleep_hours","value":7.5,"goal_ref":null,"source":"apple_health"}
+{"timestamp":"2026-01-12T07:31:37.939Z","kpi_id":"pai_commits","value":4,"goal_ref":"G2"}
+{"timestamp":"2026-01-12T07:39:01.953Z","kpi_id":"journal_entry","value":true,"goal_ref":null,"machine":"Mac","note":"Testing hostname tracking"}
+{"timestamp":"2026-01-12T07:43:54.260Z","kpi_id":"energy_level","value":7,"goal_ref":null,"machine":"MacBook-Air-L4V6F20KQ6","note":"Testing LocalHostName"}

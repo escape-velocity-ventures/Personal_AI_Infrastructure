@@ -1,6 +1,6 @@
 import { serve } from "bun";
 import type { GoogleTokens, TokenResponse } from "./types";
-import { saveTokens, getTokenPath } from "./token-manager";
+import { saveTokens, getTokenPath, fetchUserInfo } from "./token-manager";
 
 const PORT = parseInt(process.env.GOOGLE_OAUTH_PORT || "9876");
 const REDIRECT_URI = `http://localhost:${PORT}/callback`;
@@ -9,6 +9,7 @@ const SCOPES = [
   "https://www.googleapis.com/auth/gmail.modify",
   "https://www.googleapis.com/auth/calendar",
   "https://www.googleapis.com/auth/drive.readonly",
+  "https://www.googleapis.com/auth/userinfo.email", // Added for account identification
 ];
 
 export function getAuthUrl(): string {
@@ -60,16 +61,26 @@ async function exchangeCodeForTokens(code: string): Promise<GoogleTokens> {
     throw new Error("No refresh token received. Try revoking app access at https://myaccount.google.com/permissions and re-authenticating.");
   }
 
-  return {
+  const tokens: GoogleTokens = {
     access_token: data.access_token,
     refresh_token: data.refresh_token,
     expiry_date: Date.now() + data.expires_in * 1000,
     token_type: data.token_type,
     scope: data.scope,
   };
+
+  // Fetch user info to get email for account identification
+  try {
+    const userInfo = await fetchUserInfo(tokens.access_token);
+    tokens.email = userInfo.email;
+  } catch (err) {
+    console.warn("Could not fetch user email:", err);
+  }
+
+  return tokens;
 }
 
-export async function startOAuthServer(): Promise<void> {
+export async function startOAuthServer(): Promise<{ email?: string }> {
   return new Promise((resolve, reject) => {
     const server = serve({
       port: PORT,
@@ -100,16 +111,21 @@ export async function startOAuthServer(): Promise<void> {
 
           try {
             const tokens = await exchangeCodeForTokens(code);
-            saveTokens(tokens);
+            saveTokens(tokens, tokens.email);
 
             setTimeout(() => {
               server.stop();
-              resolve();
+              resolve({ email: tokens.email });
             }, 100);
+
+            const accountInfo = tokens.email
+              ? `<p>Account: <strong>${tokens.email}</strong></p>`
+              : "";
 
             return new Response(
               `<html><body>
                 <h1>Authentication Successful</h1>
+                ${accountInfo}
                 <p>Tokens saved to: ${getTokenPath()}</p>
                 <p>You can close this window.</p>
               </body></html>`,

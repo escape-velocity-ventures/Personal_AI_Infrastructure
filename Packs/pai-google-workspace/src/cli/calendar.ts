@@ -1,5 +1,5 @@
 #!/usr/bin/env bun
-import { calendar } from "../lib/google-client";
+import { calendar, forAccount } from "../lib/google-client";
 
 const command = process.argv[2];
 const args = process.argv.slice(3);
@@ -23,16 +23,23 @@ function formatDate(dateStr: string | undefined): string {
   return date.toLocaleString();
 }
 
+function getCalendarClient(account?: string) {
+  return account ? forAccount(account).calendar : calendar;
+}
+
 async function main() {
+  const parsed = parseArgs(args);
+  const account = parsed.account;
+  const cal = getCalendarClient(account);
+
   switch (command) {
     case "list": {
-      const parsed = parseArgs(args);
       const days = parseInt(parsed.days || "7", 10);
       const calendarId = parsed.calendar || "primary";
 
       console.log(`Upcoming events (next ${days} days):\n`);
 
-      const events = await calendar.listEvents(calendarId, days);
+      const events = await cal.listEvents(calendarId, days);
 
       if (events.length === 0) {
         console.log("No upcoming events.");
@@ -59,28 +66,27 @@ async function main() {
       const eventId = args[0];
 
       if (!eventId) {
-        console.error("Usage: bun run calendar get <eventId>");
+        console.error("Usage: bun run calendar get <eventId> [--account EMAIL]");
         process.exit(1);
       }
 
-      const event = await calendar.getEvent(eventId);
+      const event = await cal.getEvent(eventId);
       console.log(JSON.stringify(event, null, 2));
       break;
     }
 
     case "create": {
-      const parsed = parseArgs(args);
       const { title, start, end, description, location } = parsed;
 
       if (!title || !start || !end) {
-        console.error("Usage: bun run calendar create --title <title> --start <iso8601> --end <iso8601> [--description <desc>] [--location <loc>]");
+        console.error("Usage: bun run calendar create --title <title> --start <iso8601> --end <iso8601> [--description <desc>] [--location <loc>] [--account EMAIL]");
         console.error("");
         console.error("Example:");
         console.error('  bun run calendar create --title "Team Meeting" --start "2024-01-15T10:00:00-08:00" --end "2024-01-15T11:00:00-08:00"');
         process.exit(1);
       }
 
-      const event = await calendar.createEvent(title, start, end, {
+      const event = await cal.createEvent(title, start, end, {
         description,
         location,
       });
@@ -91,15 +97,14 @@ async function main() {
     }
 
     case "freebusy": {
-      const parsed = parseArgs(args);
       const { start, end } = parsed;
 
       if (!start || !end) {
-        console.error("Usage: bun run calendar freebusy --start <iso8601> --end <iso8601>");
+        console.error("Usage: bun run calendar freebusy --start <iso8601> --end <iso8601> [--account EMAIL]");
         process.exit(1);
       }
 
-      const result = await calendar.freeBusy(start, end);
+      const result = await cal.freeBusy(start, end);
       console.log("Free/Busy Status:");
       console.log(JSON.stringify(result, null, 2));
       break;
@@ -107,6 +112,9 @@ async function main() {
 
     default:
       console.log("Usage: bun run calendar <command> [options]");
+      console.log("");
+      console.log("Global Options:");
+      console.log("  --account EMAIL            Use specific Google account");
       console.log("");
       console.log("Commands:");
       console.log("  list [--days N] [--calendar ID]  List upcoming events");

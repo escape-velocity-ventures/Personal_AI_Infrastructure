@@ -4,6 +4,12 @@ export interface GoogleTokens {
   expiry_date: number;
   token_type: string;
   scope: string;
+  email?: string; // Account email for identification
+}
+
+export interface MultiAccountTokenStorage {
+  accounts: Record<string, GoogleTokens>;
+  defaultAccount?: string;
 }
 
 export interface OAuthConfig {
@@ -19,4 +25,11 @@ export interface TokenResponse {
   refresh_token?: string;
   scope: string;
   token_type: string;
+}
+
+export interface GoogleUserInfo {
+  id: string;
+  email: string;
+  name?: string;
+  picture?: string;
 }

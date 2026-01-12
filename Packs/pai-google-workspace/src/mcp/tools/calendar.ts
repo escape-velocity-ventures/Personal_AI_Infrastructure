@@ -1,5 +1,12 @@
-import { calendar } from "../../lib/google-client";
+import { calendar, forAccount } from "../../lib/google-client";
 import type { ToolDefinition } from "../types";
+
+const accountProperty = {
+  account: {
+    type: "string",
+    description: "Google account email to use (optional, uses default account if not specified)",
+  },
+};
 
 export const calendarTools: ToolDefinition[] = [
   {
@@ -16,6 +23,7 @@ export const calendarTools: ToolDefinition[] = [
           type: "string",
           description: "Calendar ID (default: 'primary')",
         },
+        ...accountProperty,
       },
     },
   },
@@ -33,6 +41,7 @@ export const calendarTools: ToolDefinition[] = [
           type: "string",
           description: "Calendar ID (default: 'primary')",
         },
+        ...accountProperty,
       },
       required: ["eventId"],
     },
@@ -67,6 +76,7 @@ export const calendarTools: ToolDefinition[] = [
           type: "string",
           description: "Calendar ID (default: 'primary')",
         },
+        ...accountProperty,
       },
       required: ["summary", "start", "end"],
     },
@@ -90,22 +100,30 @@ export const calendarTools: ToolDefinition[] = [
           items: { type: "string" },
           description: "Calendar IDs to check (default: ['primary'])",
         },
+        ...accountProperty,
       },
       required: ["start", "end"],
     },
   },
 ];
 
+function getCalendarClient(account?: string) {
+  return account ? forAccount(account).calendar : calendar;
+}
+
 export async function handleCalendarTool(
   name: string,
   args: Record<string, unknown>
 ): Promise<unknown> {
+  const account = args.account as string | undefined;
+  const cal = getCalendarClient(account);
+
   switch (name) {
     case "calendar_list": {
       const days = (args.days as number) || 7;
       const calendarId = (args.calendarId as string) || "primary";
 
-      const events = await calendar.listEvents(calendarId, days);
+      const events = await cal.listEvents(calendarId, days);
 
       return events.map((event) => ({
         id: event.id,
@@ -120,7 +138,7 @@ export async function handleCalendarTool(
       const eventId = args.eventId as string;
       const calendarId = (args.calendarId as string) || "primary";
 
-      return calendar.getEvent(eventId, calendarId);
+      return cal.getEvent(eventId, calendarId);
     }
 
     case "calendar_create": {
@@ -131,7 +149,7 @@ export async function handleCalendarTool(
       const location = args.location as string | undefined;
       const calendarId = args.calendarId as string | undefined;
 
-      const event = await calendar.createEvent(summary, start, end, {
+      const event = await cal.createEvent(summary, start, end, {
         description,
         location,
         calendarId,
@@ -145,7 +163,7 @@ export async function handleCalendarTool(
       const end = args.end as string;
       const calendarIds = (args.calendarIds as string[]) || ["primary"];
 
-      const result = await calendar.freeBusy(start, end, calendarIds);
+      const result = await cal.freeBusy(start, end, calendarIds);
 
       // Transform to more readable format
       const busySlots: Record<string, { start: string; end: string }[]> = {};

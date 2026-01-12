@@ -1,5 +1,12 @@
-import { drive } from "../../lib/google-client";
+import { drive, forAccount } from "../../lib/google-client";
 import type { ToolDefinition } from "../types";
+
+const accountProperty = {
+  account: {
+    type: "string",
+    description: "Google account email to use (optional, uses default account if not specified)",
+  },
+};
 
 export const driveTools: ToolDefinition[] = [
   {
@@ -16,6 +23,7 @@ export const driveTools: ToolDefinition[] = [
           type: "number",
           description: "Maximum number of results (default: 20)",
         },
+        ...accountProperty,
       },
     },
   },
@@ -33,6 +41,7 @@ export const driveTools: ToolDefinition[] = [
           type: "number",
           description: "Maximum number of results (default: 20)",
         },
+        ...accountProperty,
       },
       required: ["query"],
     },
@@ -47,6 +56,7 @@ export const driveTools: ToolDefinition[] = [
           type: "string",
           description: "The file ID",
         },
+        ...accountProperty,
       },
       required: ["fileId"],
     },
@@ -61,6 +71,7 @@ export const driveTools: ToolDefinition[] = [
           type: "string",
           description: "The file ID",
         },
+        ...accountProperty,
       },
       required: ["fileId"],
     },
@@ -76,16 +87,23 @@ function formatFileSize(bytes: string | undefined): string {
   return `${(size / (1024 * 1024 * 1024)).toFixed(1)} GB`;
 }
 
+function getDriveClient(account?: string) {
+  return account ? forAccount(account).drive : drive;
+}
+
 export async function handleDriveTool(
   name: string,
   args: Record<string, unknown>
 ): Promise<unknown> {
+  const account = args.account as string | undefined;
+  const drv = getDriveClient(account);
+
   switch (name) {
     case "drive_list": {
       const folderId = args.folderId as string | undefined;
       const maxResults = (args.maxResults as number) || 20;
 
-      const files = await drive.listFiles(folderId, maxResults);
+      const files = await drv.listFiles(folderId, maxResults);
 
       return files.map((file) => ({
         id: file.id,
@@ -100,7 +118,7 @@ export async function handleDriveTool(
       const query = args.query as string;
       const maxResults = (args.maxResults as number) || 20;
 
-      const files = await drive.search(query, maxResults);
+      const files = await drv.search(query, maxResults);
 
       return files.map((file) => ({
         id: file.id,
@@ -112,12 +130,12 @@ export async function handleDriveTool(
 
     case "drive_get": {
       const fileId = args.fileId as string;
-      return drive.getFile(fileId);
+      return drv.getFile(fileId);
     }
 
     case "drive_read": {
       const fileId = args.fileId as string;
-      const content = await drive.readContent(fileId);
+      const content = await drv.readContent(fileId);
       return { content };
     }
 

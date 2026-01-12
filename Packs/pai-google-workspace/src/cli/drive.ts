@@ -1,5 +1,5 @@
 #!/usr/bin/env bun
-import { drive } from "../lib/google-client";
+import { drive, forAccount } from "../lib/google-client";
 
 const command = process.argv[2];
 const args = process.argv.slice(3);
@@ -40,16 +40,23 @@ function formatMimeType(mimeType: string): string {
   return mimeMap[mimeType] || mimeType.split("/").pop() || "File";
 }
 
+function getDriveClient(account?: string) {
+  return account ? forAccount(account).drive : drive;
+}
+
 async function main() {
+  const parsed = parseArgs(args);
+  const account = parsed.account;
+  const drv = getDriveClient(account);
+
   switch (command) {
     case "list": {
-      const parsed = parseArgs(args);
       const folderId = parsed.folder;
       const maxResults = parseInt(parsed.max || "20", 10);
 
       console.log(folderId ? `Files in folder: ${folderId}\n` : "Recent files:\n");
 
-      const files = await drive.listFiles(folderId, maxResults);
+      const files = await drv.listFiles(folderId, maxResults);
 
       if (files.length === 0) {
         console.log("No files found.");
@@ -73,13 +80,13 @@ async function main() {
       const query = args[0];
 
       if (!query) {
-        console.error("Usage: bun run drive search <query>");
+        console.error("Usage: bun run drive search <query> [--account EMAIL]");
         process.exit(1);
       }
 
       console.log(`Searching for: "${query}"\n`);
 
-      const files = await drive.search(query);
+      const files = await drv.search(query);
 
       if (files.length === 0) {
         console.log("No files found.");
@@ -100,11 +107,11 @@ async function main() {
       const fileId = args[0];
 
       if (!fileId) {
-        console.error("Usage: bun run drive get <fileId>");
+        console.error("Usage: bun run drive get <fileId> [--account EMAIL]");
         process.exit(1);
       }
 
-      const file = await drive.getFile(fileId);
+      const file = await drv.getFile(fileId);
       console.log(JSON.stringify(file, null, 2));
       break;
     }
@@ -113,17 +120,20 @@ async function main() {
       const fileId = args[0];
 
       if (!fileId) {
-        console.error("Usage: bun run drive read <fileId>");
+        console.error("Usage: bun run drive read <fileId> [--account EMAIL]");
         process.exit(1);
       }
 
-      const content = await drive.readContent(fileId);
+      const content = await drv.readContent(fileId);
       console.log(content);
       break;
     }
 
     default:
       console.log("Usage: bun run drive <command> [options]");
+      console.log("");
+      console.log("Global Options:");
+      console.log("  --account EMAIL           Use specific Google account");
       console.log("");
       console.log("Commands:");
       console.log("  list [--folder ID] [--max N]  List files");

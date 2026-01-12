@@ -1,5 +1,12 @@
-import { gmail } from "../../lib/google-client";
+import { gmail, forAccount } from "../../lib/google-client";
 import type { ToolDefinition } from "../types";
+
+const accountProperty = {
+  account: {
+    type: "string",
+    description: "Google account email to use (optional, uses default account if not specified)",
+  },
+};
 
 export const gmailTools: ToolDefinition[] = [
   {
@@ -16,6 +23,7 @@ export const gmailTools: ToolDefinition[] = [
           type: "number",
           description: "Maximum number of results (default: 10)",
         },
+        ...accountProperty,
       },
       required: ["query"],
     },
@@ -30,6 +38,7 @@ export const gmailTools: ToolDefinition[] = [
           type: "string",
           description: "The Gmail message ID",
         },
+        ...accountProperty,
       },
       required: ["messageId"],
     },
@@ -52,6 +61,7 @@ export const gmailTools: ToolDefinition[] = [
           type: "string",
           description: "Email body (plain text)",
         },
+        ...accountProperty,
       },
       required: ["to", "subject", "body"],
     },
@@ -61,7 +71,9 @@ export const gmailTools: ToolDefinition[] = [
     description: "List all Gmail labels",
     inputSchema: {
       type: "object",
-      properties: {},
+      properties: {
+        ...accountProperty,
+      },
     },
   },
 ];
@@ -94,21 +106,28 @@ function extractBody(payload: {
   return "";
 }
 
+function getGmailClient(account?: string) {
+  return account ? forAccount(account).gmail : gmail;
+}
+
 export async function handleGmailTool(
   name: string,
   args: Record<string, unknown>
 ): Promise<unknown> {
+  const account = args.account as string | undefined;
+  const gm = getGmailClient(account);
+
   switch (name) {
     case "gmail_search": {
       const query = args.query as string;
       const maxResults = (args.maxResults as number) || 10;
 
-      const messages = await gmail.search(query, maxResults);
+      const messages = await gm.search(query, maxResults);
 
       // Fetch snippets for each message
       const results = await Promise.all(
         messages.map(async (msg) => {
-          const full = await gmail.getMessage(msg.id);
+          const full = await gm.getMessage(msg.id);
           const headers = full.payload.headers;
           const from = headers.find((h) => h.name === "From")?.value || "";
           const subject = headers.find((h) => h.name === "Subject")?.value || "";
@@ -129,7 +148,7 @@ export async function handleGmailTool(
 
     case "gmail_read": {
       const messageId = args.messageId as string;
-      const message = await gmail.getMessage(messageId);
+      const message = await gm.getMessage(messageId);
 
       const headers = message.payload.headers;
       const from = headers.find((h) => h.name === "From")?.value || "";
@@ -154,12 +173,12 @@ export async function handleGmailTool(
       const subject = args.subject as string;
       const body = args.body as string;
 
-      const result = await gmail.send(to, subject, body);
+      const result = await gm.send(to, subject, body);
       return { success: true, messageId: result.id };
     }
 
     case "gmail_labels": {
-      const labels = await gmail.listLabels();
+      const labels = await gm.listLabels();
       return labels.map((l) => ({ id: l.id, name: l.name, type: l.type }));
     }
 

@@ -1,10 +1,33 @@
 #!/usr/bin/env bun
 import { getAuthUrl, startOAuthServer } from "../auth/oauth-server";
-import { loadTokens, deleteTokens, getTokenPath } from "../auth/token-manager";
+import {
+  loadTokens,
+  deleteTokens,
+  getTokenPath,
+  listAccounts,
+  setDefaultAccount,
+  getDefaultAccount,
+} from "../auth/token-manager";
 
 const command = process.argv[2];
+const args = process.argv.slice(3);
+
+function parseArgs(args: string[]): Record<string, string> {
+  const result: Record<string, string> = {};
+  for (let i = 0; i < args.length; i++) {
+    if (args[i].startsWith("--")) {
+      const key = args[i].slice(2);
+      const value = args[i + 1] || "";
+      result[key] = value;
+      i++;
+    }
+  }
+  return result;
+}
 
 async function main() {
+  const parsed = parseArgs(args);
+
   switch (command) {
     case "login": {
       const clientId = process.env.GOOGLE_CLIENT_ID;
@@ -27,16 +50,21 @@ async function main() {
       spawn("open", [authUrl], { detached: true });
 
       // Wait for OAuth callback
-      await startOAuthServer();
+      const result = await startOAuthServer();
       console.log("\nAuthentication successful!");
+      if (result.email) {
+        console.log(`Account: ${result.email}`);
+      }
       console.log(`Tokens saved to: ${getTokenPath()}`);
       break;
     }
 
     case "status": {
-      const tokens = loadTokens();
+      const account = parsed.account;
+      const tokens = loadTokens(account);
+
       if (!tokens) {
-        console.log("Not authenticated.");
+        console.log(account ? `Account not found: ${account}` : "Not authenticated.");
         console.log("Run: bun run auth login");
         process.exit(1);
       }
@@ -47,25 +75,73 @@ async function main() {
       console.log("Authentication Status");
       console.log("─".repeat(40));
       console.log(`Token file: ${getTokenPath()}`);
+      if (tokens.email) {
+        console.log(`Account: ${tokens.email}`);
+      }
       console.log(`Scopes: ${tokens.scope}`);
       console.log(`Expires: ${expiry.toLocaleString()}`);
       console.log(`Status: ${isExpired ? "EXPIRED (will auto-refresh)" : "Valid"}`);
       break;
     }
 
+    case "accounts": {
+      const accounts = listAccounts();
+
+      if (accounts.length === 0) {
+        console.log("No accounts configured.");
+        console.log("Run: bun run auth login");
+        return;
+      }
+
+      console.log("Configured Accounts");
+      console.log("─".repeat(40));
+      for (const acc of accounts) {
+        const marker = acc.isDefault ? " (default)" : "";
+        console.log(`  ${acc.email}${marker}`);
+      }
+      break;
+    }
+
+    case "default": {
+      const account = args[0];
+
+      if (!account) {
+        const current = getDefaultAccount();
+        if (current) {
+          console.log(`Default account: ${current}`);
+        } else {
+          console.log("No default account set.");
+        }
+        return;
+      }
+
+      setDefaultAccount(account);
+      console.log(`Default account set to: ${account}`);
+      break;
+    }
+
     case "logout": {
-      deleteTokens();
-      console.log("Tokens deleted. You are now logged out.");
+      const account = parsed.account;
+
+      if (account) {
+        deleteTokens(account);
+        console.log(`Account removed: ${account}`);
+      } else {
+        deleteTokens();
+        console.log("All accounts removed. You are now logged out.");
+      }
       break;
     }
 
     default:
-      console.log("Usage: bun run auth <command>");
+      console.log("Usage: bun run auth <command> [options]");
       console.log("");
       console.log("Commands:");
-      console.log("  login   Authenticate with Google");
-      console.log("  status  Check authentication status");
-      console.log("  logout  Remove stored tokens");
+      console.log("  login                     Authenticate with Google (add another account)");
+      console.log("  status [--account EMAIL]  Check authentication status");
+      console.log("  accounts                  List all configured accounts");
+      console.log("  default [EMAIL]           Get or set default account");
+      console.log("  logout [--account EMAIL]  Remove account (or all if no account specified)");
       break;
   }
 }

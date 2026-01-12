@@ -16,7 +16,7 @@ const agentSessions = new Map<string, string>();
 const sessionTodos = new Map<string, any[]>();
 
 function getTodayEventsFile(): string {
-  const paiDir = process.env.PAI_DIR || join(homedir(), '.config', 'pai');
+  const paiDir = process.env.PAI_DIR || join(homedir(), '.claude');
   const now = new Date();
   const tz = process.env.TIME_ZONE || Intl.DateTimeFormat().resolvedOptions().timeZone;
 
@@ -90,6 +90,26 @@ function processTodoEvent(event: HookEvent): HookEvent[] {
   return events;
 }
 
+function normalizeEvent(rawEvent: any): HookEvent {
+  // Normalize raw JSONL events to HookEvent interface
+  // Raw format: { timestamp, event, tool, agent, data }
+  // Expected format: { source_app, session_id, hook_event_type, payload, ... }
+
+  return {
+    source_app: rawEvent.source_app || rawEvent.agent || 'unknown',
+    session_id: rawEvent.session_id || 'unknown',
+    hook_event_type: rawEvent.hook_event_type || rawEvent.event || 'unknown',
+    payload: rawEvent.payload || {
+      tool_name: rawEvent.tool || rawEvent.data?.tool_name,
+      tool_input: rawEvent.data?.tool_input,
+      ...rawEvent.data
+    },
+    timestamp: rawEvent.timestamp ? new Date(rawEvent.timestamp).getTime() : Date.now(),
+    agent_name: rawEvent.agent_name || rawEvent.agent,
+    summary: rawEvent.summary
+  };
+}
+
 function readNewEvents(filePath: string): HookEvent[] {
   if (!existsSync(filePath)) return [];
 
@@ -109,7 +129,8 @@ function readNewEvents(filePath: string): HookEvent[] {
       if (!line.trim()) continue;
 
       try {
-        let event = JSON.parse(line);
+        const rawEvent = JSON.parse(line);
+        let event = normalizeEvent(rawEvent);
         event.id = events.length + newEvents.length + 1;
         event = enrichEventWithAgentName(event);
         const processedEvents = processTodoEvent(event);
@@ -147,7 +168,7 @@ function storeEvents(newEvents: HookEvent[]): void {
 }
 
 function loadAgentSessions(): void {
-  const paiDir = process.env.PAI_DIR || join(homedir(), '.config', 'pai');
+  const paiDir = process.env.PAI_DIR || join(homedir(), '.claude');
   const sessionsFile = join(paiDir, 'agent-sessions.json');
 
   if (!existsSync(sessionsFile)) {
@@ -171,7 +192,7 @@ function loadAgentSessions(): void {
 }
 
 function watchAgentSessions(): void {
-  const paiDir = process.env.PAI_DIR || join(homedir(), '.config', 'pai');
+  const paiDir = process.env.PAI_DIR || join(homedir(), '.claude');
   const sessionsFile = join(paiDir, 'agent-sessions.json');
 
   if (!existsSync(sessionsFile)) return;
@@ -217,7 +238,7 @@ function watchFile(filePath: string): void {
 }
 
 export function startFileIngestion(callback?: (events: HookEvent[]) => void): void {
-  const paiDir = process.env.PAI_DIR || join(homedir(), '.config', 'pai');
+  const paiDir = process.env.PAI_DIR || join(homedir(), '.claude');
 
   console.log('🚀 Starting file-based event streaming (in-memory only)');
   console.log(`📂 Reading from ${paiDir}/history/raw-outputs/`);

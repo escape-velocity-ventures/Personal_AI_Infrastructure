@@ -408,49 +408,6 @@ const requestCounts = new Map<string, { count: number; resetTime: number }>();
 const RATE_LIMIT = 10;
 const RATE_WINDOW = 60000; // 1 minute
 
-// Deduplication - prevent same message from playing twice
-const recentMessages = new Map<string, number>(); // message hash -> timestamp
-const pendingMessages = new Set<string>(); // messages currently being processed
-const DEDUPE_WINDOW = 5000; // 5 seconds
-
-function createMessageHash(message: string): string {
-  // Normalize message for comparison (lowercase, trim, remove emotional markers)
-  return message.toLowerCase().trim().replace(/\[.*?\]/g, '').trim();
-}
-
-function isDuplicate(message: string): boolean {
-  const hash = createMessageHash(message);
-  const now = Date.now();
-
-  // ATOMIC TEST-AND-SET: First, try to claim this message
-  // If already in pending or recent, it's a duplicate
-  const wasPending = pendingMessages.has(hash);
-  const lastSent = recentMessages.get(hash);
-  const wasRecent = lastSent && (now - lastSent < DEDUPE_WINDOW);
-
-  // Always set immediately to block any concurrent requests that arrive after this point
-  pendingMessages.add(hash);
-  recentMessages.set(hash, now);
-
-  if (wasPending || wasRecent) {
-    return true;
-  }
-
-  // Clean up old entries
-  for (const [key, timestamp] of recentMessages) {
-    if (now - timestamp > DEDUPE_WINDOW) {
-      recentMessages.delete(key);
-    }
-  }
-
-  return false;
-}
-
-function markMessageComplete(message: string): void {
-  const hash = createMessageHash(message);
-  pendingMessages.delete(hash);
-}
-
 function checkRateLimit(ip: string): boolean {
   const now = Date.now();
   const record = requestCounts.get(ip);
@@ -503,33 +460,15 @@ const server = serve({
         const title = data.title || "PAI Notification";
         const message = data.message || "Task completed";
         const voiceEnabled = data.voice_enabled !== false;
-
-        // Resolve voice_id: use explicit voice_id, or look up from voice_name
-        let voiceId = data.voice_id || null;
-        if (!voiceId && data.voice_name) {
-          const config = getVoiceConfig(data.voice_name);
-          voiceId = config?.voice_id || null;
-        }
+        const voiceId = data.voice_id || data.voice_name || null;
 
         if (voiceId && typeof voiceId !== 'string') {
           throw new Error('Invalid voice_id');
         }
 
-        // Check for duplicate messages
-        if (isDuplicate(message)) {
-          return new Response(
-            JSON.stringify({ status: "skipped", message: "Duplicate message" }),
-            {
-              headers: { ...corsHeaders, "Content-Type": "application/json" },
-              status: 200
-            }
-          );
-        }
-
         console.log(`📨 Notification: "${title}" - "${message}" (voice: ${voiceEnabled}, voiceId: ${voiceId || DEFAULT_VOICE_ID})`);
 
         await sendNotification(title, message, voiceEnabled, voiceId);
-        markMessageComplete(message);
 
         return new Response(
           JSON.stringify({ status: "success", message: "Notification sent" }),
@@ -557,21 +496,9 @@ const server = serve({
         const title = data.title || "PAI Assistant";
         const message = data.message || "Task completed";
 
-        // Check for duplicate messages
-        if (isDuplicate(message)) {
-          return new Response(
-            JSON.stringify({ status: "skipped", message: "Duplicate message" }),
-            {
-              headers: { ...corsHeaders, "Content-Type": "application/json" },
-              status: 200
-            }
-          );
-        }
-
         console.log(`🤖 PAI notification: "${title}" - "${message}"`);
 
         await sendNotification(title, message, true, null);
-        markMessageComplete(message);
 
         return new Response(
           JSON.stringify({ status: "success", message: "PAI notification sent" }),

@@ -4,10 +4,14 @@
  *
  * Exposes Apple MCP tools over HTTP for K8s cluster access.
  * Runs on Mac Mini nodes and serves Calendar, Reminders, Contacts, Notes tools.
+ * Also handles Apple Health data ingestion from Health Auto Export app.
  */
 
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
+import { appendFileSync, existsSync, readFileSync, mkdirSync } from 'fs';
+import { dirname, join } from 'path';
+import { parse as parseYaml } from 'yaml';
 
 // Import all modules
 import * as calendar from './calendar/index.js';
@@ -15,10 +19,222 @@ import * as reminders from './reminders/index.js';
 import * as contacts from './contacts/index.js';
 import * as notes from './notes/index.js';
 
+// Health data configuration
+const TELOS_METRICS_PATH = process.env.TELOS_METRICS_PATH ||
+  join(dirname(dirname(dirname(import.meta.path))), 'pai-telos-metrics', 'data', 'metrics.jsonl');
+
+const TELOS_CONFIG_PATH = process.env.TELOS_CONFIG_PATH ||
+  join(dirname(dirname(dirname(import.meta.path))), 'pai-telos-metrics', 'data', 'kpi-config.yaml');
+
+// Map Health Auto Export metric names to our KPI IDs
+const HEALTH_METRIC_MAP: Record<string, { kpiId: string; goalRef: string | null }> = {
+  'step_count': { kpiId: 'steps_count', goalRef: 'G3' },
+  'step count': { kpiId: 'steps_count', goalRef: 'G3' },
+  'steps': { kpiId: 'steps_count', goalRef: 'G3' },
+  'exercise_time': { kpiId: 'exercise_minutes', goalRef: 'G3' },
+  'exercise time': { kpiId: 'exercise_minutes', goalRef: 'G3' },
+  'apple_exercise_time': { kpiId: 'exercise_minutes', goalRef: 'G3' },
+  'apple exercise time': { kpiId: 'exercise_minutes', goalRef: 'G3' },
+  'sleep_analysis': { kpiId: 'sleep_hours', goalRef: null },
+  'sleep analysis': { kpiId: 'sleep_hours', goalRef: null },
+  'sleep': { kpiId: 'sleep_hours', goalRef: null },
+};
+
+interface HealthMetricData {
+  qty?: number;
+  value?: number;
+  totalSleep?: number;
+  date: string;
+}
+
+interface HealthMetric {
+  name: string;
+  units: string;
+  data: HealthMetricData[];
+}
+
+interface HealthAutoExportPayload {
+  data: {
+    metrics?: HealthMetric[];
+    workouts?: unknown[];
+  };
+}
+
+interface MetricEntry {
+  timestamp: string;
+  kpi_id: string;
+  value: number;
+  goal_ref: string | null;
+  source: string;
+  note?: string;
+}
+
 const app = new Hono();
 
 // Enable CORS for internal cluster access
 app.use('*', cors());
+
+// ============================================================================
+// Health Data Ingestion (from Health Auto Export app)
+// ============================================================================
+
+/**
+ * Load existing metrics to check for duplicates
+ */
+function loadExistingMetrics(): MetricEntry[] {
+  if (!existsSync(TELOS_METRICS_PATH)) {
+    return [];
+  }
+  const content = readFileSync(TELOS_METRICS_PATH, 'utf-8');
+  return content
+    .split('\n')
+    .filter((line) => line.trim())
+    .map((line) => JSON.parse(line) as MetricEntry);
+}
+
+/**
+ * Check if a metric already exists for given date, KPI, and source
+ */
+function metricExists(metrics: MetricEntry[], date: string, kpiId: string): boolean {
+  return metrics.some(
+    (m) => m.timestamp.startsWith(date) && m.kpi_id === kpiId && m.source === 'health_auto_export'
+  );
+}
+
+/**
+ * Parse date from Health Auto Export format
+ * Format: "2025-01-15 10:30:00 +0000" or "2025-01-15"
+ */
+function parseHealthDate(dateStr: string): string {
+  // Extract just the date portion (YYYY-MM-DD)
+  const match = dateStr.match(/(\d{4}-\d{2}-\d{2})/);
+  return match ? match[1] : dateStr.split(' ')[0];
+}
+
+/**
+ * Extract value from Health Auto Export data point
+ */
+function extractValue(dataPoint: HealthMetricData, metricName: string): number | null {
+  // Sleep uses totalSleep field
+  if (metricName.toLowerCase().includes('sleep')) {
+    return dataPoint.totalSleep ?? dataPoint.qty ?? dataPoint.value ?? null;
+  }
+  // Other metrics use qty or value
+  return dataPoint.qty ?? dataPoint.value ?? null;
+}
+
+/**
+ * POST /health/ingest
+ * Receives health data from Health Auto Export app
+ */
+app.post('/health/ingest', async (c) => {
+  try {
+    const payload = await c.req.json() as HealthAutoExportPayload;
+
+    if (!payload.data?.metrics || !Array.isArray(payload.data.metrics)) {
+      return c.json({ error: 'Invalid payload: expected data.metrics array' }, 400);
+    }
+
+    // Ensure metrics directory exists
+    const metricsDir = dirname(TELOS_METRICS_PATH);
+    if (!existsSync(metricsDir)) {
+      mkdirSync(metricsDir, { recursive: true });
+    }
+
+    const existingMetrics = loadExistingMetrics();
+    const results: { imported: number; skipped: number; errors: string[] } = {
+      imported: 0,
+      skipped: 0,
+      errors: [],
+    };
+
+    for (const metric of payload.data.metrics) {
+      const metricNameLower = metric.name.toLowerCase().replace(/-/g, '_');
+      const mapping = HEALTH_METRIC_MAP[metricNameLower];
+
+      if (!mapping) {
+        // Skip unknown metrics silently (Health Auto Export sends many)
+        continue;
+      }
+
+      for (const dataPoint of metric.data) {
+        const date = parseHealthDate(dataPoint.date);
+        const value = extractValue(dataPoint, metric.name);
+
+        if (value === null) {
+          results.errors.push(`No value found for ${metric.name} on ${date}`);
+          continue;
+        }
+
+        // Check for existing entry
+        if (metricExists(existingMetrics, date, mapping.kpiId)) {
+          results.skipped++;
+          continue;
+        }
+
+        // Create metric entry
+        const entry: MetricEntry = {
+          timestamp: `${date}T12:00:00.000Z`,
+          kpi_id: mapping.kpiId,
+          value,
+          goal_ref: mapping.goalRef,
+          source: 'health_auto_export',
+        };
+
+        // Append to metrics file
+        appendFileSync(TELOS_METRICS_PATH, JSON.stringify(entry) + '\n');
+        results.imported++;
+
+        // Add to existing metrics for duplicate detection within same request
+        existingMetrics.push(entry);
+      }
+    }
+
+    console.log(`[Health Ingest] Imported: ${results.imported}, Skipped: ${results.skipped}`);
+
+    return c.json({
+      status: 'ok',
+      imported: results.imported,
+      skipped: results.skipped,
+      errors: results.errors.length > 0 ? results.errors : undefined,
+    });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error('[Health Ingest] Error:', message);
+    return c.json({ error: message }, 500);
+  }
+});
+
+/**
+ * GET /health/ingest/status
+ * Shows health ingestion configuration status
+ */
+app.get('/health/ingest/status', (c) => {
+  const metricsExists = existsSync(TELOS_METRICS_PATH);
+  const configExists = existsSync(TELOS_CONFIG_PATH);
+
+  let lastHealthEntry: MetricEntry | null = null;
+  if (metricsExists) {
+    const metrics = loadExistingMetrics();
+    const healthMetrics = metrics
+      .filter((m) => m.source === 'health_auto_export')
+      .sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+    lastHealthEntry = healthMetrics[0] || null;
+  }
+
+  return c.json({
+    status: 'configured',
+    metricsPath: TELOS_METRICS_PATH,
+    metricsFileExists: metricsExists,
+    configFileExists: configExists,
+    lastHealthEntry,
+    supportedMetrics: Object.keys(HEALTH_METRIC_MAP),
+  });
+});
+
+// ============================================================================
+// Apple MCP Tools
+// ============================================================================
 
 // Health check
 app.get('/health', (c) => c.json({ status: 'ok' }));
@@ -200,9 +416,13 @@ console.log('');
 console.log(`Listening on port ${port}`);
 console.log('');
 console.log('Endpoints:');
-console.log(`  GET  /health - Health check`);
-console.log(`  GET  /tools  - List available tools`);
-console.log(`  POST /call   - Call a tool`);
+console.log(`  GET  /health              - Health check`);
+console.log(`  GET  /tools               - List available tools`);
+console.log(`  POST /call                - Call a tool`);
+console.log(`  POST /health/ingest       - Receive Apple Health data`);
+console.log(`  GET  /health/ingest/status - Health ingestion status`);
+console.log('');
+console.log(`Metrics path: ${TELOS_METRICS_PATH}`);
 
 export default {
   port,

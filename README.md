@@ -22,6 +22,7 @@
 ![License](https://img.shields.io/github/license/danielmiessler/PAI?style=flat&color=22C55E)
 
 <!-- Content Badges -->
+[![Get Started](https://img.shields.io/badge/🚀_Get_Started-Quick_Install-22C55E?style=flat)](#-quick-start)
 [![Packs](https://img.shields.io/badge/📦_Packs-10-8B5CF6?style=flat)](Packs/)
 [![Bundles](https://img.shields.io/badge/🎁_Bundles-1-F97316?style=flat)](Bundles/)
 [![Contributors](https://img.shields.io/github/contributors/danielmiessler/PAI?style=flat&logo=githubsponsors&logoColor=white&label=Contributors&color=EC4899)](https://github.com/danielmiessler/PAI/graphs/contributors)
@@ -34,7 +35,7 @@
 
 <br/>
 
-**Getting Started:** [AI-First Install](#-this-readme-is-for-your-ai-assistant) · [What is PAI?](#what-is-pai) · [New to This?](#wait-hold-onassume-im-new-to-all-this) · [The Algorithm](#the-algorithm) · [Principles](#the-15-pai-principles) · [Primitives](#pai-primitives)
+**Getting Started:** [AI-First Install](#-this-readme-is-for-your-ai-assistant) · [What is PAI?](#what-is-pai) · [New to This?](#wait-hold-onassume-im-new-to-all-this) · [The Algorithm](#the-algorithm-the-centerpiece) · [Principles](#the-pai-principles) · [Primitives](#pai-primitives)
 
 **Installation:** [Packs & Bundles](#packs--bundles) · [How AI Install Works](#how-ai-installation-works) · [Browse Packs](#-available-packs) · [Browse Bundles](#-available-bundles) · [Quick Start](#-quick-start)
 
@@ -54,47 +55,49 @@
 
 </div>
 
-The most powerful AI systems are being built inside companies for companies. The richest people and the biggest corporations are getting AI that knows their goals, learns from their history, and gets better at helping them over time.
+The most powerful AI systems are being built inside companies for companies. The richest people and the biggest corporations are getting AI that learns from every interaction and gets better at helping them over time.
 
 **Everyone deserves that.**
 
-PAI exists to democratize access to world-class AI infrastructure. Not a chatbot. Not a generic assistant. A [*system* that helps you become your best self](https://danielmiessler.com/blog/personal-ai-maturity-model)—one that understands your goals, remembers your context, and improves at helping *you* specifically.
+PAI exists to democratize access to **self-learning AI infrastructure**. Not a chatbot that forgets everything. Not a generic assistant that starts fresh each time. A [*system* that improves itself](https://danielmiessler.com/blog/personal-ai-maturity-model)—one that captures feedback from every interaction, learns from mistakes, and gets better at helping *you* specifically.
+
+**The North Star: Euphoric Surprise.** PAI pursues a singular goal—creating *Euphoric Surprise* in how it executes every task. Not just completion, but results so thorough, thoughtful, and effective that you're genuinely surprised and delighted. This is how PAI helps you become the best version of yourself: by consistently exceeding expectations in service of your goals. The [Personal AI Maturity Model](https://danielmiessler.com/blog/personal-ai-maturity-model) shows where this path leads—from basic chatbots to a true AI companion.
 
 This is open-source. This is free. This is for everyone.
 
+**Who is PAI for?**
+- **Developers** using AI coding assistants who want persistent memory and custom workflows
+- **Power users** who want their AI to know their goals, preferences, and context
+- **Teams** building shared AI infrastructure with consistent capabilities
+- **Experimenters** interested in AI system design and personal AI patterns
+
 ---
 
-**What makes PAI powerful technically:** It's built on a universal algorithm (Current → Ideal via verifiable iteration) that works at every scale—from fixing a typo to building a company to figuring out what to do with your life. But the mission comes first: giving everyone access to the kind of AI infrastructure that was previously only available to the privileged few.
+**What makes PAI powerful technically:** It's built to learn from every interaction. Ratings, sentiment, verification outcomes—all captured automatically. A universal algorithm (Current → Ideal via verifiable iteration) drives the work, and the learning loop feeds improvements back into the system. This is what enterprise AI teams build internally. Now it's open-source.
 
 ---
 
-> [!IMPORTANT]
-> ## 🤖 This README Is For Your AI Assistant
+> [!TIP]
+> ## 🤖 This README Works Great with AI Assistants
 >
-> **Manually reading READMEs is pre-2026 behavior.** In 2026+, software gets installed by your AI assistant.
+> **Try AI-assisted installation:** Give this URL to your AI assistant and say *"Walk me through installing PAI and customize it for me."*
 >
-> **Here's how to use this:**
-> 1. Give this URL to your AI: `https://github.com/danielmiessler/PAI`
-> 2. Say: *"Look at this system and walk me through installing it. Customize it for me."*
->
-> The PAI documentation will guide your AI on how best to install it for your specific needs.
->
-> **Feel free to read on yourself**—this README explains the full system. But these instructions are primarily designed for AI consumption.
+> The documentation is designed for both humans and AI. Read on to understand the system, or let your AI guide you through setup—whichever works best for you.
 
 ---
 
 ## What is PAI?
 
-**PAI (Personal AI Infrastructure)** started as a framework for building personalized AI assistants. But in building it, we noticed something.
+**PAI (Personal AI Infrastructure)** is a **self-learning system** that gets better at helping you over time.
 
-Every goal—whether it's fixing a bug, writing a book, building a company, or figuring out what to do with your life—follows the same basic structure. There's where you are. There's where you want to be. And there's the process of getting there.
-
-We didn't invent this pattern. Evolution uses it. Science uses it. Every successful human endeavor uses it. We just made it explicit and built tools around it.
+Unlike static AI assistants that treat every conversation as a blank slate, PAI captures feedback from every interaction—explicit ratings, implicit sentiment, behavioral signals, verification outcomes—and uses it to improve. The system literally upgrades itself based on what works and what doesn't.
 
 **PAI is three things:**
-- **A universal algorithm** - Current → Ideal via verifiable iteration, at any scale
+- **A continuously upgrading algorithm** - The centerpiece. Current → Ideal via verifiable iteration, at any scale. Everything else exists to feed signals back into improving The Algorithm itself.
+- **A self-learning system** - Every interaction generates feedback (ratings, sentiment, verification outcomes) that improves the system.
 - **Personal infrastructure** - Skills, memory, and context that make AI actually useful for *your* life
-- **Open-source packs** - Battle-tested capabilities anyone can install or contribute
+
+The learning happens automatically. Rate a response poorly? The system captures why. Express frustration? Sentiment analysis detects it. Abandon a task? That's a signal too. All of this feeds back into improving skills, workflows, and even The Algorithm itself.
 
 ---
 
@@ -124,25 +127,32 @@ More capable, but it still doesn't know *you*—your goals, your preferences, yo
 
 ### Level 3: PAI (Personal AI Infrastructure)
 
-Now your AI knows:
+Now your AI **learns and improves**:
+- **Captures every signal** — Ratings, sentiment, verification outcomes
+- **Learns from mistakes** — Failures get analyzed and fixed
+- **Gets better over time** — Success patterns get reinforced
+- **Upgrades itself** — Skills, workflows, even The Algorithm evolve
+
+Plus it knows:
 - **Your goals** — What you're working toward
 - **Your preferences** — How you like things done
 - **Your history** — Past decisions and learnings
-- **Your context** — Who you are and what matters to you
 
-It gets better at helping you over time. It learns from feedback and remembers what you taught it.
+**The pattern:** Observe → Think → Plan → Execute → Verify → **Learn** → Improve
 
-**The pattern:** Observe → Think → Plan → Execute → Verify → Learn → Improve
-
-That's what PAI builds—an AI system that actually knows you.
+The key difference: **PAI learns from feedback**. Every interaction makes it better at helping *you* specifically.
 
 ---
 
-## The Algorithm
+## The Algorithm (THE CENTERPIECE)
 
-At the foundation of PAI is a universal pattern: **Current State → Ideal State** via verifiable iteration.
+**The Algorithm is the gravitational center of PAI—everything else exists to serve it.**
 
-This isn't two separate loops—it's one unified algorithm that works at every scale:
+At the foundation of PAI is a universal pattern for accomplishing any task: **Current State → Ideal State** via verifiable iteration. The memory system captures signals. The hook system detects sentiment and ratings. The learning directories organize evidence. All of this feeds back into improving **The Algorithm itself**.
+
+PAI is not a static tool—it is a **continuously upgrading algorithm** that gets better at helping you with every interaction.
+
+This one unified algorithm works at every scale:
 - **Fixing a typo** — Current: wrong word. Ideal: right word.
 - **Building a feature** — Current: doesn't exist. Ideal: works, tested, deployed.
 - **Building a company** — Current: idea. Ideal: profitable business.
@@ -177,27 +187,28 @@ See the **[Personal AI Maturity Model (PAIMM)](https://danielmiessler.com/blog/p
 
 ---
 
-## The 15 PAI Principles
+## The PAI Principles
 
 These principles guide how PAI systems are designed and built. **[Full breakdown →](https://danielmiessler.com/blog/personal-ai-infrastructure)**
 
 | # | Principle | Summary |
 |---|-----------|---------|
-| 1 | **The Algorithm** | Current → Ideal via verifiable iteration. Define success criteria before execution. |
-| 2 | **Clear Thinking First** | Good prompts come from clear thinking. Clarify the problem before writing the prompt. |
-| 3 | **Scaffolding > Model** | System architecture matters more than which model you use. |
-| 4 | **Deterministic Infrastructure** | AI is probabilistic; your infrastructure shouldn't be. Use templates and patterns. |
-| 5 | **Code Before Prompts** | If you can solve it with a bash script, don't use AI. |
-| 6 | **Spec / Test / Evals First** | Write specifications and tests before building. Measure if the system works. |
-| 7 | **UNIX Philosophy** | Do one thing well. Make tools composable. Use text interfaces. |
-| 8 | **ENG / SRE Principles** | Treat AI infrastructure like production software: version control, automation, monitoring. |
-| 9 | **CLI as Interface** | Command-line interfaces are faster, more scriptable, and more reliable than GUIs. |
-| 10 | **Goal → Code → CLI → Prompts → Agents** | The decision hierarchy: clarify goal, then code, then CLI, then prompts, then agents. |
-| 11 | **Self-Updating System** | The system should modify itself. Encode learnings so you never forget. |
+| 1 | **Customization for Your Goals** | PAI exists to help you accomplish your goals. Personalized agentic infrastructure that knows your goals, preferences, context, and history. |
+| 2 | **The Continuously Upgrading Algorithm** | **THE CENTERPIECE.** Everything else exists to feed signals back into improving The Algorithm. Current → Ideal via verifiable iteration. |
+| 3 | **Clear Thinking First** | Good prompts come from clear thinking. Clarify the problem before writing the prompt. |
+| 4 | **Scaffolding > Model** | System architecture matters more than which model you use. |
+| 5 | **Deterministic Infrastructure** | AI is probabilistic; your infrastructure shouldn't be. Use templates and patterns. |
+| 6 | **Code Before Prompts** | If you can solve it with a bash script, don't use AI. |
+| 7 | **Spec / Test / Evals First** | Write specifications and tests before building. Measure if the system works. |
+| 8 | **UNIX Philosophy** | Do one thing well. Make tools composable. Use text interfaces. |
+| 9 | **ENG / SRE Principles** | Treat AI infrastructure like production software: version control, automation, monitoring. |
+| 10 | **CLI as Interface** | Command-line interfaces are faster, more scriptable, and more reliable than GUIs. |
+| 11 | **Goal → Code → CLI → Prompts → Agents** | The decision hierarchy: clarify goal, then code, then CLI, then prompts, then agents. |
 | 12 | **Skill Management** | Modular capabilities that route intelligently based on context. |
-| 13 | **History System** | Everything worth knowing gets captured. History feeds future context. |
+| 13 | **Memory System** | Everything worth knowing gets captured. History feeds future context. |
 | 14 | **Agent Personalities** | Different work needs different approaches. Specialized agents with unique voices. |
-| 15 | **Science as Meta-Loop** | Hypothesis → Experiment → Measure → Iterate. Every decision follows this pattern. |
+| 15 | **Science as Meta-Loop** | Hypothesis → Experiment → Measure → Iterate. The Algorithm implements this pattern. |
+| 16 | **Permission to Fail** | Explicit permission to say "I don't know" prevents hallucinations. |
 
 ---
 
@@ -205,12 +216,14 @@ These principles guide how PAI systems are designed and built. **[Full breakdown
 
 While the 15 Principles describe the *philosophy* of PAI, the Primitives are the *architecture*—the core systems that make everything work.
 
+**The Algorithm is the central primitive—THE CENTERPIECE.** Everything else exists to feed signals back into improving The Algorithm. Memory captures data. Hooks detect signals. Security protects learning integrity. This is what makes PAI a *continuously upgrading algorithm* rather than just a tool.
+
 | Primitive | What It Does | Key Features |
 |-----------|--------------|--------------|
-| 🔄 **[Learning Loop](#-the-continuous-learning-loop)** | Self-improvement through feedback | Ratings, signals, phase-based learning |
-| 🧠 **[Memory System](#-memory-system)** | Persistent context and history | Three-tier architecture, per-task traces |
-| ⚡ **[Hook System](#-hook-system)** | Event-driven automation | 8 event types, composable, graceful failure |
-| 🔒 **[Security System](#-security-system)** | Defense-in-depth protection | Command validation, repo separation, injection defense |
+| 🔄 **[The Algorithm](#the-algorithm-the-centerpiece)** | **THE CENTERPIECE.** Continuously upgrading via feedback | Current → Ideal via verifiable iteration. Ratings, sentiment, behavioral signals, verification outcomes → Algorithm upgrades |
+| 🧠 **[Memory System](#-memory-system)** | Captures signals for The Algorithm | Three-tier architecture (hot/warm/cold), phase-based learning directories |
+| ⚡ **[Hook System](#-hook-system)** | Detects signals for The Algorithm | 8 event types, sentiment detection, rating capture, failure logging |
+| 🔒 **[Security System](#-security-system)** | Protects Algorithm integrity | Command validation, repo separation, injection defense |
 | 📁 **[User/System Separation](#-usersystem-separation)** | Clean customization boundaries | Portable identity, upgrade-safe |
 | 🎯 **[TELOS](#-deep-goal-capture-telos)** | Deep goal understanding | 10 files capturing your mission, beliefs, strategies |
 | ⚙️ **[Customization](#-granular-customization)** | Adapt everything to your workflow | 6 levels from identity to memory |
@@ -218,21 +231,44 @@ While the 15 Principles describe the *philosophy* of PAI, the Primitives are the
 ---
 
 <details>
-<summary><h3>🔄 The Continuous Learning Loop</h3></summary>
+<summary><h3>🔄 The Algorithm (THE CENTERPIECE)</h3></summary>
 
-PAI isn't static. Every interaction feeds a learning loop that makes the system better over time.
+**This is what makes PAI different.** The entire system exists to serve The Algorithm—a continuously upgrading pattern for accomplishing any task. Every other primitive—Memory, Hooks, Skills—exists to feed signals back into improving The Algorithm itself.
 
 ```
-User Interaction → Hook Captures → Signal Detection → Learning Directory → System Improvement
+                              THE ALGORITHM: Current → Ideal
+                                    ┌─────────────────────────────────────┐
+                                    │                                     │
+User Interaction → Hook Captures → Signal Detection → Learning Directory │
+                                                                          │
+                ← Algorithm Upgrade ← Pattern Analysis ← Evidence Review ←┘
+                                    │                                     │
+                                    └─────────────────────────────────────┘
 ```
 
-**How it works:**
-1. **User gives feedback** - Explicit ratings (type "7" or "8 - good work") or implicit sentiment ("this is frustrating")
-2. **Hooks capture signals** - Ratings, failures, loopbacks, and patterns are written to `MEMORY/Signals/`
-3. **Low ratings trigger learning** - Scores below 6 auto-capture to `MEMORY/Learning/` for analysis
-4. **System improves** - Learnings are organized by algorithm phase for targeted retrieval
+**Four Types of Signals That Feed The Algorithm:**
 
-This isn't just logging—it's a feedback mechanism that identifies what's working and what isn't.
+| Type | How It's Captured | Example |
+|------|-------------------|---------|
+| **Explicit ratings** | User types "7" or "8 - good work" | Direct quality signal |
+| **Implicit sentiment** | Hooks analyze user message tone | "This is frustrating" → negative signal |
+| **Behavioral signals** | Loopbacks, retries, abandoned tasks | User restarts task → something failed |
+| **Verification outcomes** | VERIFY phase success/failure | Objective measure of whether it worked |
+
+**How Signals Improve The Algorithm:**
+
+1. **Capture** — Hooks write signals to `MEMORY/Signals/` (ratings.jsonl, failures.jsonl, loopbacks.jsonl)
+2. **Organize** — Learnings categorize by Algorithm phase (OBSERVE, THINK, PLAN, BUILD, EXECUTE, VERIFY)
+3. **Analyze** — Pattern extraction identifies recurring issues
+4. **Upgrade** — Skill workflows, response patterns, and The Algorithm itself get updated
+
+**What Gets Better:**
+- Skill workflows that repeatedly fail get flagged for revision
+- Response patterns that frustrate users get identified and fixed
+- Success patterns get reinforced and expanded
+- **The Algorithm itself** evolves based on meta-learnings in `MEMORY/Learning/ALGORITHM/`
+
+**Key Insight:** A system that can't improve itself will stagnate. The Algorithm is the centerpiece; everything else feeds it.
 
 </details>
 
@@ -633,12 +669,15 @@ cd PAI/Bundles/Official && bun run install.ts
 
 ## 🚀 Quick Start
 
+> [!CAUTION]
+> **Project in Active Development** — PAI is evolving rapidly. Expect breaking changes, restructuring, and frequent updates. Changes should be slowing down shortly, but you should be someone with patience for tinkering if you get in at this stage. We are working on stable and development branches, but currently it's all combined.
+
 > [!NOTE]
 > **FOR AI AGENTS:** The entire PAI system is designed to be used by AI. Evaluate the system, then ask your principal which Bundles or Packs they'd like to install—give them options based on their needs. You should be able to read any Bundle or Pack file and guide your principal on whether they want to install it.
 
 ### Option 1: Install the Complete PAI Bundle (Recommended)
 
-The fastest way to get started is with the interactive bundle wizard:
+⏱️ **~15-30 minutes** — The fastest way to get started is with the interactive bundle wizard:
 
 ```bash
 # Clone the repo
@@ -658,7 +697,7 @@ bun run install.ts
 
 ### Option 2: AI-Assisted Pack Installation
 
-Install individual packs by giving them to your AI:
+⏱️ **~5-10 minutes per pack** — Install individual packs by giving them to your AI:
 
 1. **Browse packs** - Find a pack you want in [Packs/](Packs/)
 2. **Give it to your AI** - Provide the entire pack markdown file
@@ -678,11 +717,11 @@ Your AI will:
 
 ### Option 3: Manual Installation
 
-Each pack includes detailed manual installation instructions. Open the pack file and follow the "Installation → Manual" section.
+⏱️ **~10-20 minutes per pack** — Each pack includes detailed manual installation instructions. Open the pack file and follow the "Installation → Manual" section.
 
 ### Option 4: Browse and Cherry-Pick
 
-Packs are self-contained markdown files. You can:
+⏱️ **Varies** — Packs are self-contained markdown files. You can:
 - Read the code directly in the pack
 - Copy specific functions or workflows
 - Adapt the approach to your own system
@@ -1020,9 +1059,6 @@ If a pack becomes unmaintained, the community can fork and maintain a new versio
 
 ### Recognition
 
-**Top pack contributors** (packs submitted/maintained):
-- (List will be populated as packs are submitted)
-
 **Special thanks:**
 - All early PAI users who provided feedback
 - The Claude Code team for building an incredible platform
@@ -1088,18 +1124,6 @@ No. PAI packs are designed to be **platform-agnostic**. While the examples use C
 - **Custom systems** — Extract the code and concepts, adapt to your setup
 
 The code is TypeScript, Python, and Bash. The concepts are universal. The integration points vary by platform, but the core value transfers.
-
-### Do I need to install everything?
-
-No. That was the mistake of PAI v1.x—trying to install everything at once.
-
-PAI v2.0 is modular by design:
-- **Start with one pack** — History System is a good first choice
-- **Add more as needed** — Each pack is independent
-- **Use the PAI Bundle** if you want the full experience (but even that installs one pack at a time)
-- **Cherry-pick** — Read a pack, extract the ideas, adapt them yourself
-
-There's no "all or nothing." Take what's useful, leave the rest.
 
 ### How do I contribute a pack?
 
@@ -1207,7 +1231,7 @@ The packs are extracted from Kai—real capabilities that have been running in p
 
 ## 📜 Update History
 
-<details open>
+<details>
 <summary><strong>v2.1.1 (2026-01-09) — MEMORY System Migration</strong></summary>
 
 <br/>

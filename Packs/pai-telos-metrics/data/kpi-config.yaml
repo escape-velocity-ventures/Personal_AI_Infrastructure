@@ -59,6 +59,144 @@ kpis:
     frequency: daily
     unit: hours
 
+  - id: ai_conversations
+    name: AI Conversations
+    description: Claude Code sessions started (auto-synced from ~/.claude/projects)
+    goal_ref: G2
+    type: counter
+    target: 20
+    frequency: daily
+    unit: sessions
+    auto_sync: true
+
+  # ---------------------------------------------------------------------------
+  # Tool Usage KPIs (auto-synced from conversation logs)
+  # ---------------------------------------------------------------------------
+
+  - id: tool_file_ops
+    name: File Operations
+    description: Read, Write, Edit tool calls (auto-synced)
+    goal_ref: G2
+    type: counter
+    target: 50
+    frequency: daily
+    unit: calls
+    auto_sync: true
+
+  - id: tool_search
+    name: Search Operations
+    description: Glob, Grep tool calls (auto-synced)
+    goal_ref: G2
+    type: counter
+    target: 10
+    frequency: daily
+    unit: calls
+    auto_sync: true
+
+  - id: tool_shell
+    name: Shell Commands
+    description: Bash tool calls (auto-synced)
+    goal_ref: G2
+    type: counter
+    target: 30
+    frequency: daily
+    unit: calls
+    auto_sync: true
+
+  - id: tool_web
+    name: Web Research
+    description: WebSearch, WebFetch tool calls (auto-synced)
+    goal_ref: G2
+    type: counter
+    target: 5
+    frequency: daily
+    unit: calls
+    auto_sync: true
+
+  - id: tool_agents
+    name: Agent Delegation
+    description: Task agent tool calls (auto-synced)
+    goal_ref: G2
+    type: counter
+    target: 3
+    frequency: daily
+    unit: calls
+    auto_sync: true
+
+  - id: tool_planning
+    name: Planning Tools
+    description: TodoWrite, PlanMode tool calls (auto-synced)
+    goal_ref: G2
+    type: counter
+    target: 10
+    frequency: daily
+    unit: calls
+    auto_sync: true
+
+  # ---------------------------------------------------------------------------
+  # Development Workflow KPIs (Bash command analysis)
+  # ---------------------------------------------------------------------------
+
+  - id: dev_test
+    name: Test Runs
+    description: Test commands executed (bun test, jest, etc.)
+    goal_ref: G2
+    type: counter
+    target: 5
+    frequency: daily
+    unit: runs
+    auto_sync: true
+
+  - id: dev_lint
+    name: Lint/Typecheck
+    description: Linting and type checking commands
+    goal_ref: G2
+    type: counter
+    target: 3
+    frequency: daily
+    unit: runs
+    auto_sync: true
+
+  - id: dev_build
+    name: Builds
+    description: Build commands executed
+    goal_ref: G2
+    type: counter
+    target: 2
+    frequency: daily
+    unit: runs
+    auto_sync: true
+
+  - id: git_ops
+    name: Git Operations
+    description: Git commands (commit, push, pr, etc.)
+    goal_ref: G2
+    type: counter
+    target: 5
+    frequency: daily
+    unit: commands
+    auto_sync: true
+
+  - id: docs_edits
+    name: Documentation Edits
+    description: Markdown file creates/edits
+    goal_ref: G1
+    type: counter
+    target: 3
+    frequency: daily
+    unit: edits
+    auto_sync: true
+
+  - id: tool_diversity
+    name: Tool Diversity
+    description: Percentage of available tools used (encourages exploration)
+    goal_ref: G2
+    type: rating
+    target: 60
+    frequency: daily
+    unit: "%"
+    auto_sync: true
+
   # ===========================================================================
   # Personal Goals (G3, G4, G5)
   # ===========================================================================

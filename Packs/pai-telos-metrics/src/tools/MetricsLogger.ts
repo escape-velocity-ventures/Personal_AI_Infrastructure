@@ -111,7 +111,8 @@ function loadMetrics(): MetricEntry[] {
 export function logMetric(
   kpiId: string,
   value: number | boolean,
-  note?: string
+  note?: string,
+  timestamp?: Date
 ): MetricEntry {
   const config = loadConfig();
   const kpi = getKpi(config, kpiId);
@@ -121,7 +122,7 @@ export function logMetric(
   }
 
   const entry: MetricEntry = {
-    timestamp: new Date().toISOString(),
+    timestamp: (timestamp || new Date()).toISOString(),
     kpi_id: kpiId,
     value,
     goal_ref: kpi.goal_ref,

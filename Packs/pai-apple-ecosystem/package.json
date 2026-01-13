@@ -5,12 +5,15 @@
   "type": "module",
   "scripts": {
     "mcp": "bun run src/mcp-server.ts",
+    "http": "bun run src/http-server.ts",
+    "start": "bun run src/http-server.ts",
     "test:calendar": "bun run src/calendar/index.ts",
     "test:reminders": "bun run src/reminders/index.ts",
     "test:contacts": "bun run src/contacts/index.ts"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.0.0"
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "hono": "^4.0.0"
   },
   "devDependencies": {
     "@types/bun": "latest",

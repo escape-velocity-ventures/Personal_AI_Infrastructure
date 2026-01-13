@@ -1,0 +1,38 @@
+---
+# Apple MCP Service
+# Internal cluster service for PAI Agent to call Apple tools
+apiVersion: v1
+kind: Service
+metadata:
+  name: apple-mcp
+  labels:
+    app: apple-mcp
+spec:
+  # ClusterIP for internal access only
+  type: ClusterIP
+  selector:
+    app: apple-mcp
+  ports:
+  - name: http
+    port: 8081
+    targetPort: 8081
+    protocol: TCP
+
+---
+# Headless service for direct pod access if needed
+# Useful when you need to target a specific Mac Mini node
+apiVersion: v1
+kind: Service
+metadata:
+  name: apple-mcp-headless
+  labels:
+    app: apple-mcp
+spec:
+  clusterIP: None
+  selector:
+    app: apple-mcp
+  ports:
+  - name: http
+    port: 8081
+    targetPort: 8081
+    protocol: TCP

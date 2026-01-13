@@ -1,0 +1,65 @@
+---
+# Apple MCP DaemonSet
+# Runs on all Mac Mini nodes to provide Apple ecosystem integration
+# Each node runs its own instance to access that machine's Apple apps
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: apple-mcp
+  labels:
+    app: apple-mcp
+spec:
+  selector:
+    matchLabels:
+      app: apple-mcp
+  template:
+    metadata:
+      labels:
+        app: apple-mcp
+    spec:
+      # Only schedule on macOS nodes
+      nodeSelector:
+        kubernetes.io/os: darwin
+      # Don't evict this pod - it provides critical Apple integration
+      tolerations:
+      - key: "node.kubernetes.io/unschedulable"
+        operator: "Exists"
+        effect: "NoSchedule"
+      containers:
+      - name: apple-mcp
+        image: pai-apple-ecosystem:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8081
+          name: http
+        env:
+        - name: PORT
+          value: "8081"
+        - name: NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 200m
+            memory: 256Mi
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8081
+          initialDelaySeconds: 10
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8081
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        # AppleScript requires access to the macOS GUI session
+        # This is typically handled by running as the logged-in user
+        securityContext:
+          runAsUser: 501  # Typical macOS user UID
+          runAsGroup: 20  # staff group

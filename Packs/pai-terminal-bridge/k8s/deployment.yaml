@@ -1,0 +1,77 @@
+---
+# Terminal Bridge Deployment
+# Runs on Mac Mini nodes for Wispr Flow access
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pai-terminal-bridge
+  labels:
+    app: pai-terminal-bridge
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pai-terminal-bridge
+  template:
+    metadata:
+      labels:
+        app: pai-terminal-bridge
+    spec:
+      # Schedule on Mac Mini nodes
+      nodeSelector:
+        kubernetes.io/os: darwin
+      containers:
+      - name: terminal-bridge
+        image: pai-terminal-bridge:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 2222
+          name: ssh
+        env:
+        - name: SSH_PORT
+          value: "2222"
+        - name: PAI_AGENT_URL
+          value: "ws://pai-agent:8080"
+        - name: HOST_KEY_PATH
+          value: "/etc/ssh/host_key"
+        volumeMounts:
+        - name: ssh-host-key
+          mountPath: /etc/ssh
+          readOnly: true
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 200m
+            memory: 256Mi
+        livenessProbe:
+          tcpSocket:
+            port: 2222
+          initialDelaySeconds: 10
+          periodSeconds: 30
+        readinessProbe:
+          tcpSocket:
+            port: 2222
+          initialDelaySeconds: 5
+          periodSeconds: 10
+      volumes:
+      - name: ssh-host-key
+        secret:
+          secretName: pai-terminal-bridge-host-key
+          defaultMode: 0600
+
+---
+# SSH Host Key Secret (generate and apply separately)
+# kubectl create secret generic pai-terminal-bridge-host-key \
+#   --from-file=host_key=./keys/host_key
+apiVersion: v1
+kind: Secret
+metadata:
+  name: pai-terminal-bridge-host-key
+type: Opaque
+data:
+  # Base64 encoded host key - replace with actual key
+  # Generate with: bun run generate-keys
+  # Encode with: base64 -i keys/host_key
+  host_key: ""

@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: pai-agent
+  labels:
+    app: pai-agent
+spec:
+  type: ClusterIP
+  selector:
+    app: pai-agent
+  ports:
+  - name: http
+    port: 8080
+    targetPort: 8080
+    protocol: TCP
+  - name: ws
+    port: 8080
+    targetPort: 8080
+    protocol: TCP

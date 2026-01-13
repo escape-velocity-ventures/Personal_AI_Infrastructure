@@ -1,0 +1,19 @@
+---
+# Terminal Bridge Service
+# Exposes SSH via NodePort for external Wispr Flow access
+apiVersion: v1
+kind: Service
+metadata:
+  name: pai-terminal-bridge
+  labels:
+    app: pai-terminal-bridge
+spec:
+  type: NodePort
+  selector:
+    app: pai-terminal-bridge
+  ports:
+  - name: ssh
+    port: 2222
+    targetPort: 2222
+    # NodePort will be assigned automatically (30000-32767)
+    # Or specify: nodePort: 30022

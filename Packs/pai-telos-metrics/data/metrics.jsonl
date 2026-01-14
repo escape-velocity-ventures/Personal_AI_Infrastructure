@@ -58,3 +58,9 @@
 {"timestamp":"2026-01-10T18:00:00.000Z","kpi_id":"git_ops","value":28,"goal_ref":"G2","machine":"MacBook-Air-L4V6F20KQ6","note":"auto-sync"}
 {"timestamp":"2026-01-10T18:00:00.000Z","kpi_id":"docs_edits","value":14,"goal_ref":"G1","machine":"MacBook-Air-L4V6F20KQ6","note":"auto-sync"}
 {"timestamp":"2026-01-10T18:00:00.000Z","kpi_id":"tool_diversity","value":76,"goal_ref":"G2","machine":"MacBook-Air-L4V6F20KQ6","note":"auto-sync"}
+{"timestamp":"2026-01-13T12:00:00.000Z","kpi_id":"steps_count","value":9542,"goal_ref":"G3","source":"health_auto_export"}
+{"timestamp":"2026-01-13T12:00:00.000Z","kpi_id":"exercise_minutes","value":32,"goal_ref":"G3","source":"health_auto_export"}
+{"timestamp":"2026-01-13T12:00:00.000Z","kpi_id":"sleep_hours","value":7.2,"goal_ref":null,"source":"health_auto_export"}
+{"timestamp":"2026-01-12T12:00:00.000Z","kpi_id":"steps_count","value":1398,"goal_ref":"G3","source":"health_auto_export"}
+{"timestamp":"2026-01-12T12:00:00.000Z","kpi_id":"sleep_hours","value":4.783333333333322,"goal_ref":null,"source":"health_auto_export"}
+{"timestamp":"2026-01-14T08:45:29.530Z","kpi_id":"tinkerbelle_commits","value":1,"goal_ref":"G2","machine":"MacBook-Air-L4V6F20KQ6","note":"OAuth2 modules for multi-cloud"}

@@ -41,6 +41,35 @@ kpis:
     frequency: daily
     unit: commits
 
+  - id: tinkerbelle_commits
+    name: TinkerBelle Commits
+    description: Commits to TinkerBelle infrastructure repo
+    goal_ref: G2
+    type: counter
+    target: 3
+    frequency: daily
+    unit: commits
+    repo: escape-velocity-ventures/TinkerBelle
+
+  - id: tinkerbelle_modules
+    name: TinkerBelle Modules
+    description: New Terraform modules created
+    goal_ref: G2
+    type: counter
+    target: 1
+    frequency: weekly
+    unit: modules
+    repo: escape-velocity-ventures/TinkerBelle
+
+  - id: infra_deployments
+    name: Infrastructure Deployments
+    description: Successful terraform applies
+    goal_ref: G2
+    type: counter
+    target: 2
+    frequency: weekly
+    unit: deployments
+
   - id: features_shipped
     name: Features Shipped
     description: New capabilities added to PAI or related tools

@@ -1,7 +1,30 @@
 #!/usr/bin/env bun
+import { existsSync, readFileSync } from 'fs';
+import { join } from 'path';
+import { homedir } from 'os';
 import { loadConfig, getConfigPath } from '../config/loader';
 import { fetchAllEvents, fetchEventsBySource } from '../adapters';
 import type { UnifiedEvent } from '../types';
+
+// Load environment from PAI_DIR/.env or ~/.claude/.env
+const PAI_DIR = process.env.PAI_DIR || join(homedir(), '.claude');
+const envPath = join(PAI_DIR, '.env');
+if (existsSync(envPath)) {
+  const envContent = readFileSync(envPath, 'utf-8');
+  envContent.split('\n').forEach(line => {
+    const trimmed = line.trim();
+    if (trimmed && !trimmed.startsWith('#')) {
+      const eqIndex = trimmed.indexOf('=');
+      if (eqIndex > 0) {
+        const key = trimmed.slice(0, eqIndex);
+        const value = trimmed.slice(eqIndex + 1);
+        if (!process.env[key]) {  // Don't override existing env vars
+          process.env[key] = value;
+        }
+      }
+    }
+  });
+}
 
 const command = process.argv[2];
 const args = process.argv.slice(3);

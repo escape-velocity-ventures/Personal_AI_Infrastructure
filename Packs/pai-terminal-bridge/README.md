@@ -172,19 +172,40 @@ renderer.getClearScreen();
 
 ## Key Generation
 
+> **SECURITY WARNING**: SSH keys should NEVER be committed to git. The `keys/` directory is gitignored. Generate keys at deploy time and store in a secret manager.
+
 ```bash
-# Generate new host keys
+# Generate new host keys (local development only)
 bun run generate-keys
 
-# Keys are stored in ./keys/
+# Keys are stored in ./keys/ (gitignored)
 ls keys/
-# host_key      (private key)
+# host_key      (private key - NEVER COMMIT)
 # host_key.pub  (public key)
 ```
 
+### Kubernetes Deployment
+
+For production, create a K8s secret:
+
+```bash
+# Generate key
+ssh-keygen -t rsa -b 4096 -f /tmp/host_key -N ""
+
+# Create secret
+kubectl create secret generic pai-terminal-bridge-host-key \
+  --from-file=host_key=/tmp/host_key \
+  --from-file=host_key.pub=/tmp/host_key.pub
+
+# Clean up local copy
+rm /tmp/host_key /tmp/host_key.pub
+```
+
+The deployment mounts this secret at `/etc/ssh/host_key`.
+
 ## Security Considerations
 
-- **Host Keys**: Keep `host_key` private; distribute `host_key.pub` if needed
+- **Host Keys**: NEVER commit to git. Generate at deploy time, store in K8s secrets or vault
 - **User Auth**: Currently accepts all auth methods; implement proper auth for production
 - **Allowed Users**: Use `ALLOWED_USERS` to restrict access
 - **Network**: Bind to specific interface if needed (default: `0.0.0.0`)

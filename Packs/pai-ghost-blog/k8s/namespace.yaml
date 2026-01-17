@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: pai-blog
+  labels:
+    app.kubernetes.io/name: pai-blog
+    app.kubernetes.io/part-of: pai

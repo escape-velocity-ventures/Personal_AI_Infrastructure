@@ -144,3 +144,75 @@ curl -X POST http://localhost:8081/health/ingest \
 |----------|-------------|---------|
 | `PORT` | HTTP server port | `8081` |
 | `TELOS_METRICS_PATH` | Path to metrics.jsonl | Auto-detected |
+
+## Production Deployment (Mac Mini)
+
+For persistent deployment on a Mac Mini (e.g., Plato), use the launchd service.
+
+### Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    Mac Mini (Plato)                             │
+│                                                                 │
+│  ┌───────────────────────────────────────────────────────────┐ │
+│  │     Lima VM (k3s cluster)                                 │ │
+│  │     K8s Services: apple-mcp:8081                          │ │
+│  └───────────────────────│───────────────────────────────────┘ │
+│                          │ (192.168.5.2)                       │
+│                          ▼                                     │
+│  ┌───────────────────────────────────────────────────────────┐ │
+│  │  launchd: com.pai.apple-ecosystem                         │ │
+│  │  → bun run src/http-server.ts                             │ │
+│  │  → Port 8081                                              │ │
+│  └───────────────────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────────────┘
+
+iPhone (Health Auto Export)
+    ↓ POST to http://plato.local:8081/health/ingest
+```
+
+### Install launchd Service
+
+```bash
+# Copy plist to LaunchAgents
+cp launchd/com.pai.apple-ecosystem.plist ~/Library/LaunchAgents/
+
+# Load and start service
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.pai.apple-ecosystem.plist
+
+# Verify
+curl http://localhost:8081/health
+```
+
+### Manage Service
+
+```bash
+# Check status
+launchctl print gui/$(id -u)/com.pai.apple-ecosystem
+
+# Restart
+launchctl kickstart -k gui/$(id -u)/com.pai.apple-ecosystem
+
+# Stop
+launchctl bootout gui/$(id -u)/com.pai.apple-ecosystem
+
+# View logs
+tail -f ~/Library/Logs/pai-apple-ecosystem.log
+tail -f ~/Library/Logs/pai-apple-ecosystem.error.log
+```
+
+### K8s Integration (Lima k3s)
+
+When running alongside a Lima k3s cluster, the service is exposed via K8s:
+
+```bash
+# Apply K8s manifests (from TinkerBelle-config)
+HOST_IP=192.168.5.2  # Lima host gateway
+kubectl apply -f deployments/pai-k8s/native-apple-service.yaml
+
+# Test from cluster
+kubectl run test --rm -it --image=curlimages/curl -- curl http://apple-mcp:8081/health
+```
+
+See [TinkerBelle-config/deployments/pai-k8s](https://github.com/escape-velocity-ventures/TinkerBelle-config/tree/main/deployments/pai-k8s) for full setup.

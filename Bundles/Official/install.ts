@@ -1,8 +1,8 @@
 #!/usr/bin/env bun
 /**
- * Kai Bundle Installation Wizard v1.3.0
+ * PAI Bundle Installation Wizard v1.3.0
  *
- * Simplified interactive CLI wizard for setting up the Kai bundle.
+ * Simplified interactive CLI wizard for setting up PAI (Personal AI Infrastructure).
  * Auto-detects AI system directories and creates safety backups.
  *
  * Usage:
@@ -222,7 +222,7 @@ async function detectAndBackup(): Promise<boolean> {
 
     // Still ask for confirmation before proceeding
     const proceed = await askYesNo(
-      "Ready to install Kai to ~/.claude. Proceed?",
+      "Ready to install PAI to ~/.claude. Proceed?",
       true
     );
     if (!proceed) {
@@ -240,7 +240,7 @@ async function detectAndBackup(): Promise<boolean> {
   console.log("│  The installer will:                                        │");
   console.log("│                                                             │");
   console.log("│  1. Copy your current ~/.claude → ~/.claude-BACKUP          │");
-  console.log("│  2. Install fresh Kai files into ~/.claude                  │");
+  console.log("│  2. Install fresh PAI files into ~/.claude                  │");
   console.log("│                                                             │");
   console.log("│  Your original files will be preserved in the backup.       │");
   console.log("│                                                             │");
@@ -279,14 +279,14 @@ async function detectAndBackup(): Promise<boolean> {
 // =============================================================================
 
 async function gatherConfig(): Promise<WizardConfig> {
-  printHeader("KAI BUNDLE SETUP");
+  printHeader("PAI BUNDLE SETUP");
 
   // In update mode, read existing config first
   const existing = isUpdateMode ? await readExistingConfig() : {};
 
   if (isUpdateMode) {
     console.log("Update mode: Using existing configuration as defaults.\n");
-    if (existing.daName) console.log(`  Found AI name: ${existing.daName}`);
+    if (existing.daName) console.log(`  Found DA name: ${existing.daName}`);
     if (existing.userName) console.log(`  Found user: ${existing.userName}`);
     if (existing.timeZone) console.log(`  Found timezone: ${existing.timeZone}`);
     if (existing.elevenLabsApiKey) console.log(`  Found ElevenLabs API key: ****${existing.elevenLabsApiKey.slice(-4)}`);
@@ -305,7 +305,7 @@ async function gatherConfig(): Promise<WizardConfig> {
     }
     console.log("\nLet's update your configuration:\n");
   } else {
-    console.log("This wizard will configure your AI assistant.\n");
+    console.log("This wizard will configure your DA.\n");
   }
 
   // Check for existing PAI_DIR environment variable
@@ -332,7 +332,7 @@ async function gatherConfig(): Promise<WizardConfig> {
     : await ask("What is your name? ");
 
   const daName = await askWithDefault(
-    "What would you like to name your AI assistant?",
+    "What would you like to name your DA?",
     existing.daName || "Kai"
   );
 
@@ -391,7 +391,7 @@ description: Personal AI Infrastructure core. AUTO-LOADS at session start. USE W
 
 # CORE - Personal AI Infrastructure
 
-**Auto-loads at session start.** This skill defines your AI's identity, response format, and core operating principles.
+**Auto-loads at session start.** This skill defines your DA's identity, response format, and core operating principles.
 
 ## Identity
 
@@ -407,7 +407,7 @@ description: Personal AI Infrastructure core. AUTO-LOADS at session start. USE W
 
 ## First-Person Voice (CRITICAL)
 
-Your AI should speak as itself, not about itself in third person.
+Your DA should speak as itself, not about itself in third person.
 
 **Correct:**
 - "for my system" / "in my architecture"
@@ -550,12 +550,12 @@ async function main() {
   console.log(`
 ╔═══════════════════════════════════════════════════════════════════╗
 ║                                                                   ║
-║   ██╗  ██╗ █████╗ ██╗    ██████╗ ██╗   ██╗███╗   ██╗██████╗ ██╗   ║
-║   ██║ ██╔╝██╔══██╗██║    ██╔══██╗██║   ██║████╗  ██║██╔══██╗██║   ║
-║   █████╔╝ ███████║██║    ██████╔╝██║   ██║██╔██╗ ██║██║  ██║██║   ║
-║   ██╔═██╗ ██╔══██║██║    ██╔══██╗██║   ██║██║╚██╗██║██║  ██║██║   ║
-║   ██║  ██╗██║  ██║██║    ██████╔╝╚██████╔╝██║ ╚████║██████╔╝███████╗
-║   ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝    ╚═════╝  ╚═════╝ ╚═╝  ╚═══╝╚═════╝ ╚══════╝
+║   ██████╗  █████╗ ██╗    ██████╗ ██╗   ██╗███╗   ██╗██████╗ ██╗   ║
+║   ██╔══██╗██╔══██╗██║    ██╔══██╗██║   ██║████╗  ██║██╔══██╗██║   ║
+║   ██████╔╝███████║██║    ██████╔╝██║   ██║██╔██╗ ██║██║  ██║██║   ║
+║   ██╔═══╝ ██╔══██║██║    ██╔══██╗██║   ██║██║╚██╗██║██║  ██║██║   ║
+║   ██║     ██║  ██║██║    ██████╔╝╚██████╔╝██║ ╚████║██████╔╝███████╗
+║   ╚═╝     ╚═╝  ╚═╝╚═╝    ╚═════╝  ╚═════╝ ╚═╝  ╚═══╝╚═════╝ ╚══════╝
 ║                                                                   ║
 ║              Personal AI Infrastructure - ${modeLabel.padEnd(12)}         ║
 ║                                                                   ║
@@ -605,7 +605,7 @@ async function main() {
     // Create .env file (no quotes around values - .env format standard)
     console.log("Creating .env file...");
     const envFileContent = `# PAI Environment Configuration
-# Created by Kai Bundle installer - ${new Date().toISOString().split("T")[0]}
+# Created by PAI Bundle installer - ${new Date().toISOString().split("T")[0]}
 
 DA=${config.daName}
 TIME_ZONE=${config.timeZone}
@@ -662,7 +662,7 @@ ${config.elevenLabsVoiceId ? `ELEVENLABS_VOICE_ID=${config.elevenLabsVoiceId}` :
       : `${process.env.HOME}/.bashrc`;
 
     const envExports = `
-# PAI Configuration (added by Kai Bundle installer)
+# PAI Configuration (added by PAI Bundle installer)
 export DA="${config.daName}"
 export TIME_ZONE="${config.timeZone}"
 export PAI_SOURCE_APP="$DA"
@@ -697,7 +697,7 @@ ${config.elevenLabsVoiceId ? `export ELEVENLABS_VOICE_ID="${config.elevenLabsVoi
 
     if (isUpdateMode) {
       console.log(`
-Your Kai system has been updated:
+Your PAI system has been updated:
 
   📁 Installation: ~/.claude
   🤖 Assistant Name: ${config.daName}
@@ -721,7 +721,7 @@ Your existing hooks, history, and customizations have been preserved.
 `);
     } else {
       console.log(`
-Your Kai system is configured:
+Your PAI system is configured:
 
   📁 Installation: ~/.claude
   💾 Backup: ~/.claude-BACKUP
@@ -739,11 +739,11 @@ Files created:
 
 Next steps:
 
-  1. Install the packs IN ORDER by giving each pack file to your AI:
-     - kai-hook-system.md
-     - kai-history-system.md
-     - kai-core-install.md
-     - kai-voice-system.md (optional, requires ElevenLabs)
+  1. Install the packs IN ORDER by giving each pack file to your DA:
+     - pai-hook-system.md
+     - pai-memory-system.md
+     - pai-core-install.md
+     - pai-voice-system.md (optional, requires ElevenLabs)
 
   2. Restart Claude Code to activate hooks
 

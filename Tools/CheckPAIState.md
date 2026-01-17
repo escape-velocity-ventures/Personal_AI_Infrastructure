@@ -6,7 +6,7 @@ A diagnostic workflow for assessing your PAI installation health, identifying is
 
 ## What This Does
 
-When you run this check, your AI will:
+When you run this check, your DA will:
 
 1. **Inventory installed packs** — Identify which PAI packs are currently installed in your system
 2. **Verify basic functionality** — Test that core systems (hooks, history, skills) are working
@@ -18,13 +18,13 @@ When you run this check, your AI will:
 
 ## How to Use
 
-Give this file to your AI and say:
+Give this file to your DA and say:
 
 ```
 Check my PAI state and give me recommendations.
 ```
 
-Your AI will run through the diagnostic steps below and report back.
+Your DA will run through the diagnostic steps below and report back.
 
 ---
 
@@ -190,7 +190,7 @@ cat $PAI_DIR/skills/CORE/SKILL.md 2>/dev/null | head -50
 
 ## Generating Recommendations
 
-After running diagnostics, your AI should provide:
+After running diagnostics, your DA should provide:
 
 ### 1. Health Summary
 
@@ -257,7 +257,7 @@ RECOMMENDATIONS:
 SUGGESTED NEXT: pai-identity
   - All dependencies met (hooks, history, skills installed)
   - Adds consistent personality and response format
-  - Installation: Give your AI the pai-identity.md pack file
+  - Installation: Give your DA the pai-identity.md pack file
 ```
 
 ---
@@ -266,11 +266,11 @@ SUGGESTED NEXT: pai-identity
 
 To run this diagnostic:
 
-1. Give this file to your AI
+1. Give this file to your DA
 2. Set your PAI directory: `PAI_DIR=~/.pai` (or wherever you installed)
 3. Say: "Check my PAI state"
 
-Your AI will run through each step, build a health report, and provide actionable recommendations.
+Your DA will run through each step, build a health report, and provide actionable recommendations.
 
 ---
 

@@ -106,12 +106,12 @@ While you can install packs individually, bundles provide:
 ### Option 1: AI-Assisted (Recommended)
 
 1. Open the bundle's directory (the README displays automatically)
-2. Give it to your AI
+2. Give it to your DA
 3. Say: "Install this bundle into my system"
 
-Your AI will:
+Your DA will:
 - **Analyze first** - Review all packs that need to be installed and their dependencies
-- **Run the wizard** - If the bundle includes a setup wizard, walk you through it to collect personalization data (AI name, personality, contacts, technical preferences, etc.)
+- **Run the wizard** - If the bundle includes a setup wizard, walk you through it to collect personalization data (DA name, personality, contacts, technical preferences, etc.)
 - **Install in order** - Install packs in the correct sequence based on dependencies
 - **Configure connections** - Set up integrations between packs
 - **Verify installation** - Confirm each pack works and validate the bundle as a whole

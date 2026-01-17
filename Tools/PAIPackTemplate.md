@@ -216,7 +216,7 @@ This pack adds automatic memory to your entire AI infrastructure. The PAI Histor
 
 **Core principle:** Work normally, documentation handles itself.
 
-No more forgotten context between sessions. No more lost learnings. Your AI remembers everything so you don't have to.
+No more forgotten context between sessions. No more lost learnings. Your DA remembers everything so you don't have to.
 
 Please follow the installation instructions below to integrate this pack into your infrastructure.
 
@@ -311,7 +311,7 @@ This creates cascading problems across your entire AI infrastructure:
 
 Traditional AI systems treat each interaction as ephemeral. But real work is cumulative. Today's debugging session informs tomorrow's architecture decision. Last month's research prevents this month's repeated mistake.
 
-Without a history system, your AI is brilliant but amnesiac. Every session is day one. Every context is fresh. Every lesson must be relearned.
+Without a history system, your DA is brilliant but amnesiac. Every session is day one. Every context is fresh. Every lesson must be relearned.
 
 ## The Solution
 <!--
@@ -1002,7 +1002,7 @@ For each customization:
 - Note the EXPECTED OUTCOME
 
 Example from Art Skill:
-- RECOMMENDED: Have an extended conversation with your AI about your aesthetic preferences,
+- RECOMMENDED: Have an extended conversation with your DA about your aesthetic preferences,
   capture this in Aesthetic.md, so all generated images reflect your personal style.
 - OPTIONAL: Add your own color palette, create custom prompt templates for your use cases.
 

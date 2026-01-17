@@ -1,4 +1,4 @@
-# THE ALGORITHM Skill v0.5.0 - Installation Guide
+# PAI Algorithm Skill v2.3.0 - Installation Guide
 
 **This guide is designed for AI agents installing this pack into a user's infrastructure.**
 
@@ -17,7 +17,7 @@
 
 Before starting, greet the user:
 ```
-"I'm installing THE ALGORITHM Skill v0.5.0 - Universal execution engine using scientific method to achieve ideal state.
+"I'm installing PAI Algorithm Skill v2.3.0 - THE ALGORITHM execution engine. This provides structured task execution using Current State → Ideal State methodology with effort classification, ISC tracking, and phase management.
 
 Let me analyze your system and guide you through installation."
 ```
@@ -31,44 +31,43 @@ Let me analyze your system and guide you through installation."
 ### 1.1 Run These Commands
 
 ```bash
-# Check for PAI directory
 PAI_CHECK="${PAI_DIR:-$HOME/.claude}"
 echo "PAI_DIR: $PAI_CHECK"
 
 # Check if pai-core-install is installed (REQUIRED)
 if [ -f "$PAI_CHECK/skills/CORE/SKILL.md" ]; then
-  echo "✓ pai-core-install is installed"
+  echo "OK pai-core-install is installed"
 else
-  echo "❌ pai-core-install NOT installed - REQUIRED!"
+  echo "ERROR pai-core-install NOT installed - REQUIRED!"
 fi
 
-# Check if pai-agents-skill is installed (REQUIRED)
-if [ -f "$PAI_CHECK/skills/Agents/SKILL.md" ]; then
-  echo "✓ pai-agents-skill is installed"
+# Check for pai-agents-skill (recommended)
+if [ -d "$PAI_CHECK/skills/Agents" ]; then
+  echo "OK pai-agents-skill is installed (recommended for agent composition)"
 else
-  echo "❌ pai-agents-skill NOT installed - REQUIRED!"
+  echo "NOTE pai-agents-skill not installed (optional but recommended)"
 fi
 
 # Check for existing THEALGORITHM skill
 if [ -d "$PAI_CHECK/skills/THEALGORITHM" ]; then
-  echo "⚠️  Existing THEALGORITHM skill found at: $PAI_CHECK/skills/THEALGORITHM"
-  ls -la "$PAI_CHECK/skills/THEALGORITHM/"
+  echo "WARNING Existing THEALGORITHM skill found at: $PAI_CHECK/skills/THEALGORITHM"
+  ls "$PAI_CHECK/skills/THEALGORITHM/"
 else
-  echo "✓ No existing THEALGORITHM skill (clean install)"
+  echo "OK No existing THEALGORITHM skill (clean install)"
 fi
 
-# Check for Bun runtime
+# Check for Bun runtime (REQUIRED)
 if command -v bun &> /dev/null; then
-  echo "✓ Bun is installed: $(bun --version)"
+  echo "OK Bun is installed: $(bun --version)"
 else
-  echo "❌ Bun not installed - REQUIRED!"
+  echo "ERROR Bun not installed - REQUIRED!"
 fi
 
-# Check for pai-voice-system (optional)
-if [ -d "$PAI_CHECK/VoiceServer" ]; then
-  echo "✓ pai-voice-system is installed (voice features available)"
+# Check for MEMORY directories
+if [ -d "$PAI_CHECK/MEMORY/Learning/ALGORITHM" ]; then
+  echo "OK ALGORITHM learning directory exists"
 else
-  echo "⚠️  pai-voice-system not installed (voice transitions unavailable)"
+  echo "NOTE ALGORITHM learning directory will be created"
 fi
 ```
 
@@ -78,15 +77,15 @@ Tell the user what you found:
 ```
 "Here's what I found on your system:
 - pai-core-install: [installed / NOT INSTALLED - REQUIRED]
-- pai-agents-skill: [installed / NOT INSTALLED - REQUIRED]
-- Existing THEALGORITHM skill: [Yes at path / No]
+- pai-agents-skill: [installed / not installed (optional)]
+- Existing THEALGORITHM: [Yes / No]
 - Bun runtime: [installed vX.X / NOT INSTALLED - REQUIRED]
-- pai-voice-system: [installed / not installed (optional)]"
+- MEMORY structure: [exists / will be created]"
 ```
 
-**STOP if pai-core-install, pai-agents-skill, or Bun is not installed.** Tell the user:
+**STOP if pai-core-install or Bun is not installed.** Tell the user:
 ```
-"pai-core-install, pai-agents-skill, and Bun are required. Please install them first, then return to install this pack."
+"pai-core-install and Bun are required. Please install them first, then return to install this pack."
 ```
 
 ---
@@ -95,49 +94,33 @@ Tell the user what you found:
 
 **Use AskUserQuestion tool at each decision point.**
 
-### Question 1: Conflict Resolution (if existing found)
+### Question 1: Conflict Resolution (if existing skill found)
 
-**Only ask if existing THEALGORITHM skill detected:**
+**Only ask if existing THEALGORITHM directory detected:**
 
 ```json
 {
   "header": "Conflict",
-  "question": "Existing THEALGORITHM skill detected. How should I proceed?",
+  "question": "Existing ALGORITHM skill detected. How should I proceed?",
   "multiSelect": false,
   "options": [
-    {"label": "Backup and Replace (Recommended)", "description": "Creates timestamped backup, then installs new version"},
-    {"label": "Replace Without Backup", "description": "Overwrites existing without backup"},
-    {"label": "Abort Installation", "description": "Cancel installation, keep existing"}
+    {"label": "Backup and replace (Recommended)", "description": "Creates timestamped backup, then installs fresh"},
+    {"label": "Replace without backup", "description": "Overwrites existing skill files"},
+    {"label": "Cancel", "description": "Abort installation, keep existing"}
   ]
 }
 ```
 
-### Question 2: Voice Transitions
-
-**Only ask if pai-voice-system is installed:**
-
-```json
-{
-  "header": "Voice",
-  "question": "Enable voice announcements during phase transitions?",
-  "multiSelect": false,
-  "options": [
-    {"label": "Yes, enable voice (Recommended)", "description": "AlgorithmDisplay will speak phase changes"},
-    {"label": "Silent mode", "description": "Visual display only, no voice"}
-  ]
-}
-```
-
-### Question 3: Final Confirmation
+### Question 2: Final Confirmation
 
 ```json
 {
   "header": "Install",
-  "question": "Ready to install THE ALGORITHM Skill v0.5.0?",
+  "question": "Ready to install PAI Algorithm Skill v2.3.0?",
   "multiSelect": false,
   "options": [
-    {"label": "Yes, install now (Recommended)", "description": "Proceeds with installation using choices above"},
-    {"label": "Show me what will change", "description": "Lists all files that will be created/modified"},
+    {"label": "Yes, install now (Recommended)", "description": "Proceeds with installation"},
+    {"label": "Show me what will change", "description": "Lists all files that will be created"},
     {"label": "Cancel", "description": "Abort installation"}
   ]
 }
@@ -147,14 +130,17 @@ Tell the user what you found:
 
 ## Phase 3: Backup (If Needed)
 
-**Only execute if user chose "Backup and Replace":**
+**Only execute if user chose "Backup and replace":**
 
 ```bash
 PAI_DIR="${PAI_DIR:-$HOME/.claude}"
-BACKUP_DIR="$PAI_DIR/Backups/thealgorithm-skill-$(date +%Y%m%d-%H%M%S)"
-mkdir -p "$BACKUP_DIR"
-[ -d "$PAI_DIR/skills/THEALGORITHM" ] && cp -r "$PAI_DIR/skills/THEALGORITHM" "$BACKUP_DIR/"
-echo "Backup created at: $BACKUP_DIR"
+BACKUP_DIR="$PAI_DIR/Backups/algorithm-skill-$(date +%Y%m%d-%H%M%S)"
+
+if [ -d "$PAI_DIR/skills/THEALGORITHM" ]; then
+  mkdir -p "$BACKUP_DIR"
+  cp -r "$PAI_DIR/skills/THEALGORITHM" "$BACKUP_DIR/"
+  echo "Backup created at: $BACKUP_DIR"
+fi
 ```
 
 ---
@@ -166,7 +152,7 @@ echo "Backup created at: $BACKUP_DIR"
 ```json
 {
   "todos": [
-    {"content": "Create skill directory structure", "status": "pending", "activeForm": "Creating directory structure"},
+    {"content": "Create directory structure", "status": "pending", "activeForm": "Creating directory structure"},
     {"content": "Copy skill files from pack", "status": "pending", "activeForm": "Copying skill files"},
     {"content": "Install dependencies", "status": "pending", "activeForm": "Installing dependencies"},
     {"content": "Create MEMORY directories", "status": "pending", "activeForm": "Creating MEMORY directories"},
@@ -175,16 +161,13 @@ echo "Backup created at: $BACKUP_DIR"
 }
 ```
 
-### 4.1 Create Skill Directory Structure
+### 4.1 Create Directory Structure
 
-**Mark todo "Create skill directory structure" as in_progress.**
+**Mark todo "Create directory structure" as in_progress.**
 
 ```bash
 PAI_DIR="${PAI_DIR:-$HOME/.claude}"
-mkdir -p "$PAI_DIR/skills/THEALGORITHM/Tools"
-mkdir -p "$PAI_DIR/skills/THEALGORITHM/Data"
-mkdir -p "$PAI_DIR/skills/THEALGORITHM/Phases"
-mkdir -p "$PAI_DIR/skills/THEALGORITHM/Reference"
+mkdir -p "$PAI_DIR/skills/THEALGORITHM/"{Data,Tools,Phases,Reference}
 ```
 
 **Mark todo as completed.**
@@ -196,38 +179,20 @@ mkdir -p "$PAI_DIR/skills/THEALGORITHM/Reference"
 Copy all files from the pack's `src/skills/THEALGORITHM/` directory:
 
 ```bash
-# From the pack directory (where this INSTALL.md is located)
 PACK_DIR="$(pwd)"
 PAI_DIR="${PAI_DIR:-$HOME/.claude}"
 
-# Copy main skill file
-cp "$PACK_DIR/src/skills/THEALGORITHM/SKILL.md" "$PAI_DIR/skills/THEALGORITHM/"
-
-# Copy data files
-cp "$PACK_DIR/src/skills/THEALGORITHM/Data/Capabilities.yaml" "$PAI_DIR/skills/THEALGORITHM/Data/"
-
-# Copy tools
-cp "$PACK_DIR/src/skills/THEALGORITHM/Tools/"*.ts "$PAI_DIR/skills/THEALGORITHM/Tools/"
-
-# Copy phase documentation
-cp "$PACK_DIR/src/skills/THEALGORITHM/Phases/"*.md "$PAI_DIR/skills/THEALGORITHM/Phases/"
-
-# Copy reference documentation
-cp "$PACK_DIR/src/skills/THEALGORITHM/Reference/"*.md "$PAI_DIR/skills/THEALGORITHM/Reference/"
+cp -r "$PACK_DIR/src/skills/THEALGORITHM/"* "$PAI_DIR/skills/THEALGORITHM/"
 ```
 
-**Files copied:**
-- `SKILL.md` - Main skill routing and quick reference
-- `Data/Capabilities.yaml` - 30+ orchestratable capabilities registry
-- `Tools/AlgorithmDisplay.ts` - LCARS-style visual display with voice
-- `Tools/EffortClassifier.ts` - Request effort level classification
-- `Tools/CapabilityLoader.ts` - Load capabilities by effort level
-- `Tools/CapabilitySelector.ts` - Select capabilities for ISC rows
-- `Tools/ISCManager.ts` - Create/update/query ISC tables
-- `Tools/TraitModifiers.ts` - Effort-to-trait mappings
-- `Tools/RalphLoopExecutor.ts` - Persistent iteration executor
-- `Phases/*.md` - Detailed phase documentation (OBSERVE through LEARN)
-- `Reference/*.md` - Capability and effort matrices
+**Files included:**
+- `SKILL.md` - Main skill definition
+- `Tools/EffortClassifier.ts` - Classifies task effort level
+- `Tools/ISCManager.ts` - Manages Ideal State Criteria
+- `Tools/AlgorithmDisplay.ts` - Visual status display
+- `Tools/CapabilityLoader.ts` - Loads effort-specific capabilities
+- `Phases/*.md` - Phase documentation
+- `Reference/*.md` - Reference materials
 
 **Mark todo as completed.**
 
@@ -251,9 +216,8 @@ bun add yaml
 PAI_DIR="${PAI_DIR:-$HOME/.claude}"
 mkdir -p "$PAI_DIR/MEMORY/Work"
 mkdir -p "$PAI_DIR/MEMORY/State"
+mkdir -p "$PAI_DIR/MEMORY/Learning/ALGORITHM"
 ```
-
-These directories store ISC state between sessions.
 
 **Mark todo as completed.**
 
@@ -268,31 +232,28 @@ These directories store ISC state between sessions.
 ```bash
 PAI_DIR="${PAI_DIR:-$HOME/.claude}"
 
-echo "=== THE ALGORITHM Skill Verification ==="
+echo "=== PAI Algorithm Skill v2.3.0 Verification ==="
 
-# Check skill files exist
-echo "Checking skill files..."
-[ -f "$PAI_DIR/skills/THEALGORITHM/SKILL.md" ] && echo "✓ SKILL.md" || echo "❌ SKILL.md missing"
-[ -f "$PAI_DIR/skills/THEALGORITHM/Data/Capabilities.yaml" ] && echo "✓ Capabilities.yaml" || echo "❌ Capabilities.yaml missing"
-[ -f "$PAI_DIR/skills/THEALGORITHM/Tools/EffortClassifier.ts" ] && echo "✓ EffortClassifier.ts" || echo "❌ EffortClassifier.ts missing"
-[ -f "$PAI_DIR/skills/THEALGORITHM/Tools/ISCManager.ts" ] && echo "✓ ISCManager.ts" || echo "❌ ISCManager.ts missing"
-[ -f "$PAI_DIR/skills/THEALGORITHM/Tools/AlgorithmDisplay.ts" ] && echo "✓ AlgorithmDisplay.ts" || echo "❌ AlgorithmDisplay.ts missing"
+# Check SKILL.md
+[ -f "$PAI_DIR/skills/THEALGORITHM/SKILL.md" ] && echo "OK SKILL.md" || echo "ERROR SKILL.md missing"
+
+# Check tools
+echo ""
+echo "Checking tools..."
+for tool in EffortClassifier ISCManager AlgorithmDisplay CapabilityLoader; do
+  [ -f "$PAI_DIR/skills/THEALGORITHM/Tools/${tool}.ts" ] && echo "OK ${tool}.ts" || echo "ERROR ${tool}.ts missing"
+done
+
+# Test tool execution
+echo ""
+echo "Testing tool execution..."
+bun run "$PAI_DIR/skills/THEALGORITHM/Tools/EffortClassifier.ts" --help && echo "OK Tool executes" || echo "ERROR Tool execution failed"
 
 # Check MEMORY directories
 echo ""
 echo "Checking MEMORY directories..."
-[ -d "$PAI_DIR/MEMORY/Work" ] && echo "✓ MEMORY/Work" || echo "❌ MEMORY/Work missing"
-[ -d "$PAI_DIR/MEMORY/State" ] && echo "✓ MEMORY/State" || echo "❌ MEMORY/State missing"
-
-# Test EffortClassifier
-echo ""
-echo "Testing EffortClassifier..."
-bun run "$PAI_DIR/skills/THEALGORITHM/Tools/EffortClassifier.ts" --request "Add a new feature" --output json | head -10
-
-# Test ISCManager
-echo ""
-echo "Testing ISCManager..."
-bun run "$PAI_DIR/skills/THEALGORITHM/Tools/ISCManager.ts" --help | head -5
+[ -d "$PAI_DIR/MEMORY/Work" ] && echo "OK MEMORY/Work" || echo "ERROR MEMORY/Work missing"
+[ -d "$PAI_DIR/MEMORY/Learning/ALGORITHM" ] && echo "OK MEMORY/Learning/ALGORITHM" || echo "ERROR MEMORY/Learning/ALGORITHM missing"
 
 echo "=== Verification Complete ==="
 ```
@@ -306,16 +267,20 @@ echo "=== Verification Complete ==="
 ### On Success
 
 ```
-"THE ALGORITHM Skill v0.5.0 installed successfully!
+"PAI Algorithm Skill v2.3.0 installed successfully!
 
 What's available:
-- 7 execution phases: OBSERVE → THINK → PLAN → BUILD → EXECUTE → VERIFY → LEARN
-- ISC (Ideal State Criteria) tracking
-- Effort-based capability selection (TRIVIAL → DETERMINED)
-- Ralph Loop for persistent iteration
-- LCARS-style visual display with voice support
+- EffortClassifier: Automatically classifies task complexity (QUICK/STANDARD/SIGNIFICANT/TRANSFORMATIONAL)
+- ISCManager: Creates and tracks Ideal State Criteria for tasks
+- AlgorithmDisplay: Shows visual status during execution
+- CapabilityLoader: Loads appropriate capabilities for effort level
 
-Try it: Ask me to 'run the algorithm on: Add dark mode toggle'"
+THE ALGORITHM activates automatically when you mention 'run the algorithm' or start complex tasks.
+
+Usage:
+- 'Run the algorithm on [task]' - Explicit activation
+- 'Use the algorithm for [project]' - Structured execution
+- Complex tasks automatically trigger algorithm workflow"
 ```
 
 ### On Failure
@@ -324,9 +289,9 @@ Try it: Ask me to 'run the algorithm on: Add dark mode toggle'"
 "Installation encountered issues. Here's what to check:
 
 1. Ensure pai-core-install is installed first
-2. Ensure pai-agents-skill is installed second
-3. Verify Bun is installed: `bun --version`
-4. Check directory permissions on $PAI_DIR/skills/
+2. Verify Bun is installed: `bun --version`
+3. Check directory permissions on $PAI_DIR/skills/
+4. Verify yaml package installed: `cd $PAI_DIR/skills/THEALGORITHM/Tools && bun add yaml`
 5. Run the verification commands in VERIFY.md
 
 Need help? Check the Troubleshooting section below."
@@ -343,115 +308,83 @@ This pack requires pai-core-install. Install it first:
 Give the AI the pai-core-install pack directory and ask it to install.
 ```
 
-### "pai-agents-skill not found"
-
-This pack requires pai-agents-skill for custom agent composition. Install it:
-```
-Give the AI the pai-agents-skill pack directory and ask it to install.
-```
-
 ### "bun: command not found"
 
 ```bash
-# Install Bun
 curl -fsSL https://bun.sh/install | bash
-# Restart terminal or source ~/.bashrc
+source ~/.zshrc  # or restart terminal
 ```
 
-### EffortClassifier not found
+### "Cannot find module 'yaml'"
 
 ```bash
-# Check PAI_DIR is set correctly
-echo $PAI_DIR
-# Should output your PAI directory (default: ~/.claude)
+cd $PAI_DIR/skills/THEALGORITHM/Tools
+bun add yaml
 ```
 
-### Capability loading fails
+### Tool execution fails
 
 ```bash
-# Validate YAML syntax
-bun -e "const yaml = require('yaml'); yaml.parse(require('fs').readFileSync('$PAI_DIR/skills/THEALGORITHM/Data/Capabilities.yaml', 'utf8'))"
-```
+# Check tool syntax
+bun run $PAI_DIR/skills/THEALGORITHM/Tools/EffortClassifier.ts --help
 
-### Voice not working
-
-```bash
-# Check if voice server is running
-curl -s http://localhost:8888/status || echo "Voice server not running"
-# Install pai-voice-system if needed
-```
-
-### ISC not saving
-
-```bash
-# Check MEMORY directories exist
-ls -la "$PAI_DIR/MEMORY/Work/"
-ls -la "$PAI_DIR/MEMORY/State/"
+# If TypeScript errors, ensure bun is up to date
+bun upgrade
 ```
 
 ---
 
 ## What's Included
 
+### Core Files
+
 | File | Purpose |
 |------|---------|
-| `SKILL.md` | Main skill definition with workflow routing |
-| `Data/Capabilities.yaml` | 30+ orchestratable capabilities registry |
-| `Tools/AlgorithmDisplay.ts` | LCARS-style visual display with voice |
-| `Tools/EffortClassifier.ts` | Classify requests by effort level |
-| `Tools/CapabilityLoader.ts` | Load capabilities by effort level |
-| `Tools/CapabilitySelector.ts` | Select capabilities for ISC rows |
-| `Tools/ISCManager.ts` | Create, update, query ISC tables |
-| `Tools/TraitModifiers.ts` | Effort-to-trait mappings |
-| `Tools/RalphLoopExecutor.ts` | Persistent iteration executor |
-| `Phases/*.md` | Phase documentation (OBSERVE through LEARN) |
-| `Reference/*.md` | Capability and effort matrices |
+| `SKILL.md` | Skill definition and routing |
+| `Tools/EffortClassifier.ts` | Task complexity classification |
+| `Tools/ISCManager.ts` | Ideal State Criteria management |
+| `Tools/AlgorithmDisplay.ts` | Visual execution status |
+| `Tools/CapabilityLoader.ts` | Effort-specific capabilities |
+
+### MEMORY Structure
+
+| Directory | Purpose |
+|-----------|---------|
+| `MEMORY/Work/` | Active work tracking |
+| `MEMORY/State/` | Algorithm state persistence |
+| `MEMORY/Learning/ALGORITHM/` | Algorithm learning captures |
 
 ---
 
 ## Usage
 
-### From Claude Code
+### Automatic Activation
 
-```
-"Run the algorithm on: Add dark mode toggle"
-"Use THE ALGORITHM for this complex task"
-"Start algorithm with effort level THOROUGH"
-```
+THE ALGORITHM activates when:
+- User says "run the algorithm"
+- User says "use the algorithm"
+- Complex multi-step tasks are detected
 
-### CLI Examples
+### Effort Levels
+
+| Level | Tasks | Approach |
+|-------|-------|----------|
+| QUICK | Simple fixes, single-file changes | Direct execution |
+| STANDARD | Features, multi-file changes | Structured with ISC |
+| SIGNIFICANT | Major features, refactoring | Full algorithm with phases |
+| TRANSFORMATIONAL | Architecture changes, new systems | Extended planning and validation |
+
+### Manual Tool Usage
 
 ```bash
-# Start with visual display
-bun run $PAI_DIR/skills/THEALGORITHM/Tools/AlgorithmDisplay.ts start STANDARD -r "Add dark mode toggle"
+# Classify effort
+bun run $PAI_DIR/skills/THEALGORITHM/Tools/EffortClassifier.ts --request "Add dark mode"
 
-# Classify effort level
-bun run $PAI_DIR/skills/THEALGORITHM/Tools/EffortClassifier.ts --request "Add dark mode toggle"
+# Manage ISC
+bun run $PAI_DIR/skills/THEALGORITHM/Tools/ISCManager.ts create --request "Build auth system"
+bun run $PAI_DIR/skills/THEALGORITHM/Tools/ISCManager.ts show
+bun run $PAI_DIR/skills/THEALGORITHM/Tools/ISCManager.ts clear
 
-# Create ISC
-bun run $PAI_DIR/skills/THEALGORITHM/Tools/ISCManager.ts create --request "Add dark mode toggle"
-
-# Transition phases
-bun run $PAI_DIR/skills/THEALGORITHM/Tools/AlgorithmDisplay.ts phase THINK
-bun run $PAI_DIR/skills/THEALGORITHM/Tools/AlgorithmDisplay.ts phase EXECUTE
-
-# Ralph loop for persistent iteration
-bun run $PAI_DIR/skills/THEALGORITHM/Tools/RalphLoopExecutor.ts \
-  --prompt "Fix the auth bug" \
-  --completion-promise "All tests pass" \
-  --max-iterations 15
+# Start algorithm display
+bun run $PAI_DIR/skills/THEALGORITHM/Tools/AlgorithmDisplay.ts start STANDARD -r "Feature request"
 ```
-
----
-
-## Integration with Other Skills
-
-THE ALGORITHM integrates with:
-- **Agents skill** - For custom agent composition via AgentFactory
-- **BeCreative skill** - For UltraThink thinking mode
-- **Council skill** - For multi-perspective debate (THOROUGH+)
-- **RedTeam skill** - For adversarial analysis (DETERMINED)
-- **FirstPrinciples skill** - For assumption challenging
-- **Browser skill** - For web verification
-
-These integrations work automatically if the skills are installed.

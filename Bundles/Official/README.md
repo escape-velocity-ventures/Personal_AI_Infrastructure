@@ -2,7 +2,7 @@
   <img src="pai-bundle.png" alt="The Official PAI Bundle" width="256">
 </p>
 
-# The Official PAI Bundle v2.1.0
+# The Official PAI Bundle v2.3.0
 
 > **FOR AI AGENTS:** You are about to install the complete PAI bundle. Run the wizard, then install each pack in order.
 
@@ -127,22 +127,49 @@ When fully installed, the PAI bundle gives you:
 
 **After running the wizard, install these packs IN ORDER:**
 
+### Required Packs
+
 | # | Pack | Purpose | Dependencies |
 |---|------|---------|--------------|
 | 1 | [pai-hook-system](../../Packs/pai-hook-system/) | Event-driven automation | None |
-| 2 | [pai-history-system](../../Packs/pai-history-system/) | Memory and capture | Hooks |
-| 3 | [pai-core-install](../../Packs/pai-core-install/) | Skills + Identity + Architecture | Hooks, History |
-| 4 | [pai-prompting-skill](../../Packs/pai-prompting-skill/) | Meta-prompting & templates | Core |
-| 5 | [pai-voice-system](../../Packs/pai-voice-system/) | Voice notifications (optional) | Hooks, Core |
-| 6 | [pai-agents-skill](../../Packs/pai-agents-skill/) | Dynamic agent composition (optional) | Core, Voice (optional) |
-| 7 | [pai-art-skill](../../Packs/pai-art-skill/) | Visual content generation (optional) | Core |
-| 8 | [pai-observability-server](../../Packs/pai-observability-server/) | Multi-agent monitoring (optional) | Hooks |
-| 9 | [pai-upgrades-skill](../../Packs/pai-upgrades-skill/) | Track and implement system upgrades (optional) | Core |
-| 10 | [pai-browser-skill](../../Packs/pai-browser-skill/) | Browser automation (optional) | Core |
+| 2 | [pai-core-install](../../Packs/pai-core-install/) | Skills + Identity + MEMORY system | Hooks |
+
+### Infrastructure Packs
+
+| # | Pack | Purpose | Dependencies |
+|---|------|---------|--------------|
+| 3 | [pai-statusline](../../Packs/pai-statusline/) | 4-mode responsive status line | Core |
+| 4 | [pai-voice-system](../../Packs/pai-voice-system/) | Voice notifications | Hooks, Core |
+| 5 | [pai-observability-server](../../Packs/pai-observability-server/) | Multi-agent monitoring | Hooks |
+
+### Skill Packs (install any you need)
+
+| Pack | Purpose |
+|------|---------|
+| [pai-agents-skill](../../Packs/pai-agents-skill/) | Dynamic agent composition |
+| [pai-algorithm-skill](../../Packs/pai-algorithm-skill/) | The Algorithm - verifiable iteration |
+| [pai-annualreports-skill](../../Packs/pai-annualreports-skill/) | Security report analysis |
+| [pai-art-skill](../../Packs/pai-art-skill/) | Visual content generation |
+| [pai-brightdata-skill](../../Packs/pai-brightdata-skill/) | Progressive web scraping |
+| [pai-browser-skill](../../Packs/pai-browser-skill/) | Browser automation |
+| [pai-council-skill](../../Packs/pai-council-skill/) | Multi-agent debate |
+| [pai-createcli-skill](../../Packs/pai-createcli-skill/) | CLI tool generation |
+| [pai-createskill-skill](../../Packs/pai-createskill-skill/) | Skill creation |
+| [pai-firstprinciples-skill](../../Packs/pai-firstprinciples-skill/) | First principles analysis |
+| [pai-osint-skill](../../Packs/pai-osint-skill/) | Open source intelligence |
+| [pai-privateinvestigator-skill](../../Packs/pai-privateinvestigator-skill/) | Ethical people-finding |
+| [pai-prompting-skill](../../Packs/pai-prompting-skill/) | Meta-prompting system |
+| [pai-recon-skill](../../Packs/pai-recon-skill/) | Security reconnaissance |
+| [pai-redteam-skill](../../Packs/pai-redteam-skill/) | Adversarial analysis |
+| [pai-research-skill](../../Packs/pai-research-skill/) | Multi-source research |
+| [pai-system-skill](../../Packs/pai-system-skill/) | System maintenance |
+| [pai-telos-skill](../../Packs/pai-telos-skill/) | Life OS and goals |
+
+> **Alternative:** Use a [Full Release](../../Releases/v2.3/) which includes all 23 packs pre-configured in a complete `.claude/` directory.
 
 ### How to Install Packs
 
-Give each pack directory to your AI and ask it to install:
+Give each pack directory to your DA and ask it to install:
 
 ```
 "Install the pai-hook-system pack from PAI/Packs/pai-hook-system/"
@@ -245,6 +272,13 @@ The PAI system embeds these principles from [Personal AI Infrastructure](https:/
 ---
 
 ## Changelog
+
+### 2.3.0 - 2026-01-15
+- **Full Releases Return:** Added Releases/v2.3/ with complete .claude directory
+- **23 Packs Total:** 5 infrastructure + 18 skill packs
+- **Continuous Learning:** Sentiment capture, rating system, learning extraction
+- **New Packs:** Added pai-statusline, pai-annualreports-skill, pai-brightdata-skill, pai-council-skill, pai-createcli-skill, pai-createskill-skill, pai-firstprinciples-skill, pai-osint-skill, pai-privateinvestigator-skill, pai-recon-skill, pai-redteam-skill, pai-research-skill, pai-system-skill, pai-telos-skill
+- **History Retired:** MEMORY system in pai-core-install replaces standalone history pack
 
 ### 2.1.0 - 2026-01-08
 - **Rebranded to PAI:** All packs renamed from pai-* to pai-* for consistency with project name

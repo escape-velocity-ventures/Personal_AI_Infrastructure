@@ -1,210 +1,154 @@
-# Verification Checklist - THE ALGORITHM Skill
+# PAI Algorithm Skill Verification
 
-## Mandatory Completion Checklist
-
-**IMPORTANT**: This checklist MUST be completed before marking installation as done.
-
-### File Structure Verification
-
-- [ ] `$PAI_DIR/skills/THEALGORITHM/SKILL.md` exists
-- [ ] `$PAI_DIR/skills/THEALGORITHM/Data/Capabilities.yaml` exists
-- [ ] `$PAI_DIR/skills/THEALGORITHM/Tools/EffortClassifier.ts` exists
-- [ ] `$PAI_DIR/skills/THEALGORITHM/Tools/CapabilityLoader.ts` exists
-- [ ] `$PAI_DIR/skills/THEALGORITHM/Tools/CapabilitySelector.ts` exists
-- [ ] `$PAI_DIR/skills/THEALGORITHM/Tools/ISCManager.ts` exists
-- [ ] `$PAI_DIR/skills/THEALGORITHM/Tools/AlgorithmDisplay.ts` exists
-- [ ] `$PAI_DIR/skills/THEALGORITHM/Tools/TraitModifiers.ts` exists
-- [ ] `$PAI_DIR/skills/THEALGORITHM/Tools/RalphLoopExecutor.ts` exists
-- [ ] `$PAI_DIR/skills/THEALGORITHM/Phases/Observe.md` exists
-- [ ] `$PAI_DIR/skills/THEALGORITHM/Phases/Think.md` exists
-- [ ] `$PAI_DIR/skills/THEALGORITHM/Phases/Plan.md` exists
-- [ ] `$PAI_DIR/skills/THEALGORITHM/Phases/Build.md` exists
-- [ ] `$PAI_DIR/skills/THEALGORITHM/Phases/Execute.md` exists
-- [ ] `$PAI_DIR/skills/THEALGORITHM/Phases/Verify.md` exists
-- [ ] `$PAI_DIR/skills/THEALGORITHM/Phases/Learn.md` exists
-- [ ] `$PAI_DIR/MEMORY/Work/` directory exists
-
-### CLI Tool Verification
-
-- [ ] `bun run EffortClassifier.ts --help` shows usage information
-- [ ] `bun run CapabilityLoader.ts --list-all` displays all capabilities
-- [ ] `bun run ISCManager.ts --help` shows usage information
-- [ ] `bun run AlgorithmDisplay.ts --help` shows usage information
-- [ ] `bun run TraitModifiers.ts --list` shows effort configurations
-- [ ] `bun run RalphLoopExecutor.ts --help` shows usage information
-
-### Functional Tests
-
-#### Test 1: Effort Classification
-```bash
-bun run $PAI_DIR/skills/THEALGORITHM/Tools/EffortClassifier.ts \
-  --request "Add a new authentication system" \
-  --output json
-```
-**Expected**: Returns JSON with effort level (likely THOROUGH), confidence score, and reasoning
-
-#### Test 2: Capability Loading
-```bash
-bun run $PAI_DIR/skills/THEALGORITHM/Tools/CapabilityLoader.ts \
-  --effort STANDARD \
-  --output markdown
-```
-**Expected**: Shows available capabilities for STANDARD effort level
-
-#### Test 3: ISC Creation
-```bash
-bun run $PAI_DIR/skills/THEALGORITHM/Tools/ISCManager.ts create \
-  --request "Test feature" \
-  --effort STANDARD
-```
-**Expected**: Creates new ISC, outputs confirmation message
-
-#### Test 4: ISC Row Addition
-```bash
-bun run $PAI_DIR/skills/THEALGORITHM/Tools/ISCManager.ts add \
-  -d "Feature works correctly" \
-  -s EXPLICIT
-```
-**Expected**: Adds row to ISC, shows row ID
-
-#### Test 5: ISC Display
-```bash
-bun run $PAI_DIR/skills/THEALGORITHM/Tools/ISCManager.ts show -o markdown
-```
-**Expected**: Displays formatted ISC table
-
-#### Test 6: Capability Selection
-```bash
-bun run $PAI_DIR/skills/THEALGORITHM/Tools/CapabilitySelector.ts \
-  --row "Research best practices for API design" \
-  --effort STANDARD
-```
-**Expected**: Suggests research capability (likely perplexity)
-
-#### Test 7: Algorithm Display
-```bash
-bun run $PAI_DIR/skills/THEALGORITHM/Tools/AlgorithmDisplay.ts show
-```
-**Expected**: Shows LCARS-style display with phase progression
-
-#### Test 8: Trait Modifiers
-```bash
-bun run $PAI_DIR/skills/THEALGORITHM/Tools/TraitModifiers.ts \
-  --effort THOROUGH \
-  --phase verify
-```
-**Expected**: Returns verification traits (skeptical, meticulous, adversarial)
-
-#### Test 9: Ralph Loop Status
-```bash
-bun run $PAI_DIR/skills/THEALGORITHM/Tools/RalphLoopExecutor.ts --status
-```
-**Expected**: Shows "No active Ralph loop" or current loop status
-
-#### Test 10: Clean ISC
-```bash
-bun run $PAI_DIR/skills/THEALGORITHM/Tools/ISCManager.ts clear
-```
-**Expected**: Archives and clears current ISC
+> **MANDATORY:** All checks must pass before installation is complete.
 
 ---
 
-## Quick Verification Script
+## Quick Verification
 
 ```bash
-#!/bin/bash
-PAI_DIR="${PAI_DIR:-$HOME/.config/pai}"
-
-echo "=== THE ALGORITHM Skill Verification ==="
-echo ""
-
-PASS=0
-FAIL=0
-
-check() {
-  if [ "$1" = "0" ]; then
-    echo "[PASS] $2"
-    ((PASS++))
-  else
-    echo "[FAIL] $2"
-    ((FAIL++))
-  fi
-}
-
-# File checks
-[ -f "$PAI_DIR/skills/THEALGORITHM/SKILL.md" ]
-check $? "SKILL.md exists"
-
-[ -f "$PAI_DIR/skills/THEALGORITHM/Data/Capabilities.yaml" ]
-check $? "Capabilities.yaml exists"
-
-[ -f "$PAI_DIR/skills/THEALGORITHM/Tools/EffortClassifier.ts" ]
-check $? "EffortClassifier.ts exists"
-
-[ -f "$PAI_DIR/skills/THEALGORITHM/Tools/ISCManager.ts" ]
-check $? "ISCManager.ts exists"
-
-[ -f "$PAI_DIR/skills/THEALGORITHM/Tools/AlgorithmDisplay.ts" ]
-check $? "AlgorithmDisplay.ts exists"
-
-[ -f "$PAI_DIR/skills/THEALGORITHM/Tools/RalphLoopExecutor.ts" ]
-check $? "RalphLoopExecutor.ts exists"
-
-[ -d "$PAI_DIR/MEMORY/Work" ]
-check $? "MEMORY/Work directory exists"
-
-# CLI checks
-bun run "$PAI_DIR/skills/THEALGORITHM/Tools/EffortClassifier.ts" --help >/dev/null 2>&1
-check $? "EffortClassifier CLI runs"
-
-bun run "$PAI_DIR/skills/THEALGORITHM/Tools/ISCManager.ts" --help >/dev/null 2>&1
-check $? "ISCManager CLI runs"
-
-bun run "$PAI_DIR/skills/THEALGORITHM/Tools/CapabilityLoader.ts" --list-all >/dev/null 2>&1
-check $? "CapabilityLoader CLI runs"
-
-# Functional checks
-bun run "$PAI_DIR/skills/THEALGORITHM/Tools/EffortClassifier.ts" \
-  --request "Test request" --output json 2>/dev/null | grep -q "effort"
-check $? "Effort classification works"
-
-bun run "$PAI_DIR/skills/THEALGORITHM/Tools/TraitModifiers.ts" \
-  --effort STANDARD --output json 2>/dev/null | grep -q "traits"
-check $? "Trait modifiers work"
-
-echo ""
-echo "=== Results: $PASS passed, $FAIL failed ==="
-
-if [ $FAIL -eq 0 ]; then
-  echo "THE ALGORITHM Skill installation verified successfully!"
-  exit 0
-else
-  echo "Some checks failed. Review the output above."
-  exit 1
-fi
+# Run these commands to verify installation
+ls -la ~/.claude/skills/THEALGORITHM/SKILL.md && \
+ls -la ~/.claude/skills/THEALGORITHM/Data/Capabilities.yaml && \
+ls -la ~/.claude/skills/THEALGORITHM/Tools/ISCManager.ts && \
+echo "Core files present"
 ```
+
+---
+
+## Detailed Checklist
+
+### 1. File Structure
+
+| # | Check | Command | Pass Criteria | Status |
+|---|-------|---------|---------------|--------|
+| 1 | Main skill file | `ls ~/.claude/skills/THEALGORITHM/SKILL.md` | File exists | [ ] |
+| 2 | Data directory | `ls ~/.claude/skills/THEALGORITHM/Data/` | Contains Capabilities.yaml, VerificationMethods.yaml | [ ] |
+| 3 | Tools directory | `ls ~/.claude/skills/THEALGORITHM/Tools/` | Contains 7 .ts files | [ ] |
+| 4 | Phases directory | `ls ~/.claude/skills/THEALGORITHM/Phases/` | Contains 7 .md files | [ ] |
+| 5 | Reference directory | `ls ~/.claude/skills/THEALGORITHM/Reference/` | Contains 3 .md files | [ ] |
+| 6 | Memory directories | `ls ~/.claude/MEMORY/Work/ ~/.claude/MEMORY/State/` | Directories exist | [ ] |
+
+### 2. Tool Execution
+
+| # | Check | Command | Pass Criteria | Status |
+|---|-------|---------|---------------|--------|
+| 1 | EffortClassifier help | `bun run ~/.claude/skills/THEALGORITHM/Tools/EffortClassifier.ts --help` | Shows usage info | [ ] |
+| 2 | CapabilityLoader help | `bun run ~/.claude/skills/THEALGORITHM/Tools/CapabilityLoader.ts --help` | Shows usage info | [ ] |
+| 3 | ISCManager help | `bun run ~/.claude/skills/THEALGORITHM/Tools/ISCManager.ts --help` | Shows usage info | [ ] |
+| 4 | AlgorithmDisplay help | `bun run ~/.claude/skills/THEALGORITHM/Tools/AlgorithmDisplay.ts --help` | Shows usage info | [ ] |
+| 5 | CapabilitySelector help | `bun run ~/.claude/skills/THEALGORITHM/Tools/CapabilitySelector.ts --help` | Shows usage info | [ ] |
+| 6 | TraitModifiers help | `bun run ~/.claude/skills/THEALGORITHM/Tools/TraitModifiers.ts --help` | Shows usage info | [ ] |
+| 7 | RalphLoopExecutor help | `bun run ~/.claude/skills/THEALGORITHM/Tools/RalphLoopExecutor.ts --help` | Shows usage info | [ ] |
+
+### 3. Functionality Tests
+
+```bash
+# Test 1: Effort Classification
+bun run ~/.claude/skills/THEALGORITHM/Tools/EffortClassifier.ts --request "Hello"
+# Expected: EFFORT: TRIVIAL
+
+bun run ~/.claude/skills/THEALGORITHM/Tools/EffortClassifier.ts --request "Refactor the authentication system"
+# Expected: EFFORT: THOROUGH
+
+bun run ~/.claude/skills/THEALGORITHM/Tools/EffortClassifier.ts --request "Keep going until done"
+# Expected: EFFORT: DETERMINED
+```
+
+```bash
+# Test 2: Capability Loading
+bun run ~/.claude/skills/THEALGORITHM/Tools/CapabilityLoader.ts --effort STANDARD
+# Expected: Lists available capabilities including models, thinking, execution
+
+bun run ~/.claude/skills/THEALGORITHM/Tools/CapabilityLoader.ts --effort THOROUGH
+# Expected: Shows additional capabilities like debate.council, thinking.plan_mode
+```
+
+```bash
+# Test 3: ISC Management
+# Create ISC
+bun run ~/.claude/skills/THEALGORITHM/Tools/ISCManager.ts create --request "Add dark mode"
+# Expected: ISC created for: Add dark mode
+
+# Add row
+bun run ~/.claude/skills/THEALGORITHM/Tools/ISCManager.ts add --description "Toggle works" --source EXPLICIT
+# Expected: Added row 1
+
+# Show ISC
+bun run ~/.claude/skills/THEALGORITHM/Tools/ISCManager.ts show
+# Expected: Displays ISC table with the added row
+
+# Clean up
+bun run ~/.claude/skills/THEALGORITHM/Tools/ISCManager.ts clear
+# Expected: Current ISC cleared
+```
+
+```bash
+# Test 4: Capability Selection
+bun run ~/.claude/skills/THEALGORITHM/Tools/CapabilitySelector.ts --row "Research best practices" --effort STANDARD
+# Expected: PRIMARY CAPABILITY: perplexity (research category)
+
+bun run ~/.claude/skills/THEALGORITHM/Tools/CapabilitySelector.ts --row "Implement the feature" --effort STANDARD
+# Expected: PRIMARY CAPABILITY: engineer (execution category)
+```
+
+```bash
+# Test 5: Trait Modifiers
+bun run ~/.claude/skills/THEALGORITHM/Tools/TraitModifiers.ts --effort STANDARD
+# Expected: TRAITS: analytical, systematic
+
+bun run ~/.claude/skills/THEALGORITHM/Tools/TraitModifiers.ts --effort STANDARD --phase verify
+# Expected: TRAITS: skeptical, meticulous, adversarial
+```
+
+```bash
+# Test 6: Algorithm Display (visual test)
+bun run ~/.claude/skills/THEALGORITHM/Tools/AlgorithmDisplay.ts show
+# Expected: Visual display with phase progression (may show "No active ISC")
+
+bun run ~/.claude/skills/THEALGORITHM/Tools/AlgorithmDisplay.ts effort THOROUGH
+# Expected: Effort banner in orange/red colors
+```
+
+### 4. Data File Validation
+
+```bash
+# Test YAML parsing
+bun run -e "import { parse } from 'yaml'; import { readFileSync } from 'fs'; const data = parse(readFileSync(process.env.HOME + '/.claude/skills/THEALGORITHM/Data/Capabilities.yaml', 'utf-8')); console.log('Capabilities version:', data.version); console.log('Models:', Object.keys(data.models).join(', '));"
+# Expected: Shows version 1.0 and model names
+```
+
+---
+
+## Verification Complete
+
+When all checks pass:
+
+- [ ] All file structure checks passed (6/6)
+- [ ] All tool execution checks passed (7/7)
+- [ ] All functionality tests passed (6/6)
+- [ ] Data file validation passed (1/1)
+
+**Installation verified. THE ALGORITHM skill is ready for use.**
 
 ---
 
 ## Troubleshooting
 
-| Issue | Solution |
-|-------|----------|
-| Tool not found | Check `$PAI_DIR` is set correctly |
-| YAML parse error | Verify Capabilities.yaml syntax |
-| ISC not saving | Ensure MEMORY/Work directory exists with write permissions |
-| Missing dependencies | Run `bun add yaml` in Tools directory |
-| Voice not working | Check pai-voice-system is running on port 8888 |
-| Display garbled | Terminal may not support ANSI colors |
-
-## Integration Verification
-
-After installation, verify integration with other skills:
+### Tools fail to execute
 
 ```bash
-# Test that Agents skill is available (for custom agent composition)
-[ -f "$PAI_DIR/skills/Agents/Tools/AgentFactory.ts" ] && echo "Agents skill: OK" || echo "Agents skill: MISSING"
+# Ensure bun is installed
+bun --version
 
-# Test that CORE skill is available (for user context)
-[ -f "$PAI_DIR/skills/CORE/SKILL.md" ] && echo "CORE skill: OK" || echo "CORE skill: MISSING"
+# If yaml import fails, install it
+cd ~/.claude/skills/THEALGORITHM/Tools && bun add yaml
 ```
+
+### ISC commands fail with "No current ISC"
+
+This is expected behavior when no ISC has been created. Run `create` first.
+
+### Voice notifications don't work
+
+Voice is optional. The algorithm works without it. Ensure the voice server is running at localhost:8888 if you want voice announcements.

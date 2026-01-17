@@ -1,4 +1,4 @@
-# Verification Checklist - Kai Prompting Skill
+# Verification Checklist - PAI Prompting Skill v2.3.0
 
 ## Mandatory Checks
 
@@ -12,6 +12,12 @@ ls $PAI_DIR/skills/Prompting/
 
 ls $PAI_DIR/skills/Prompting/Templates/Primitives/
 # Expected: Roster.hbs Voice.hbs Structure.hbs Briefing.hbs Gate.hbs
+
+ls $PAI_DIR/skills/Prompting/Templates/Evals/
+# Expected: Judge.hbs Rubric.hbs Comparison.hbs Report.hbs TestCase.hbs
+
+ls $PAI_DIR/skills/Prompting/Templates/Data/
+# Expected: Agents.yaml ValidationGates.yaml VoicePresets.yaml
 ```
 
 - [ ] `$PAI_DIR/skills/Prompting/` directory exists
@@ -19,7 +25,10 @@ ls $PAI_DIR/skills/Prompting/Templates/Primitives/
 - [ ] `Standards.md` present
 - [ ] `Templates/` directory exists
 - [ ] `Templates/Primitives/` contains 5 `.hbs` files
-- [ ] `Tools/` directory exists with 2 `.ts` files
+- [ ] `Templates/Evals/` contains 5 `.hbs` files
+- [ ] `Templates/Data/` contains 3 `.yaml` files
+- [ ] `Templates/Tools/` contains CLI tools and package.json
+- [ ] `Tools/` directory exists with `.ts` files
 
 ### Dependencies
 
@@ -41,7 +50,7 @@ for template in $PAI_DIR/skills/Prompting/Templates/Primitives/*.hbs; do
 done
 ```
 
-- [ ] All 5 templates pass validation
+- [ ] All 5 primitive templates pass validation
 
 ### Template Rendering
 
@@ -53,7 +62,7 @@ echo 'agents:
     name: "Test Agent"
     display_name: "Test"
     role: "Tester"
-    emoji: "🧪"
+    emoji: "test"
     personality:
       perspective: "Testing perspective"
       traits:
@@ -118,6 +127,30 @@ bun run $PAI_DIR/skills/Prompting/Tools/RenderTemplate.ts \
 
 - [ ] Briefing template renders agent identity, context, and task sections
 
+### Eval Template Test
+
+```bash
+echo 'eval:
+  type: "judge"
+  criteria:
+    - name: "Accuracy"
+      weight: 0.4
+      description: "Response matches expected output"
+    - name: "Completeness"
+      weight: 0.3
+      description: "All requirements addressed"
+    - name: "Style"
+      weight: 0.3
+      description: "Follows formatting guidelines"' > /tmp/test-eval.yaml
+
+bun run $PAI_DIR/skills/Prompting/Tools/RenderTemplate.ts \
+  --template $PAI_DIR/skills/Prompting/Templates/Evals/Judge.hbs \
+  --data /tmp/test-eval.yaml \
+  --preview
+```
+
+- [ ] Judge template renders with evaluation criteria
+
 ## Verification Summary
 
 | Check | Status |
@@ -128,6 +161,7 @@ bun run $PAI_DIR/skills/Prompting/Tools/RenderTemplate.ts \
 | Roster renders | |
 | Gate renders | |
 | Briefing renders | |
+| Eval templates present | |
 
 ## Troubleshooting
 
@@ -154,5 +188,5 @@ If a helper isn't working:
 ## Cleanup Test Files
 
 ```bash
-rm /tmp/test-agents.yaml /tmp/test-gate.yaml /tmp/test-briefing.yaml
+rm /tmp/test-agents.yaml /tmp/test-gate.yaml /tmp/test-briefing.yaml /tmp/test-eval.yaml
 ```

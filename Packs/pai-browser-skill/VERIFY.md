@@ -1,203 +1,206 @@
-# Browser Skill v1.2.0 - Verification
-
-**This verification guide is for AI agents to confirm successful installation.**
-
+---
+name: pai-browser-skill-verify
+version: 2.3.0
 ---
 
-## MANDATORY COMPLETION CHECKLIST
+# Verification Guide
 
-**AI Agents: You MUST verify ALL items below pass before reporting installation success.**
-
-### Core Installation (Checks 1-8)
-
-| # | Check | Command | Pass Criteria | Status |
-|---|-------|---------|---------------|--------|
-| 1 | Directory exists | `ls -la $PAI_DIR/skills/Browser/` | Directory with files shown | |
-| 2 | Core files present | `ls $PAI_DIR/skills/Browser/{src/index.ts,SKILL.md,package.json}` | All 3 files exist | |
-| 3 | Tools present | `ls $PAI_DIR/skills/Browser/Tools/{Browse.ts,BrowserSession.ts}` | Both tools exist | |
-| 4 | Dependencies installed | `cd $PAI_DIR/skills/Browser && bun pm ls \| grep playwright` | playwright listed | |
-| 5 | Playwright browsers | `bunx playwright install chromium --dry-run 2>&1 \| head -5` | Shows chromium installed OR installs it | |
-| 6 | API import works | `cd $PAI_DIR/skills/Browser && bun -e "import './src/index.ts'"` | No error | |
-| 7 | CLI help works | `bun run $PAI_DIR/skills/Browser/Tools/Browse.ts --help 2>&1 \| head -10` | Shows v1.2.0 usage | |
-| 8 | Examples exist | `ls $PAI_DIR/skills/Browser/examples/*.ts` | At least 2 example files | |
-
-### Session Management (Checks 9-15)
-
-| # | Check | Command | Pass Criteria | Status |
-|---|-------|---------|---------------|--------|
-| 9 | Session auto-start | `bun run $PAI_DIR/skills/Browser/Tools/Browse.ts https://example.com 2>&1` | Shows diagnostics output | |
-| 10 | Screenshot created | `ls /tmp/browse-*.png 2>/dev/null \| head -1` | File exists | |
-| 11 | Session status | `bun run $PAI_DIR/skills/Browser/Tools/Browse.ts status` | Shows session info | |
-| 12 | Health endpoint | `curl -s http://localhost:9222/health 2>/dev/null \| head -1` | Returns JSON with status:ok | |
-| 13 | Console command | `bun run $PAI_DIR/skills/Browser/Tools/Browse.ts console` | Shows console output or "No console output" | |
-| 14 | Network command | `bun run $PAI_DIR/skills/Browser/Tools/Browse.ts network` | Shows network or "No network activity" | |
-| 15 | Session stop | `bun run $PAI_DIR/skills/Browser/Tools/Browse.ts stop` | Shows "Session stopped" | |
-
-**Completion Requirements:**
-- ALL 15 checks must pass
-- If ANY check fails, troubleshoot before proceeding
-- Report exact error messages for failed checks
-- DO NOT report success until all checks pass
-
-**After all checks pass, mark installation complete:**
-```
-INSTALLATION VERIFIED: All 15 checks passed
-   - Browser skill v1.2.0 installed at $PAI_DIR/skills/Browser/
-   - Playwright chromium browser ready
-   - Session auto-start working
-   - Diagnostic endpoints functional
-   - API, examples, and CLI all operational
-```
-
----
+Verify your Browser skill installation is working correctly.
 
 ## Quick Verification
 
-Run these commands to verify the Browser skill is working:
-
-### 1. Check Version
+### 1. Check Files Exist
 
 ```bash
-bun run $PAI_DIR/skills/Browser/Tools/Browse.ts --help | head -3
+ls ~/.claude/skills/Browser/
+# Should show: SKILL.md README.md index.ts package.json Tools/ Workflows/ examples/
 ```
 
-Expected: Shows "Browse CLI v1.2.0"
-
-### 2. Test Debug-First Navigation
+### 2. Check Dependencies
 
 ```bash
-bun run $PAI_DIR/skills/Browser/Tools/Browse.ts https://example.com
+ls ~/.claude/skills/Browser/node_modules/playwright
+# Should show playwright package files
 ```
 
-Expected output:
-```
-📸 Screenshot: /tmp/browse-TIMESTAMP.png
-
-📊 Network: X requests | Y KB | avg Zms
-✅ Page: "Example Domain" loaded successfully
-```
-
-### 3. Verify Session Running
+### 3. Run Basic Test
 
 ```bash
-bun run $PAI_DIR/skills/Browser/Tools/Browse.ts status
+bun run ~/.claude/skills/Browser/examples/screenshot.ts https://example.com
 ```
 
-Expected:
+**Expected Output:**
 ```
-Browser Session:
-  ID: xxxxxxxx
-  Port: 9222
-  URL: https://example.com
+=== Playwright Screenshot ===
+
+1. Launching browser...
+2. Navigating to https://example.com...
+3. Taking screenshot (fullPage: false)...
+
+Screenshot saved: screenshot.png
+
+Token savings: 98.9%
+   MCP approach: ~13700 tokens
+   Code approach: ~150 tokens
+```
+
+## Comprehensive Verification
+
+### Run Full Test Suite
+
+```bash
+bun run ~/.claude/skills/Browser/examples/comprehensive-test.ts
+```
+
+**Expected Output:**
+```
+=== Playwright FileMCP Comprehensive Test ===
+
+--- LIFECYCLE ---
+PASS launch()
+
+--- NAVIGATION ---
+PASS navigate()
+PASS getUrl()
+PASS getTitle()
+...
+
+==================================================
+TEST SUMMARY
+==================================================
+
+Passed:  35+
+Failed:  0
+Skipped: 5-7
+Total:   40+
+```
+
+### Verify CLI Tool
+
+```bash
+# Test Browse CLI
+bun run ~/.claude/skills/Browser/Tools/Browse.ts --help
+```
+
+**Expected Output:**
+```
+Browse CLI v2.0.0 - Debug-First Browser Automation
+
+Usage:
+  bun run Browse.ts <url>                    Navigate with full diagnostics
+  bun run Browse.ts errors                   Show console errors
   ...
 ```
 
-### 4. Test Diagnostic Commands
+### Verify Page Load
 
 ```bash
-# Console output
-bun run $PAI_DIR/skills/Browser/Tools/Browse.ts console
-
-# Network activity
-bun run $PAI_DIR/skills/Browser/Tools/Browse.ts network
-
-# Failed requests
-bun run $PAI_DIR/skills/Browser/Tools/Browse.ts failed
+bun run ~/.claude/skills/Browser/examples/verify-page.ts https://example.com
 ```
 
-### 5. Stop Session
+**Expected Output:**
+```
+=== Page Verification ===
 
-```bash
-bun run $PAI_DIR/skills/Browser/Tools/Browse.ts stop
+1. Launching browser...
+2. Navigating to https://example.com...
+   Page loaded in XXms
+
+3. Page title: "Example Domain"
+
+No console errors
+
+=== Verification Complete ===
 ```
 
-Expected: "Session stopped"
+## Feature Verification Checklist
 
----
+| Feature | Test Command | Expected Result |
+|---------|--------------|-----------------|
+| Screenshot | `bun examples/screenshot.ts https://example.com` | Creates screenshot.png |
+| Page Verify | `bun examples/verify-page.ts https://example.com` | Shows page title, no errors |
+| Full Suite | `bun examples/comprehensive-test.ts` | 35+ tests pass |
+| CLI Help | `bun Tools/Browse.ts --help` | Shows usage info |
+| Session | `bun Tools/Browse.ts status` | Shows session info or "No session" |
 
-## Common Issues
+## Verification by Capability
 
-### "Cannot find module 'playwright'"
+### Navigation
 
 ```bash
-cd $PAI_DIR/skills/Browser
-bun install
+cd ~/.claude/skills/Browser
+bun -e "
+import { PlaywrightBrowser } from './index.ts'
+const b = new PlaywrightBrowser()
+await b.launch({ headless: true })
+await b.navigate('https://example.com')
+console.log('Title:', await b.getTitle())
+await b.close()
+"
 ```
 
-### "Executable doesn't exist"
+### Console Capture
 
 ```bash
-bunx playwright install chromium
+bun -e "
+import { PlaywrightBrowser } from './index.ts'
+const b = new PlaywrightBrowser()
+await b.launch({ headless: true })
+await b.navigate('https://example.com')
+await b.evaluate(() => console.log('Test log'))
+console.log('Logs:', b.getConsoleLogs().length)
+await b.close()
+"
 ```
 
-### Session won't start
+### Network Capture
 
-Check if port 9222 is already in use:
 ```bash
-lsof -i :9222
+bun -e "
+import { PlaywrightBrowser } from './index.ts'
+const b = new PlaywrightBrowser()
+await b.launch({ headless: true })
+await b.navigate('https://example.com')
+console.log('Requests:', b.getNetworkStats().totalRequests)
+await b.close()
+"
 ```
 
-Kill the process if needed:
-```bash
-kill $(lsof -t -i :9222)
-```
+## Troubleshooting Failed Verification
 
-### Session state file issue
+### If Screenshot Test Fails
 
-Clean up orphan state:
+1. Check Playwright installation:
+   ```bash
+   bunx playwright install chromium
+   ```
+
+2. Check permissions (macOS):
+   ```bash
+   xattr -cr ~/.cache/ms-playwright/
+   ```
+
+### If Tests Time Out
+
+1. Increase timeout in test
+2. Check network connectivity
+3. Try a different URL
+
+### If Session Won't Start
+
 ```bash
+# Clear stale state
 rm /tmp/browser-session.json
+
+# Kill any orphan processes
+pkill -f BrowserSession.ts
 ```
 
----
+## Success Criteria
 
-## Full Test Script
+Installation is verified when:
 
-```typescript
-import { PlaywrightBrowser } from '$PAI_DIR/skills/Browser/src/index.ts'
-
-async function verifyBrowserSkill() {
-  console.log('Testing Browser skill v1.2.0...')
-
-  const browser = new PlaywrightBrowser()
-
-  // Test 1: Launch
-  console.log('1. Launching browser...')
-  await browser.launch({ headless: true })
-  console.log('   OK')
-
-  // Test 2: Navigate
-  console.log('2. Navigating to example.com...')
-  await browser.navigate('https://example.com')
-  console.log('   OK')
-
-  // Test 3: Get title
-  console.log('3. Getting page title...')
-  const title = await browser.getTitle()
-  console.log(`   Title: ${title}`)
-
-  // Test 4: Console logs
-  console.log('4. Getting console logs...')
-  const logs = browser.getConsoleLogs()
-  console.log(`   Log entries: ${logs.length}`)
-
-  // Test 5: Network stats
-  console.log('5. Getting network stats...')
-  const stats = browser.getNetworkStats()
-  console.log(`   Requests: ${stats.totalRequests}`)
-
-  // Test 6: Screenshot
-  console.log('6. Taking screenshot...')
-  await browser.screenshot({ path: '/tmp/verify-test.png' })
-  console.log('   OK')
-
-  // Test 7: Close
-  console.log('7. Closing browser...')
-  await browser.close()
-  console.log('   OK')
-
-  console.log('\nAll tests passed!')
-}
-
-verifyBrowserSkill()
-```
+1. `bun examples/screenshot.ts` creates a valid PNG
+2. `bun examples/comprehensive-test.ts` passes 35+ tests
+3. CLI tool responds to commands
+4. No permission or dependency errors

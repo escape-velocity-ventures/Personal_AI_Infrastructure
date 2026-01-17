@@ -1,34 +1,37 @@
-# Verification Guide: Kai Hook System
+# Verification Guide: PAI Hook System v2.3.0
 
 ## Quick Verification
 
 Run these commands to verify the installation:
 
 ```bash
-# 1. Check all hooks exist
-ls -la $PAI_DIR/hooks/*.ts
-# Should show: security-validator.ts, initialize-session.ts,
-#              load-core-context.ts, update-tab-titles.ts
+PAI_DIR="${PAI_DIR:-$HOME/.claude}"
 
-# 2. Check lib files exist
-ls -la $PAI_DIR/hooks/lib/*.ts
-# Should show: observability.ts
+# 1. Check all hooks exist (15 expected)
+echo "Hook files:"
+ls -la $PAI_DIR/hooks/*.hook.ts | wc -l
+# Should show: 15
 
-# 3. Test security validator with a safe command
+# 2. Check lib files exist (12 expected)
+echo "Library files:"
+ls -la $PAI_DIR/hooks/lib/*.ts | wc -l
+# Should show: 12
+
+# 3. Check handler files exist (4 expected)
+echo "Handler files:"
+ls -la $PAI_DIR/hooks/handlers/*.ts | wc -l
+# Should show: 4
+
+# 4. Test security validator with a safe command
 echo '{"session_id":"test","tool_name":"Bash","tool_input":{"command":"ls -la"}}' | \
-  bun run $PAI_DIR/hooks/security-validator.ts
+  bun run $PAI_DIR/hooks/SecurityValidator.hook.ts
 # Should exit 0 (allowed)
 
-# 4. Test security validator catches dangerous patterns
+# 5. Test security validator catches dangerous patterns
 # NOTE: This is SAFE - we're just piping JSON text to stdin, not executing anything
 echo '{"session_id":"test","tool_name":"Bash","tool_input":{"command":"rm -rf /tmp/test"}}' | \
-  bun run $PAI_DIR/hooks/security-validator.ts
+  bun run $PAI_DIR/hooks/SecurityValidator.hook.ts
 # Should exit 2 (blocked) and print warning
-
-# 5. Test session initialization
-echo '{"session_id":"test","cwd":"/Users/you/Projects/MyProject"}' | \
-  bun run $PAI_DIR/hooks/initialize-session.ts
-# Should set tab title and create session marker
 
 # 6. Verify settings.json has hooks configured
 grep -l "hooks" ~/.claude/settings.json
@@ -55,11 +58,13 @@ rm /tmp/pai-security-canary
 
 ## Success Indicators
 
+- [ ] 15 hook files exist in $PAI_DIR/hooks/
+- [ ] 12 library files exist in $PAI_DIR/hooks/lib/
+- [ ] 4 handler files exist in $PAI_DIR/hooks/handlers/
 - [ ] Security validator blocks dangerous commands (exit code 2)
 - [ ] Security validator allows safe commands (exit code 0)
 - [ ] Tab title updates when you send prompts
-- [ ] Session marker created at `$PAI_DIR/.current-session`
-- [ ] All 5 TypeScript files exist in correct locations
+- [ ] All TypeScript files exist in correct locations
 
 ---
 
@@ -69,11 +74,42 @@ rm /tmp/pai-security-canary
 
 ### File Verification
 
-- [ ] `$PAI_DIR/hooks/security-validator.ts` exists and is executable
-- [ ] `$PAI_DIR/hooks/initialize-session.ts` exists and is executable
-- [ ] `$PAI_DIR/hooks/load-core-context.ts` exists and is executable
-- [ ] `$PAI_DIR/hooks/update-tab-titles.ts` exists and is executable
+#### Hooks (15 files)
+- [ ] `$PAI_DIR/hooks/SecurityValidator.hook.ts` exists
+- [ ] `$PAI_DIR/hooks/LoadContext.hook.ts` exists
+- [ ] `$PAI_DIR/hooks/StartupGreeting.hook.ts` exists
+- [ ] `$PAI_DIR/hooks/CheckVersion.hook.ts` exists
+- [ ] `$PAI_DIR/hooks/UpdateTabTitle.hook.ts` exists
+- [ ] `$PAI_DIR/hooks/SetQuestionTab.hook.ts` exists
+- [ ] `$PAI_DIR/hooks/ExplicitRatingCapture.hook.ts` exists
+- [ ] `$PAI_DIR/hooks/FormatEnforcer.hook.ts` exists
+- [ ] `$PAI_DIR/hooks/StopOrchestrator.hook.ts` exists
+- [ ] `$PAI_DIR/hooks/SessionSummary.hook.ts` exists
+- [ ] `$PAI_DIR/hooks/QuestionAnswered.hook.ts` exists
+- [ ] `$PAI_DIR/hooks/AutoWorkCreation.hook.ts` exists
+- [ ] `$PAI_DIR/hooks/WorkCompletionLearning.hook.ts` exists
+- [ ] `$PAI_DIR/hooks/ImplicitSentimentCapture.hook.ts` exists
+- [ ] `$PAI_DIR/hooks/AgentOutputCapture.hook.ts` exists
+
+#### Libraries (12 files)
 - [ ] `$PAI_DIR/hooks/lib/observability.ts` exists
+- [ ] `$PAI_DIR/hooks/lib/notifications.ts` exists
+- [ ] `$PAI_DIR/hooks/lib/identity.ts` exists
+- [ ] `$PAI_DIR/hooks/lib/paths.ts` exists
+- [ ] `$PAI_DIR/hooks/lib/time.ts` exists
+- [ ] `$PAI_DIR/hooks/lib/change-detection.ts` exists
+- [ ] `$PAI_DIR/hooks/lib/learning-utils.ts` exists
+- [ ] `$PAI_DIR/hooks/lib/metadata-extraction.ts` exists
+- [ ] `$PAI_DIR/hooks/lib/recovery-types.ts` exists
+- [ ] `$PAI_DIR/hooks/lib/response-format.ts` exists
+- [ ] `$PAI_DIR/hooks/lib/IdealState.ts` exists
+- [ ] `$PAI_DIR/hooks/lib/TraceEmitter.ts` exists
+
+#### Handlers (4 files)
+- [ ] `$PAI_DIR/hooks/handlers/capture.ts` exists
+- [ ] `$PAI_DIR/hooks/handlers/voice.ts` exists
+- [ ] `$PAI_DIR/hooks/handlers/tab-state.ts` exists
+- [ ] `$PAI_DIR/hooks/handlers/SystemIntegrity.ts` exists
 
 ### Configuration Verification
 
@@ -81,12 +117,14 @@ rm /tmp/pai-security-canary
 - [ ] `settings.json` contains `SessionStart` hooks configuration
 - [ ] `settings.json` contains `PreToolUse` hooks configuration
 - [ ] `settings.json` contains `UserPromptSubmit` hooks configuration
+- [ ] `settings.json` contains `Stop` hooks configuration
+- [ ] `settings.json` contains `SubagentStop` hooks configuration
 
 ### Functional Verification
 
 - [ ] Security validator allows `ls -la` (exit code 0)
 - [ ] Security validator blocks `rm -rf /` patterns (exit code 2)
-- [ ] Session initialization runs without errors
+- [ ] LoadContext hook runs without errors
 - [ ] Tab title hook runs without errors
 
 ### Code Integrity Check
@@ -94,15 +132,24 @@ rm /tmp/pai-security-canary
 Run these commands to verify files are complete (not truncated):
 
 ```bash
-# Check file sizes (should be > 1KB each)
-wc -c $PAI_DIR/hooks/*.ts $PAI_DIR/hooks/lib/*.ts
+PAI_DIR="${PAI_DIR:-$HOME/.claude}"
 
-# Expected approximate sizes:
-# security-validator.ts    ~5000 bytes
-# initialize-session.ts    ~3000 bytes
-# load-core-context.ts     ~2000 bytes
-# update-tab-titles.ts     ~2500 bytes
-# lib/observability.ts     ~1500 bytes
+# Check total file count
+echo "Total files:"
+find $PAI_DIR/hooks -name "*.ts" | wc -l
+# Expected: 31 (15 hooks + 12 libs + 4 handlers)
+
+# Check file sizes (should be > 1KB each for most files)
+echo ""
+echo "File sizes:"
+wc -c $PAI_DIR/hooks/*.hook.ts | tail -1
+wc -c $PAI_DIR/hooks/lib/*.ts | tail -1
+wc -c $PAI_DIR/hooks/handlers/*.ts | tail -1
+
+# Expected approximate totals:
+# hooks/*.hook.ts     ~120KB total
+# lib/*.ts            ~90KB total
+# handlers/*.ts       ~20KB total
 ```
 
 ---
@@ -142,6 +189,17 @@ For testing and debugging, here are the event payload formats:
   "stop_hook_active": true,
   "transcript_path": "/path/to/transcript.jsonl",
   "response": "The full assistant response text"
+}
+```
+
+### SubagentStop
+
+```json
+{
+  "session_id": "uuid",
+  "agent_name": "engineer",
+  "transcript_path": "/path/to/transcript.jsonl",
+  "response": "The agent's response text"
 }
 ```
 
@@ -193,7 +251,7 @@ For testing and debugging, here are the event payload formats:
 echo $PAI_DIR
 
 # If not set, export it
-export PAI_DIR="$HOME/.config/pai"
+export PAI_DIR="$HOME/.claude"
 ```
 
 ### Security validator exits with wrong code
@@ -201,7 +259,7 @@ export PAI_DIR="$HOME/.config/pai"
 ```bash
 # Debug with verbose output
 echo '{"session_id":"test","tool_name":"Bash","tool_input":{"command":"rm -rf /"}}' | \
-  bun run $PAI_DIR/hooks/security-validator.ts
+  bun run $PAI_DIR/hooks/SecurityValidator.hook.ts
 echo "Exit code: $?"
 ```
 
@@ -215,6 +273,16 @@ cat ~/.claude/settings.json | jq .
 python3 -m json.tool ~/.claude/settings.json
 ```
 
+### Missing library dependencies
+
+```bash
+# Check all lib files are present
+ls -la $PAI_DIR/hooks/lib/
+
+# Verify specific imports work
+bun run -e "import { emitEvent } from '$PAI_DIR/hooks/lib/observability.ts'; console.log('OK')"
+```
+
 ---
 
 ## Post-Verification
@@ -225,3 +293,15 @@ After all verification passes:
 2. Test with a real session
 3. Verify tab titles update
 4. Try a blocked command to confirm security validation
+5. Check learning hooks capture data (if enabled)
+
+---
+
+## Version Information
+
+- **Pack Version:** 2.3.0
+- **Release Date:** 2026-01-14
+- **Hook Count:** 15
+- **Library Count:** 12
+- **Handler Count:** 4
+- **Total Files:** 31

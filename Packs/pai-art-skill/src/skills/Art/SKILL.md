@@ -1,95 +1,172 @@
 ---
 name: Art
-description: Visual content generation with Excalidraw hand-drawn aesthetic. USE WHEN user wants diagrams, visualizations, comics, or editorial illustrations.
+description: Complete visual content system. USE WHEN user wants to create visual content, illustrations, diagrams, OR mentions art, header images, visualizations, mermaid, flowchart, technical diagram, infographic, PAI icon, pack icon, or PAI pack icon.
 ---
 
 # Art Skill
 
-Visual content generation system using **Excalidraw hand-drawn** aesthetic with dark-mode, tech-forward color palette.
+Complete visual content system for creating illustrations, diagrams, and visual content.
 
-## Output Location
+## Customization
+
+**Before executing, check for user customizations at:**
+`~/.claude/skills/CORE/USER/SKILLCUSTOMIZATIONS/Art/`
+
+If this directory exists, load and apply:
+- `PREFERENCES.md` - Aesthetic preferences, default model, output location
+- `CharacterSpecs.md` - Character design specifications
+- `SceneConstruction.md` - Scene composition guidelines
+
+These override default behavior. If the directory does not exist, proceed with skill defaults.
+
+## MANDATORY: Output to Downloads First
 
 ```
 ALL GENERATED IMAGES GO TO ~/Downloads/ FIRST
-Preview in Finder/Preview before final placement
-Only copy to project directories after review
+NEVER output directly to project directories
+User MUST preview in Finder/Preview before use
 ```
+
+**This applies to ALL workflows in this skill.**
+
+## Voice Notification
+
+**When executing a workflow, do BOTH:**
+
+1. **Send voice notification**:
+   ```bash
+   curl -s -X POST http://localhost:8888/notify \
+     -H "Content-Type: application/json" \
+     -d '{"message": "Running the WORKFLOWNAME workflow from the Art skill"}' \
+     > /dev/null 2>&1 &
+   ```
+
+2. **Output text notification**:
+   ```
+   Running the **WorkflowName** workflow from the **Art** skill...
+   ```
+
+---
 
 ## Workflow Routing
 
-Route to the appropriate workflow based on the request:
+Route to the appropriate workflow based on the request.
 
-  - Technical or architecture diagram -> `Workflows/TechnicalDiagrams.md`
   - Blog header or editorial illustration -> `Workflows/Essay.md`
-  - Comic or sequential panels -> `Workflows/Comics.md`
+  - Visualization or chart -> `Workflows/Visualize.md`
+  - Mermaid flowchart or sequence diagram -> `Workflows/Mermaid.md`
+  - Technical or architecture diagram -> `Workflows/TechnicalDiagrams.md`
+  - Framework or 2x2 matrix -> `Workflows/Frameworks.md`
+  - Stat card or big number visual -> `Workflows/Stats.md`
+  - PAI pack icon -> `Workflows/CreatePAIPackIcon.md`
 
 ---
 
 ## Core Aesthetic
 
-**Excalidraw Hand-Drawn** - Clean, approachable technical illustrations with:
-- Slightly wobbly hand-drawn lines (NOT perfect vectors)
-- Simple shapes with organic imperfections
-- Consistent hand-lettered typography style
-- Dark mode backgrounds with bright accents
+**Default:** Production-quality concept art style appropriate for editorial and technical content.
 
-**Full aesthetic documentation:** `$PAI_DIR/skills/Art/Aesthetic.md`
+**UL Editorial Color Palette:**
+```
+Background: Light Cream #F5E6D3 or White #FFFFFF
+Primary Accent: Deep Purple #4A148C (strategic, 10-20%)
+Secondary Accent: Deep Teal #00796B (5-10%)
+Structure: Black #000000
+Text: Charcoal #2D2D2D
+```
 
----
+**Typography System (3-Tier):**
+- Tier 1 (Headers): Valkyrie-style elegant wedge-serif italic
+- Tier 2 (Labels): Concourse-style geometric sans-serif
+- Tier 3 (Insights): Advocate-style condensed italic for callouts
 
-## Color System
-
-| Color | Hex | Usage |
-|-------|-----|-------|
-| Background | `#0a0a0f` | Primary dark background |
-| PAI Blue | `#4a90d9` | Key elements, primary accents |
-| Electric Cyan | `#22d3ee` | Flows, connections, secondary |
-| Accent Purple | `#8b5cf6` | Highlights, callouts (10-15%) |
-| Text White | `#e5e7eb` | Primary text, labels |
-| Surface | `#1a1a2e` | Cards, panels |
-| Line Work | `#94a3b8` | Hand-drawn borders |
+**Load customizations from:** `~/.claude/skills/CORE/USER/SKILLCUSTOMIZATIONS/Art/PREFERENCES.md`
 
 ---
 
 ## Image Generation
 
-**Default model:** nano-banana-pro (Gemini 3 Pro)
+**Default model:** Check user customization at `SKILLCUSTOMIZATIONS/Art/PREFERENCES.md`
+**Fallback:** nano-banana-pro (best text rendering)
+
+### CRITICAL: Always Output to Downloads First
+
+**ALL generated images MUST go to `~/Downloads/` first for preview and selection.**
+
+Never output directly to a project's `public/images/` directory. User needs to review images in Preview before they're used.
+
+**Workflow:**
+1. Generate to `~/Downloads/[descriptive-name].png`
+2. User reviews in Preview
+3. If approved, THEN copy to final destination
+4. Create WebP and thumbnail versions at final destination
 
 ```bash
-bun run $PAI_DIR/skills/Art/Tools/Generate.ts \
+# CORRECT - Output to Downloads for preview
+bun run ~/.claude/skills/Art/Tools/Generate.ts \
   --model nano-banana-pro \
   --prompt "[PROMPT]" \
   --size 2K \
-  --aspect-ratio 16:9 \
-  --output ~/Downloads/output.png
+  --aspect-ratio 1:1 \
+  --thumbnail \
+  --output ~/Downloads/blog-header-concept.png
+
+# After approval, copy to final location
+cp ~/Downloads/blog-header-concept.png ~/Projects/Website/cms/public/images/
 ```
 
-**API keys in:** `$PAI_DIR/.env` (single source of truth for all authentication)
+### Multiple Reference Images (Character/Style Consistency)
 
----
+For improved character or style consistency, use multiple `--reference-image` flags:
+
+```bash
+# Multiple reference images for better likeness
+bun run ~/.claude/skills/Art/Tools/Generate.ts \
+  --model nano-banana-pro \
+  --prompt "Person from references at a party..." \
+  --reference-image face1.jpg \
+  --reference-image face2.jpg \
+  --reference-image face3.jpg \
+  --size 2K \
+  --aspect-ratio 16:9 \
+  --output ~/Downloads/character-scene.png
+```
+
+**API keys in:** `${PAI_DIR}/.env`
 
 ## Examples
 
-**Example 1: Technical diagram**
+**Example 1: Blog header image**
 ```
-User: "create a diagram showing the auth flow"
--> Invokes TECHNICALDIAGRAMS workflow
--> Creates Excalidraw-style architecture visual
--> Outputs PNG with dark background, blue accents
-```
-
-**Example 2: Blog header**
-```
-User: "create a header for my post about AI agents"
+User: "create a header for my AI agents post"
 -> Invokes ESSAY workflow
--> Generates hand-drawn illustration
+-> Generates editorial illustration prompt
+-> Creates image with consistent aesthetic
 -> Saves to ~/Downloads/ for preview
+-> After approval, copies to public/images/
 ```
 
-**Example 3: Comic strip**
+**Example 2: Technical architecture diagram**
 ```
-User: "create a comic showing the before/after of using AI"
--> Invokes COMICS workflow
--> Creates 3-4 panel sequential narrative
--> Editorial style, not cartoonish
+User: "make a diagram showing the SPQA pattern"
+-> Invokes TECHNICALDIAGRAMS workflow
+-> Creates structured architecture visual
+-> Outputs PNG with consistent styling
+```
+
+**Example 3: Framework visualization**
+```
+User: "create a 2x2 matrix for security vs convenience"
+-> Invokes FRAMEWORKS workflow
+-> Creates hand-drawn framework visual
+-> Purple highlights optimal quadrant
+```
+
+**Example 4: PAI pack icon**
+```
+User: "create icon for the skill system pack"
+-> Invokes CREATEPAIPACKICON workflow
+-> Generates 1K image with --remove-bg for transparency
+-> Resizes to 256x256 RGBA PNG
+-> Outputs to ~/Downloads/ for preview
 ```

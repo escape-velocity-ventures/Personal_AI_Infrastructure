@@ -1,146 +1,146 @@
 ---
-name: Kai Browser Skill
-pack-id: danielmiessler-browser-skill-core-v1.2.0
-version: 1.2.0
+name: PAI Browser Skill
+pack-id: danielmiessler-pai-browser-skill-v2.3.0
+version: 2.3.0
 author: danielmiessler
-description: Debug-first browser automation with always-on visibility - console/network capture by default, session auto-start, 99% token savings over MCP
+description: Debug-first browser automation with always-on visibility - console logs, network requests, and errors captured by default
 type: skill
-purpose-type: [automation, testing, verification, browser-automation]
+purpose-type: [browser-automation, testing, debugging, screenshots]
 platform: claude-code
-dependencies: []
-keywords: [browser, playwright, automation, screenshot, web-testing, verification, debug, diagnostics, session, mcp-replacement]
+dependencies: [pai-core-install, bun, playwright]
+keywords: [browser, playwright, automation, debugging, screenshots, web-testing]
 ---
 
-<p align="center">
-  <img src="icons/pai-browser-skill-v3.png" alt="PAI Browser Skill" width="256">
-</p>
+# PAI Browser Skill Pack
 
-# Browser Skill v1.2.0
+Debug-first browser automation with always-on visibility. Console logs, network requests, and errors are captured by default - no opt-in required.
 
-**Debug-first browser automation with always-on visibility.**
+## What's Included
 
-> **Installation:** This pack is designed for AI-assisted installation. Give this directory to your AI and ask it to install using the wizard in `INSTALL.md`. The installation dynamically adapts to your system state. See [AI-First Installation Philosophy](../../README.md#ai-first-installation-philosophy) for details.
+```
+src/skills/Browser/
+  SKILL.md           # Main skill definition
+  README.md          # Code-first interface documentation
+  index.ts           # PlaywrightBrowser class
+  package.json       # Dependencies
+  tsconfig.json      # TypeScript configuration
+  Tools/
+    Browse.ts        # CLI tool for browser automation
+    BrowserSession.ts # Persistent session server
+  Workflows/
+    Extract.md       # Extract content from web pages
+    Interact.md      # Form filling and clicks
+    Screenshot.md    # Screenshot capture
+    Update.md        # Sync with Playwright MCP
+    VerifyPage.md    # Page load verification
+  examples/
+    screenshot.ts    # Screenshot example
+    verify-page.ts   # Page verification example
+    comprehensive-test.ts # Full API test suite
+```
 
----
+## Key Features
 
-## What It Does
+### Debug-First Philosophy
 
-The Browser skill provides Playwright automation with 99% token savings:
+Debugging visibility by DEFAULT. Like good logging frameworks - you don't turn on logging when you have a problem, you have it enabled from the start so the data exists when problems occur.
 
-- **Navigate** to URLs with automatic diagnostics
-- **Screenshot** pages with issue detection
-- **Interact** with forms, buttons, dropdowns
-- **Verify** page content and elements
-- **Monitor** console logs and network requests
+### Token Savings
 
-## Why Debug-First?
+| Approach | Tokens | Performance |
+|----------|--------|-------------|
+| Playwright MCP | ~13,700 at load | MCP protocol overhead |
+| Code-first | ~50-200 per op | Direct Playwright API |
+| **Savings** | **99%+** | Faster execution |
 
-Traditional approach: Run test, it fails, add logging, run again.
+### Session Auto-Start
 
-Debug-first approach: **Logging already exists.** When something breaks, the data is there.
+Session auto-starts on first use. No explicit `session start` needed.
 
-Every `bun run Browse.ts <url>` command captures:
-- Screenshot
-- Console errors/warnings
-- Failed network requests
-- Network summary
-- Load status
+### Always-On Capture
+
+From the moment the browser launches:
+- **Console logs** - All `console.log`, `console.error`, etc.
+- **Network requests** - Every request with headers, timing, size
+- **Network responses** - Status codes, response times, sizes
+- **Page errors** - Uncaught exceptions, promise rejections
 
 ## Quick Start
 
 ```bash
-# Navigate and get full diagnostics
-bun run $PAI_DIR/skills/Browser/Tools/Browse.ts https://example.com
+# Navigate with full diagnostics (PRIMARY COMMAND)
+bun run ~/.claude/skills/Browser/Tools/Browse.ts https://example.com
 
-# Check for errors
-bun run $PAI_DIR/skills/Browser/Tools/Browse.ts errors
-
-# Take screenshot of current page
-bun run $PAI_DIR/skills/Browser/Tools/Browse.ts screenshot /tmp/shot.png
+# Output:
+# Screenshot: /tmp/browse-1704614400.png
+# Console Errors (2): ...
+# Failed Requests (1): ...
+# Network: 34 requests | 1.2MB | avg 120ms
+# Page: "Example" loaded successfully
 ```
 
-## Token Savings
+## Usage Examples
 
-| Approach | Tokens | When Loaded |
-|----------|--------|-------------|
-| Playwright MCP | ~13,700 | At startup (always) |
-| Browser Skill | ~0 | Per operation (on demand) |
-
-**Result:** 99%+ token savings
-
-## API Reference
-
-### CLI Commands
-
-| Command | Description |
-|---------|-------------|
-| `<url>` | Navigate with full diagnostics |
-| `errors` | Console errors only |
-| `warnings` | Console warnings only |
-| `console` | All console output |
-| `network` | Network activity |
-| `failed` | Failed requests |
-| `screenshot [path]` | Screenshot current page |
-| `navigate <url>` | Navigate without diagnostics |
-| `click <selector>` | Click element |
-| `fill <sel> <val>` | Fill input |
-| `type <sel> <text>` | Type with delay |
-| `eval "<js>"` | Execute JavaScript |
-| `open <url>` | Open in default browser |
-| `status` | Session info |
-| `restart` | Fresh session |
-| `stop` | Stop session |
-
-### TypeScript API
+### Basic Screenshot
 
 ```typescript
-import { PlaywrightBrowser } from '$PAI_DIR/skills/Browser/src/index.ts'
+import { PlaywrightBrowser } from '~/.claude/skills/Browser/index.ts'
 
 const browser = new PlaywrightBrowser()
 await browser.launch()
 await browser.navigate('https://example.com')
-await browser.screenshot({ path: 'shot.png' })
+await browser.screenshot({ path: 'screenshot.png' })
 await browser.close()
 ```
 
-**Navigation:** `launch()`, `navigate()`, `goBack()`, `goForward()`, `reload()`, `close()`
+### Debugging Workflow
 
-**Capture:** `screenshot()`, `getVisibleText()`, `getVisibleHtml()`, `savePdf()`
+```bash
+# Load the page
+bun run Browse.ts https://myapp.com/users
 
-**Interaction:** `click()`, `fill()`, `type()`, `select()`, `pressKey()`
+# Check console errors
+bun run Browse.ts errors
 
-**Monitoring:** `getConsoleLogs()`, `getNetworkLogs()`, `getNetworkStats()`
+# Check failed requests
+bun run Browse.ts failed
 
-**Waiting:** `waitForSelector()`, `waitForNavigation()`, `waitForNetworkIdle()`
+# View network activity
+bun run Browse.ts network
+```
 
-## Installation
+### Form Interaction
 
-See `INSTALL.md` for step-by-step instructions.
+```typescript
+await browser.navigate('https://example.com/login')
+await browser.fill('#email', 'test@example.com')
+await browser.fill('#password', 'secret')
+await browser.click('button[type="submit"]')
+await browser.waitForNavigation()
+```
 
-## Verification
+## CLI Commands
 
-See `VERIFY.md` for verification steps (15 checks for v1.2.0).
+| Command | Description |
+|---------|-------------|
+| `<url>` | Navigate with full diagnostics |
+| `errors` | Show console errors |
+| `warnings` | Show console warnings |
+| `console` | Show all console output |
+| `network` | Show network activity |
+| `failed` | Show failed requests |
+| `screenshot [path]` | Take screenshot |
+| `click <selector>` | Click element |
+| `fill <sel> <val>` | Fill input |
+| `status` | Session info |
+| `restart` | Fresh session |
 
----
+## Requirements
 
-## Changelog
+- Bun runtime
+- Playwright (`bun add playwright`)
 
-### v1.2.0 (January 2026)
-- **NEW:** Debug-first architecture with always-on event capture
-- **NEW:** Session auto-start (no explicit start needed)
-- **NEW:** 30-minute idle timeout for auto-cleanup
-- **NEW:** Diagnostic commands (errors, warnings, console, network, failed)
-- **NEW:** BrowserSession.ts persistent server
-- **NEW:** Rich formatted diagnostic output
-- **CHANGED:** Primary command is now `<url>` for navigate + diagnostics
-- **CHANGED:** CLI expanded from 3 to 15+ commands
+## Related Documentation
 
-### v1.1.0
-- CLI-first redesign
-- Added decision tree routing
-- Updated VERIFY phase integration
-
-### v1.0.0
-- Initial release
-- Code-first Playwright wrapper
-- Basic CLI (open, screenshot, verify)
+- [Browser Automation](~/.claude/skills/CORE/SYSTEM/BROWSERAUTOMATION.md)
+- [Playwright Docs](https://playwright.dev)

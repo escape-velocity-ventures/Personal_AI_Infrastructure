@@ -1,13 +1,13 @@
 # Installing PAI
 
 > [!IMPORTANT]
-> ## This File Is For Your AI Assistant
+> ## This File Is For Your DA
 >
 > **This is the future of software installation.**
 >
-> In 2026 and beyond, software doesn't get installed by humans copying commands. It gets installed by your AI assistant, who reads the documentation, understands your system, asks you questions, and customizes the installation for your specific needs.
+> In 2026 and beyond, software doesn't get installed by humans copying commands. It gets installed by your DA assistant, who reads the documentation, understands your system, asks you questions, and customizes the installation for your specific needs.
 >
-> **You can install PAI manually if you want**—the instructions are below. But PAI is designed to be installed by your AI. Give your AI this file and let it guide you through a personalized wizard.
+> **You can install PAI manually if you want**—the instructions are below. But PAI is designed to be installed by your DA. Give your DA this file and let it guide you through a personalized wizard.
 
 ---
 
@@ -41,7 +41,7 @@ Start by explaining PAI to your principal:
 
 **How is PAI different from other AI tools?**
 > Unlike plugins, extensions, or simple prompts, PAI is a complete infrastructure layer:
-> - **Memory** — Your AI remembers past sessions, decisions, and learnings
+> - **Memory** — Your DA remembers past sessions, decisions, and learnings
 > - **Skills** — Specialized capabilities that route intelligently based on context
 > - **Hooks** — Event-driven automation that responds to what's happening
 > - **Security** — Layered protection for your data and commands
@@ -108,11 +108,12 @@ If they chose the PAI Bundle, explain what's included:
 
 | Pack | What It Does |
 |------|--------------|
-| **Hook System** | Event-driven automation — the foundation everything else builds on |
-| **Core Install** | Identity, skills routing, and system configuration |
-| **History System** | Automatic capture of sessions, decisions, and learnings |
-| **Voice System** | Spoken notifications via text-to-speech |
-| **Browser Skill** | Web automation for testing and verification |
+| **pai-hook-system** | Event-driven automation — the foundation everything else builds on |
+| **pai-core-install** | Identity, skills routing, system configuration, and memory system |
+| **pai-agents-skill** | Dynamic agent composition with personality traits and voices |
+| **pai-voice-system** | Spoken notifications via text-to-speech (optional) |
+| **pai-browser-skill** | Web automation for testing and verification |
+| **pai-observability-server** | Real-time dashboard for monitoring agent activity |
 
 **Ask: Ready to install the PAI Bundle?**
 - Yes, install everything
@@ -131,11 +132,12 @@ For each pack being installed:
 4. **Confirm success** before moving to the next pack
 
 **Installation order matters.** Install in this sequence:
-1. pai-hook-system (foundation)
-2. pai-core-install (identity and routing)
-3. pai-history-system (memory)
-4. pai-voice-system (optional)
-5. pai-browser-skill (optional)
+1. pai-hook-system (foundation - hooks enable everything else)
+2. pai-core-install (identity, skills, memory system)
+3. pai-agents-skill (agent composition - requires core)
+4. pai-voice-system (optional - TTS notifications)
+5. pai-browser-skill (optional - web automation)
+6. pai-observability-server (optional - monitoring dashboard)
 
 ---
 
@@ -199,7 +201,7 @@ Each pack in `Packs/` has its own installation:
 # Example: Install just the history system
 cd Packs/pai-history-system
 # Read INSTALL.md and follow instructions
-# Or give the directory to your AI
+# Or give the directory to your DA
 ```
 
 ### Directory Structure
@@ -223,7 +225,7 @@ $PAI_DIR/
 ## Troubleshooting
 
 **Hooks not firing?**
-- Restart your AI session after installation
+- Restart your DA session after installation
 - Check `settings.json` has the hooks registered
 - Verify hook files exist in `$PAI_DIR/hooks/`
 
@@ -243,10 +245,10 @@ Traditional software installation is a series of commands you copy and paste, ho
 
 AI-first installation is different:
 
-1. **Context-aware** — Your AI understands your existing setup before making changes
+1. **Context-aware** — Your DA understands your existing setup before making changes
 2. **Interactive** — You're asked questions, not given a one-size-fits-all script
 3. **Adaptive** — Installation adjusts based on your answers and environment
-4. **Verified** — Your AI confirms things work, not just that commands ran
+4. **Verified** — Your DA confirms things work, not just that commands ran
 5. **Explained** — You understand what's being installed and why
 
 This is how software should be installed in 2026 and beyond. Not copying commands. Having a conversation with an AI that customizes the system for you.

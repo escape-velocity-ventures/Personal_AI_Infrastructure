@@ -1,4 +1,4 @@
-# PAI Observability Server v1.0.0 - Installation Guide
+# PAI Observability Server v2.3.0 - Installation Guide
 
 **This guide is designed for AI agents installing this pack into a user's infrastructure.**
 
@@ -17,7 +17,7 @@
 
 Before starting, greet the user:
 ```
-"I'm installing PAI Observability Server v1.0.0 - Real-time multi-agent activity monitoring dashboard with WebSocket streaming.
+"I'm installing PAI Observability Server v2.3.0 - Real-time multi-agent activity monitoring dashboard with WebSocket streaming, task tracking, and MenuBar app.
 
 Let me analyze your system and guide you through installation."
 ```
@@ -146,12 +146,26 @@ Install order:
 }
 ```
 
-### Question 3: Final Confirmation
+### Question 3: MenuBar App (macOS only)
+
+```json
+{
+  "header": "MenuBar App",
+  "question": "Install the macOS MenuBar app for quick server control?",
+  "multiSelect": false,
+  "options": [
+    {"label": "Yes, install MenuBar app", "description": "Build and install native macOS menu bar control"},
+    {"label": "No, skip MenuBar app", "description": "Use manage.sh only"}
+  ]
+}
+```
+
+### Question 4: Final Confirmation
 
 ```json
 {
   "header": "Install",
-  "question": "Ready to install PAI Observability Server v1.0.0?",
+  "question": "Ready to install PAI Observability Server v2.3.0?",
   "multiSelect": false,
   "options": [
     {"label": "Yes, install now (Recommended)", "description": "Proceeds with installation using choices above"},
@@ -188,9 +202,11 @@ echo "Backup created at: $BACKUP_DIR"
     {"content": "Copy server files", "status": "pending", "activeForm": "Copying server files"},
     {"content": "Copy client files", "status": "pending", "activeForm": "Copying client files"},
     {"content": "Copy hook files", "status": "pending", "activeForm": "Copying hook files"},
-    {"content": "Copy management script", "status": "pending", "activeForm": "Copying management script"},
+    {"content": "Copy management scripts", "status": "pending", "activeForm": "Copying management scripts"},
+    {"content": "Copy MenuBar app (macOS)", "status": "pending", "activeForm": "Copying MenuBar app"},
     {"content": "Install server dependencies", "status": "pending", "activeForm": "Installing server dependencies"},
     {"content": "Install client dependencies", "status": "pending", "activeForm": "Installing client dependencies"},
+    {"content": "Build MenuBar app (macOS)", "status": "pending", "activeForm": "Building MenuBar app"},
     {"content": "Register capture hooks", "status": "pending", "activeForm": "Registering capture hooks"},
     {"content": "Run verification", "status": "pending", "activeForm": "Running verification"}
   ]
@@ -208,6 +224,12 @@ PAI_DIR="${PAI_DIR:-$HOME/.claude}"
 mkdir -p "$PAI_DIR/observability/apps/server/src"
 mkdir -p "$PAI_DIR/observability/apps/client/src/components"
 mkdir -p "$PAI_DIR/observability/apps/client/src/composables"
+mkdir -p "$PAI_DIR/observability/apps/client/src/styles"
+mkdir -p "$PAI_DIR/observability/apps/client/src/utils"
+mkdir -p "$PAI_DIR/observability/apps/client/src/types"
+mkdir -p "$PAI_DIR/observability/MenuBarApp"
+mkdir -p "$PAI_DIR/observability/Tools"
+mkdir -p "$PAI_DIR/observability/scripts"
 
 # Create history directory for event storage
 mkdir -p "$PAI_DIR/history/raw-outputs"
@@ -226,16 +248,17 @@ mkdir -p "$PAI_DIR/hooks/lib"
 PACK_DIR="$(pwd)"
 PAI_DIR="${PAI_DIR:-$HOME/.claude}"
 
-# Copy server source files
-cp "$PACK_DIR/src/observability/apps/server/src/types.ts" "$PAI_DIR/observability/apps/server/src/"
-cp "$PACK_DIR/src/observability/apps/server/src/file-ingest.ts" "$PAI_DIR/observability/apps/server/src/"
-cp "$PACK_DIR/src/observability/apps/server/src/index.ts" "$PAI_DIR/observability/apps/server/src/"
-cp "$PACK_DIR/src/observability/apps/server/package.json" "$PAI_DIR/observability/apps/server/"
+# Copy server source files from src/Observability/apps/server/
+cp -r "$PACK_DIR/src/Observability/apps/server/src/"* "$PAI_DIR/observability/apps/server/src/"
+cp "$PACK_DIR/src/Observability/apps/server/package.json" "$PAI_DIR/observability/apps/server/"
 ```
 
 **Files copied:**
 - `types.ts` - TypeScript interfaces
 - `file-ingest.ts` - JSONL file watcher
+- `task-watcher.ts` - Background task monitoring
+- `db.ts` - In-memory event database
+- `theme.ts` - Dashboard theme definitions
 - `index.ts` - HTTP + WebSocket server
 - `package.json` - Server dependencies
 
@@ -249,25 +272,24 @@ cp "$PACK_DIR/src/observability/apps/server/package.json" "$PAI_DIR/observabilit
 PACK_DIR="$(pwd)"
 PAI_DIR="${PAI_DIR:-$HOME/.claude}"
 
-# Copy client source files
-cp "$PACK_DIR/src/observability/apps/client/src/main.ts" "$PAI_DIR/observability/apps/client/src/"
-cp "$PACK_DIR/src/observability/apps/client/src/style.css" "$PAI_DIR/observability/apps/client/src/"
-cp "$PACK_DIR/src/observability/apps/client/src/App.vue" "$PAI_DIR/observability/apps/client/src/"
+# Copy client source files from src/Observability/apps/client/
+cp -r "$PACK_DIR/src/Observability/apps/client/src/"* "$PAI_DIR/observability/apps/client/src/"
 
 # Copy client config files
-cp "$PACK_DIR/src/observability/apps/client/package.json" "$PAI_DIR/observability/apps/client/"
-cp "$PACK_DIR/src/observability/apps/client/vite.config.ts" "$PAI_DIR/observability/apps/client/"
-cp "$PACK_DIR/src/observability/apps/client/index.html" "$PAI_DIR/observability/apps/client/"
-cp "$PACK_DIR/src/observability/apps/client/tailwind.config.js" "$PAI_DIR/observability/apps/client/"
-cp "$PACK_DIR/src/observability/apps/client/postcss.config.js" "$PAI_DIR/observability/apps/client/"
+cp "$PACK_DIR/src/Observability/apps/client/package.json" "$PAI_DIR/observability/apps/client/"
+cp "$PACK_DIR/src/Observability/apps/client/vite.config.ts" "$PAI_DIR/observability/apps/client/"
+cp "$PACK_DIR/src/Observability/apps/client/index.html" "$PAI_DIR/observability/apps/client/"
+cp "$PACK_DIR/src/Observability/apps/client/tailwind.config.js" "$PAI_DIR/observability/apps/client/"
+cp "$PACK_DIR/src/Observability/apps/client/postcss.config.js" "$PAI_DIR/observability/apps/client/"
+cp "$PACK_DIR/src/Observability/apps/client/tsconfig.json" "$PAI_DIR/observability/apps/client/"
+cp "$PACK_DIR/src/Observability/apps/client/tsconfig.app.json" "$PAI_DIR/observability/apps/client/"
+cp "$PACK_DIR/src/Observability/apps/client/tsconfig.node.json" "$PAI_DIR/observability/apps/client/"
 ```
 
 **Files copied:**
-- `main.ts` - Vue app entry
-- `style.css` - Tailwind styles
-- `App.vue` - Main dashboard component
+- `src/` - Vue components, composables, styles, utils
 - `package.json` - Client dependencies
-- Config files for Vite, Tailwind, PostCSS
+- Config files for Vite, Tailwind, PostCSS, TypeScript
 
 **Mark todo as completed.**
 
@@ -280,36 +302,60 @@ PACK_DIR="$(pwd)"
 PAI_DIR="${PAI_DIR:-$HOME/.claude}"
 
 # Copy capture hook
-cp "$PACK_DIR/src/hooks/capture-all-events.ts" "$PAI_DIR/hooks/"
+cp "$PACK_DIR/src/hooks/AgentOutputCapture.hook.ts" "$PAI_DIR/hooks/"
 
 # Copy metadata extraction library
 cp "$PACK_DIR/src/hooks/lib/metadata-extraction.ts" "$PAI_DIR/hooks/lib/"
+cp "$PACK_DIR/src/hooks/lib/observability.ts" "$PAI_DIR/hooks/lib/"
 ```
 
 **Files copied:**
-- `capture-all-events.ts` - Captures all events to JSONL
+- `AgentOutputCapture.hook.ts` - Captures all events to JSONL
 - `lib/metadata-extraction.ts` - Extract agent metadata
+- `lib/observability.ts` - Observability utilities
 
 **Mark todo as completed.**
 
-### 4.5 Copy Management Script
+### 4.5 Copy Management Scripts
 
-**Mark todo "Copy management script" as in_progress.**
+**Mark todo "Copy management scripts" as in_progress.**
 
 ```bash
 PACK_DIR="$(pwd)"
 PAI_DIR="${PAI_DIR:-$HOME/.claude}"
 
 # Copy management script
-cp "$PACK_DIR/src/observability/manage.sh" "$PAI_DIR/observability/"
-
-# Make executable
+cp "$PACK_DIR/src/Observability/manage.sh" "$PAI_DIR/observability/"
 chmod +x "$PAI_DIR/observability/manage.sh"
+
+# Copy utility scripts
+cp -r "$PACK_DIR/src/Observability/scripts/"* "$PAI_DIR/observability/scripts/"
+chmod +x "$PAI_DIR/observability/scripts/"*.sh
+
+# Copy Tools
+cp -r "$PACK_DIR/src/Observability/Tools/"* "$PAI_DIR/observability/Tools/"
 ```
 
 **Mark todo as completed.**
 
-### 4.6 Install Server Dependencies
+### 4.6 Copy MenuBar App (macOS)
+
+**Mark todo "Copy MenuBar app (macOS)" as in_progress.**
+
+**Only execute on macOS:**
+
+```bash
+PACK_DIR="$(pwd)"
+PAI_DIR="${PAI_DIR:-$HOME/.claude}"
+
+# Copy MenuBar app source
+cp -r "$PACK_DIR/src/Observability/MenuBarApp/"* "$PAI_DIR/observability/MenuBarApp/"
+chmod +x "$PAI_DIR/observability/MenuBarApp/build.sh"
+```
+
+**Mark todo as completed.**
+
+### 4.7 Install Server Dependencies
 
 **Mark todo "Install server dependencies" as in_progress.**
 
@@ -321,7 +367,7 @@ bun install
 
 **Mark todo as completed.**
 
-### 4.7 Install Client Dependencies
+### 4.8 Install Client Dependencies
 
 **Mark todo "Install client dependencies" as in_progress.**
 
@@ -333,7 +379,21 @@ bun install
 
 **Mark todo as completed.**
 
-### 4.8 Register Capture Hooks
+### 4.9 Build MenuBar App (macOS)
+
+**Mark todo "Build MenuBar app (macOS)" as in_progress.**
+
+**Only execute on macOS if user requested MenuBar app:**
+
+```bash
+PAI_DIR="${PAI_DIR:-$HOME/.claude}"
+cd "$PAI_DIR/observability/MenuBarApp"
+./build.sh
+```
+
+**Mark todo as completed.**
+
+### 4.10 Register Capture Hooks
 
 **Mark todo "Register capture hooks" as in_progress.**
 
@@ -356,12 +416,13 @@ Read `config/settings-hooks.json` and merge the hooks into the user's existing s
 ```bash
 PAI_DIR="${PAI_DIR:-$HOME/.claude}"
 
-echo "=== PAI Observability Server Verification ==="
+echo "=== PAI Observability Server v2.3.0 Verification ==="
 
 # Check server files
 echo "Checking server files..."
 [ -f "$PAI_DIR/observability/apps/server/src/index.ts" ] && echo "✓ server/index.ts" || echo "❌ server/index.ts missing"
 [ -f "$PAI_DIR/observability/apps/server/src/file-ingest.ts" ] && echo "✓ server/file-ingest.ts" || echo "❌ server/file-ingest.ts missing"
+[ -f "$PAI_DIR/observability/apps/server/src/task-watcher.ts" ] && echo "✓ server/task-watcher.ts" || echo "❌ server/task-watcher.ts missing"
 [ -f "$PAI_DIR/observability/apps/server/package.json" ] && echo "✓ server/package.json" || echo "❌ server/package.json missing"
 
 # Check client files
@@ -373,20 +434,28 @@ echo "Checking client files..."
 # Check hook files
 echo ""
 echo "Checking hook files..."
-[ -f "$PAI_DIR/hooks/capture-all-events.ts" ] && echo "✓ capture-all-events.ts" || echo "❌ capture-all-events.ts missing"
+[ -f "$PAI_DIR/hooks/AgentOutputCapture.hook.ts" ] && echo "✓ AgentOutputCapture.hook.ts" || echo "❌ AgentOutputCapture.hook.ts missing"
 [ -f "$PAI_DIR/hooks/lib/metadata-extraction.ts" ] && echo "✓ metadata-extraction.ts" || echo "❌ metadata-extraction.ts missing"
+[ -f "$PAI_DIR/hooks/lib/observability.ts" ] && echo "✓ observability.ts" || echo "❌ observability.ts missing"
 
 # Check management script
 echo ""
 echo "Checking management script..."
 [ -x "$PAI_DIR/observability/manage.sh" ] && echo "✓ manage.sh is executable" || echo "❌ manage.sh not executable"
 
+# Check MenuBar app (macOS only)
+if [[ "$OSTYPE" == "darwin"* ]]; then
+  echo ""
+  echo "Checking MenuBar app..."
+  [ -f "$PAI_DIR/observability/MenuBarApp/ObservabilityApp.swift" ] && echo "✓ MenuBar source" || echo "❌ MenuBar source missing"
+fi
+
 # Test server start (quick test)
 echo ""
 echo "Testing server..."
 $PAI_DIR/observability/manage.sh start &
-sleep 3
-if curl -s http://localhost:4000/health | grep -q "ok"; then
+sleep 5
+if curl -s http://localhost:4000/events/filter-options | grep -q "agents"; then
   echo "✓ Server responding on port 4000"
 else
   echo "❌ Server not responding"
@@ -405,13 +474,15 @@ echo "=== Verification Complete ==="
 ### On Success
 
 ```
-"PAI Observability Server v1.0.0 installed successfully!
+"PAI Observability Server v2.3.0 installed successfully!
 
 What's available:
 - Real-time event streaming via WebSocket
 - Multi-agent activity tracking
 - Event timeline visualization
 - Agent swim lanes
+- Background task monitoring
+- MenuBar app for quick control (macOS)
 
 To start the dashboard:
 1. Run: $PAI_DIR/observability/manage.sh start
@@ -476,7 +547,7 @@ $PAI_DIR/observability/manage.sh stop
 
 ```bash
 # Check hooks are registered
-grep -A5 'capture-all-events' ~/.claude/settings.json
+grep -A5 'AgentOutputCapture' ~/.claude/settings.json
 
 # Check JSONL file is being written
 ls -la $PAI_DIR/history/raw-outputs/$(date +%Y-%m)/
@@ -488,10 +559,21 @@ ls -la $PAI_DIR/history/raw-outputs/$(date +%Y-%m)/
 
 ```bash
 # Check server is running
-curl http://localhost:4000/health
+curl http://localhost:4000/events/filter-options
 
 # Check browser console for errors
 # Open DevTools > Console tab
+```
+
+### MenuBar app not building (macOS)
+
+```bash
+# Ensure Xcode command line tools are installed
+xcode-select --install
+
+# Try building manually
+cd $PAI_DIR/observability/MenuBarApp
+./build.sh
 ```
 
 ---
@@ -500,13 +582,22 @@ curl http://localhost:4000/health
 
 | File | Purpose |
 |------|---------|
-| `observability/apps/server/src/index.ts` | HTTP + WebSocket server |
-| `observability/apps/server/src/file-ingest.ts` | JSONL file watcher |
-| `observability/apps/server/src/types.ts` | TypeScript interfaces |
-| `observability/apps/client/src/App.vue` | Vue dashboard |
-| `observability/manage.sh` | Start/stop/restart script |
-| `hooks/capture-all-events.ts` | Event capture hook |
-| `hooks/lib/metadata-extraction.ts` | Agent metadata extraction |
+| `src/Observability/apps/server/src/index.ts` | HTTP + WebSocket server |
+| `src/Observability/apps/server/src/file-ingest.ts` | JSONL file watcher |
+| `src/Observability/apps/server/src/task-watcher.ts` | Background task monitoring |
+| `src/Observability/apps/server/src/db.ts` | In-memory event database |
+| `src/Observability/apps/server/src/theme.ts` | Dashboard theme definitions |
+| `src/Observability/apps/server/src/types.ts` | TypeScript interfaces |
+| `src/Observability/apps/client/src/App.vue` | Vue dashboard |
+| `src/Observability/apps/client/src/components/` | UI components (15+) |
+| `src/Observability/apps/client/src/composables/` | Vue composition utilities |
+| `src/Observability/manage.sh` | Start/stop/restart script |
+| `src/Observability/MenuBarApp/` | macOS menu bar app |
+| `src/Observability/Tools/ManageServer.ts` | Server management tool |
+| `src/hooks/AgentOutputCapture.hook.ts` | Event capture hook |
+| `src/hooks/lib/metadata-extraction.ts` | Agent metadata extraction |
+| `src/hooks/lib/observability.ts` | Observability utilities |
+| `config/settings-hooks.json` | Hook registration template |
 
 ---
 

@@ -1,115 +1,181 @@
 ---
-name: Kai Agents Skill
-pack-id: danielmiessler-agents-skill-core-v1.1.1
-version: 1.1.1
+name: PAI Agents Skill
+pack-id: danielmiessler-pai-agents-skill-v2.3.0
+version: 2.3.0
 author: danielmiessler
-description: Dynamic agent composition and orchestration system - create custom agents with unique personalities, voices, and trait combinations on-the-fly
+description: Dynamic agent composition and management system with custom personalities, voice mappings, and parallel orchestration
 type: skill
-purpose-type: [productivity, automation, development]
+purpose-type: [agent-management, orchestration, personality-system]
 platform: claude-code
-dependencies: [danielmiessler-core-install-core-v1.0.0]
-keywords: [agents, delegation, parallel, traits, personalities, voice, composition, dynamic, factory, custom, orchestration, subagents]
+dependencies: [pai-core-install]
+keywords: [agents, custom-agents, personalities, voices, parallel, orchestration]
 ---
 
-<p align="center">
-  <img src="../icons/agents-skill.png" alt="PAI Agents Skill" width="256">
-</p>
+# PAI Agents Skill Pack v2.3.0
 
-# PAI Agents Skill
-
-> Dynamic agent composition system - create specialized agents with unique personalities and voices, composed from traits on-the-fly
-
-> **Installation:** This pack is designed for AI-assisted installation. Give this directory to your AI and ask it to install using the wizard in `INSTALL.md`. The installation dynamically adapts to your system state. See [AI-First Installation Philosophy](../../README.md#ai-first-installation-philosophy) for details.
+**Dynamic agent composition and management system for PAI.**
 
 ---
 
-## What's Included
+## What This Pack Provides
 
-| Component | File | Purpose |
-|-----------|------|---------|
-| Agents skill | `src/skills/Agents/SKILL.md` | Routing and agent definitions |
-| Agent factory | `src/skills/Agents/Tools/AgentFactory.ts` | Dynamic agent composition |
-| Trait definitions | `src/skills/Agents/Data/Traits.yaml` | Expertise, personality, approach traits |
-| Agent template | `src/skills/Agents/Templates/DynamicAgent.hbs` | Prompt template for composed agents |
-| Create agent | `src/skills/Agents/Workflows/CreateCustomAgent.md` | Custom agent workflow |
-| List traits | `src/skills/Agents/Workflows/ListTraits.md` | Show available traits |
-| Personalities | `src/skills/Agents/AgentPersonalities.md` | Named agent examples |
+The Agents skill is a complete agent composition and management system that enables:
 
-## The Problem
+- **Dynamic Agent Composition** - Create specialized agents from trait combinations (expertise + personality + approach)
+- **Personality-Based Voice Mapping** - Each unique trait combination maps to a distinct ElevenLabs voice
+- **Named Agent Templates** - Pre-configured agents for common roles (Engineer, Architect, Designer, etc.)
+- **Parallel Agent Orchestration** - Launch multiple agents simultaneously for parallel work
+- **Context Loading System** - Simple markdown-based context files for agent specialization
 
-AI agent systems typically offer one-size-fits-all agents. You spawn "an agent" but they all have the same personality, same approach, same voice.
+---
 
-**Cognitive Monoculture:**
-- Every analysis comes from the same perspective
-- No natural devil's advocacy or alternative viewpoints
-- Blind spots become systematic
-
-**Lack of Specialization:**
-- A security review agent should think differently than a creative brainstorming agent
-- Generic agents lack focused expertise and behavioral patterns
-- "Jack of all trades" means master of none
-
-**Voice Confusion:**
-- When multiple agents speak, they're indistinguishable
-- No personality differentiation in outputs
-
-## The Solution
+## Key Features
 
 ### Hybrid Agent Model
-
-Two types of agents working together:
 
 | Type | Definition | Best For |
 |------|------------|----------|
 | **Named Agents** | Persistent identities with backstories | Recurring work, voice output, relationships |
-| **Dynamic Agents** | Task-specific specialists composed from traits | One-off tasks, novel combinations, parallel work |
+| **Dynamic Agents** | Task-specific specialists from traits | One-off tasks, novel combinations, parallel work |
 
-### Trait Composition System
+### Trait Categories
 
-Agents are composed by combining three trait categories:
+**Expertise** (10 domains):
+- security, legal, finance, medical, technical, research, creative, business, data, communications
+
+**Personality** (10 styles):
+- skeptical, enthusiastic, cautious, bold, analytical, creative, empathetic, contrarian, pragmatic, meticulous
+
+**Approach** (8 methods):
+- thorough, rapid, systematic, exploratory, comparative, synthesizing, adversarial, consultative
+
+### Voice Integration
+
+Each trait combination automatically maps to an appropriate ElevenLabs voice:
+- Skeptical + analytical -> George (intellectual warmth)
+- Enthusiastic + creative -> Jeremy (high energy)
+- Bold + business -> Domi (assertive CEO)
+- 45+ voices with characteristics defined
+
+---
+
+## Named Agents Included
+
+| Agent | Role | Voice ID |
+|-------|------|----------|
+| Engineer | Elite principal engineer with TDD focus | iLVmqjzCGGvqtMCk6vVQ |
+| Architect | System design with PhD-level expertise | muZKMsIDGYtIkjjiUS82 |
+| Designer | UX/UI specialist with design school pedigree | 2f09SZ8gvYo2C1S98dOr |
+| QATester | Quality validation using browser automation | 4JeAhLWWF31aL3Xfm6LQ |
+| Pentester | Security specialist, reformed grey hat | n9TLi5s4c4P3zV4Kgf3C |
+| Artist | Visual content creator | f6DmA3m8JRwzf1qgkITQ |
+| Intern | Fast parallel grunt work | d3MFdIuCfbAIwiu7jC4a |
+
+---
+
+## Usage Examples
+
+### Create Custom Agents
+```
+User: "Spin up 5 custom science agents to analyze this data"
+-> Creates 5 agents with DIFFERENT trait combinations
+-> Each gets unique personality + matched voice
+-> All run in parallel
+```
+
+### List Available Traits
+```
+User: "What agent personalities can you create?"
+-> Shows expertise, personality, and approach options
+-> Explains composition system
+```
+
+### Spawn Parallel Workers
+```
+User: "Launch 10 agents to research these companies"
+-> Creates 10 generic Intern agents
+-> Uses haiku model for speed
+-> Spotchecks results automatically
+```
+
+---
+
+## Pack Contents
 
 ```
-AGENT = Expertise + Personality + Approach
+pai-agents-skill/
+|-- README.md              # This file
+|-- INSTALL.md             # AI agent installation guide
+|-- VERIFY.md              # Post-installation verification
++-- src/
+    |-- agents/            # Named agent template files (11 total)
+    |   |-- Engineer.md
+    |   |-- Architect.md
+    |   |-- Designer.md
+    |   |-- QATester.md
+    |   |-- Pentester.md
+    |   |-- Artist.md
+    |   |-- Intern.md
+    |   |-- ClaudeResearcher.md
+    |   |-- GeminiResearcher.md
+    |   |-- GrokResearcher.md
+    |   +-- CodexResearcher.md
+    +-- skills/Agents/     # Agents skill directory
+        |-- SKILL.md       # Main skill routing
+        |-- AgentPersonalities.md
+        |-- AgentProfileSystem.md
+        |-- ArchitectContext.md
+        |-- ArtistContext.md
+        |-- ClaudeResearcherContext.md
+        |-- CodexResearcherContext.md
+        |-- DesignerContext.md
+        |-- EngineerContext.md
+        |-- GeminiResearcherContext.md
+        |-- GrokResearcherContext.md
+        |-- QATesterContext.md
+        |-- Data/
+        |   +-- Traits.yaml
+        |-- Templates/
+        |   +-- DynamicAgent.hbs
+        |-- Tools/
+        |   |-- AgentFactory.ts
+        |   |-- LoadAgentContext.ts
+        |   |-- SpawnAgentWithProfile.ts
+        |   +-- package.json
+        +-- Workflows/
+            |-- CreateCustomAgent.md
+            |-- ListTraits.md
+            +-- SpawnParallelAgents.md
 ```
 
-**Expertise (10 types):** security, legal, finance, medical, technical, research, creative, business, data, communications
+---
 
-**Personality (10 dimensions):** skeptical, enthusiastic, cautious, bold, analytical, creative, empathetic, contrarian, pragmatic, meticulous
+## Requirements
 
-**Approach (8 styles):** thorough, rapid, systematic, exploratory, comparative, synthesizing, adversarial, consultative
+- **pai-core-install** - Required (provides CORE skill infrastructure)
+- **bun** - For running TypeScript tools
+- **ElevenLabs API** (optional) - For voice output via voice server
 
-**Total combinations:** 10 x 10 x 8 = **800 unique agent compositions**
+---
 
-### Voice Mapping
+## Model Selection
 
-Each trait combination maps to a distinct voice automatically.
+| Task Type | Model | Speed |
+|-----------|-------|-------|
+| Grunt work, simple checks | haiku | 10-20x faster |
+| Standard analysis | sonnet | Balanced |
+| Deep reasoning | opus | Maximum intelligence |
 
-## Example Usage
+---
 
-```bash
-# Infer traits from task
-bun run AgentFactory.ts --task "Review this security architecture"
-# Result: security + skeptical + thorough agent with appropriate voice
+## Related Packs
 
-# Specify explicitly
-bun run AgentFactory.ts --traits "legal,meticulous,systematic"
-# Result: Legal expert with careful systematic approach
+- **pai-core-install** - Required foundation (provides CORE skill)
+- **pai-development-pack** - Uses Engineer and Architect agents
 
-# List all traits
-bun run AgentFactory.ts --list
-```
+---
 
-## Changelog
+## Version History
 
-### 1.1.1 - 2026-01-03
-- Added missing `SpawnParallelAgents.md` workflow (was referenced but didn't exist)
-- Fixed workflow validation
-
-### 1.1.0 - 2025-12-30
-- **CRITICAL FIX**: Custom agents now use `subagent_type: "general-purpose"` instead of "Intern"
-- Added constitutional rule for custom agent creation
-
-### 1.0.0 - 2025-12-29
-- Initial release
-- 28 composable traits (10 expertise, 10 personality, 8 approach)
-- AgentFactory CLI tool with trait inference
+- **v2.3.0** (2026-01-14): Initial pack release for PAI v2.3
+- Based on Agents skill v1.0.0 (2025-12-16)

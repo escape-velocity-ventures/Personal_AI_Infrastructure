@@ -1,21 +1,21 @@
 ---
-name: Kai Hook System
-pack-id: danielmiessler-pai-hook-system-core-v1.0.0
-version: 1.0.0
+name: PAI Hook System
+pack-id: danielmiessler-pai-hook-system-v2.3.0
+version: 2.3.0
 author: danielmiessler
-description: Event-driven automation framework for Claude Code - the foundation for all hook-based capabilities including security validation, session management, and context injection
+description: Event-driven automation framework for Claude Code - the foundation for all hook-based capabilities including security validation, session management, context injection, learning capture, and sentiment analysis
 type: feature
-purpose-type: [automation, security, development]
+purpose-type: [automation, security, development, learning]
 platform: claude-code
-dependencies: []
-keywords: [hooks, automation, events, security, validation, sessions, context, claude-code, preprocessing, postprocessing]
+dependencies: [pai-core-install]
+keywords: [hooks, automation, events, security, validation, sessions, context, claude-code, preprocessing, postprocessing, learning, sentiment]
 ---
 
 <p align="center">
-  <img src="../icons/pai-hook-system.png" alt="Kai Hook System" width="256">
+  <img src="../icons/pai-hook-system.png" alt="PAI Hook System" width="256">
 </p>
 
-# Kai Hook System (pai-hook-system)
+# PAI Hook System (pai-hook-system)
 
 > Event-driven automation framework for Claude Code - the foundation for all hook-based capabilities
 
@@ -25,19 +25,16 @@ keywords: [hooks, automation, events, security, validation, sessions, context, c
 
 ## What's Included
 
-| Component | File | Purpose |
-|-----------|------|---------|
-| Security validator | `src/security-validator.ts` | Block dangerous commands before execution |
-| Session initializer | `src/initialize-session.ts` | Set up session context and markers |
-| Context loader | `src/load-core-context.ts` | Load CORE skill at session start |
-| Tab title updater | `src/update-tab-titles.ts` | Update terminal tabs with task context |
-| Observability lib | `src/lib/observability.ts` | Event logging and dashboard integration |
-| Hook config | `config/settings-hooks.json` | Claude Code hook registration template |
+| Component | Count | Purpose |
+|-----------|-------|---------|
+| Hook files | 15 | Event handlers for all lifecycle events |
+| Library files | 12 | Shared utilities and helpers |
+| Handler files | 4 | Specialized processing handlers |
 
 **Summary:**
-- **Files created:** 6
-- **Hooks registered:** 4 (PreToolUse, SessionStart ×2, UserPromptSubmit)
-- **Dependencies:** None (foundation pack)
+- **Files created:** 31
+- **Hooks registered:** 15 (SessionStart x3, PreToolUse x1, UserPromptSubmit x3, Stop x7, SubagentStop x1)
+- **Dependencies:** pai-core-install (foundation pack)
 
 ## The Problem
 
@@ -46,6 +43,7 @@ Claude Code fires events throughout its operation, but by default nothing listen
 - **PreToolUse**: Before any tool runs - opportunity to validate, block, or modify
 - **PostToolUse**: After any tool runs - opportunity to capture, log, or react
 - **Stop**: When the agent finishes responding - opportunity to capture work
+- **SubagentStop**: When a subagent finishes - opportunity to capture agent output
 - **SessionStart**: When a new session begins - opportunity to initialize
 - **SessionEnd**: When a session closes - opportunity to summarize
 - **UserPromptSubmit**: When the user sends a message - opportunity to process
@@ -55,28 +53,35 @@ Without a hook system:
 - Sessions start cold without context
 - No automation layer between events and actions
 - Each capability must be built from scratch
-
-Claude Code's hook system is powerful but undocumented in practice. You can configure hooks in settings.json, but:
-- What events are available?
-- What data does each event provide?
-- How do you write hooks that never block or crash?
-- How do you chain multiple hooks together?
+- Learning opportunities are missed
+- Sentiment and feedback go uncaptured
 
 ## The Solution
 
-The Kai Hook System provides a complete framework for event-driven automation:
+The PAI Hook System provides a complete framework for event-driven automation:
 
 **Core Architecture:**
 
 ```
 $PAI_DIR/
 ├── hooks/                           # Hook implementations
-│   ├── security-validator.ts        # PreToolUse: Block dangerous commands
-│   ├── initialize-session.ts        # SessionStart: Session setup
-│   ├── load-core-context.ts         # SessionStart: Context injection
-│   ├── update-tab-titles.ts         # UserPromptSubmit: Tab automation
-│   └── lib/                         # Shared libraries
-│       └── observability.ts         # Dashboard integration
+│   ├── SecurityValidator.hook.ts    # PreToolUse: Block dangerous commands
+│   ├── LoadContext.hook.ts          # SessionStart: Context injection
+│   ├── StartupGreeting.hook.ts      # SessionStart: Voice greeting
+│   ├── CheckVersion.hook.ts         # SessionStart: Version compatibility
+│   ├── UpdateTabTitle.hook.ts       # UserPromptSubmit: Tab automation
+│   ├── SetQuestionTab.hook.ts       # UserPromptSubmit: Question state
+│   ├── ExplicitRatingCapture.hook.ts# UserPromptSubmit: Rating capture
+│   ├── FormatEnforcer.hook.ts       # Stop: Format compliance
+│   ├── StopOrchestrator.hook.ts     # Stop: Post-response coordination
+│   ├── SessionSummary.hook.ts       # Stop: Session summaries
+│   ├── QuestionAnswered.hook.ts     # Stop: Question completion
+│   ├── AutoWorkCreation.hook.ts     # Stop: Work entry creation
+│   ├── WorkCompletionLearning.hook.ts # Stop: Learning capture
+│   ├── ImplicitSentimentCapture.hook.ts # Stop: Sentiment analysis
+│   ├── AgentOutputCapture.hook.ts   # SubagentStop: Agent output routing
+│   ├── lib/                         # Shared libraries (12 files)
+│   └── handlers/                    # Specialized handlers (4 files)
 └── settings.json                    # Hook configuration
 ```
 
@@ -90,7 +95,7 @@ $PAI_DIR/
 | `SubagentStop` | Subagent finishes | Capture agent outputs, route to categories |
 | `SessionStart` | New session begins | Load context, initialize state |
 | `SessionEnd` | Session closes | Summarize work, cleanup |
-| `UserPromptSubmit` | User sends message | Process input, update UI |
+| `UserPromptSubmit` | User sends message | Process input, update UI, capture ratings |
 | `PreCompact` | Before context compaction | Save important context |
 
 **Design Principles:**
@@ -106,48 +111,48 @@ $PAI_DIR/
 The hook system's power comes from its **event-driven middleware pattern** - a layered architecture that intercepts, processes, and extends every AI operation without modifying Claude Code itself.
 
 ```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                        HOOK SYSTEM ARCHITECTURE                          │
-├─────────────────────────────────────────────────────────────────────────┤
-│                                                                         │
-│  ┌──────────────┐                                                       │
-│  │  Claude Code │ ──► Events fire at every operation                    │
-│  └──────┬───────┘                                                       │
-│         │                                                               │
-│         ▼                                                               │
-│  ┌──────────────────────────────────────────────────────────────────┐  │
-│  │                    LAYER 1: Event Stream                          │  │
-│  │  SessionStart ─► PreToolUse ─► PostToolUse ─► Stop ─► SessionEnd  │  │
-│  └──────────────────────────────────────────────────────────────────┘  │
-│         │                                                               │
-│         ▼                                                               │
-│  ┌──────────────────────────────────────────────────────────────────┐  │
-│  │                    LAYER 2: Hook Registry                         │  │
-│  │  settings.json defines which hooks fire on which events           │  │
-│  │  Matchers filter by tool name (Bash, Edit, *) or context          │  │
-│  └──────────────────────────────────────────────────────────────────┘  │
-│         │                                                               │
-│         ▼                                                               │
-│  ┌──────────────────────────────────────────────────────────────────┐  │
-│  │                    LAYER 3: Hook Implementations                  │  │
-│  │  TypeScript files that process events and take actions            │  │
-│  │  security-validator.ts │ initialize-session.ts │ update-tabs.ts   │  │
-│  └──────────────────────────────────────────────────────────────────┘  │
-│         │                                                               │
-│         ▼                                                               │
-│  ┌──────────────────────────────────────────────────────────────────┐  │
-│  │                    LAYER 4: Shared Libraries                      │  │
-│  │  Common utilities: observability.ts, prosody-enhancer.ts          │  │
-│  │  Fail-safe patterns, logging, integration helpers                 │  │
-│  └──────────────────────────────────────────────────────────────────┘  │
-│         │                                                               │
-│         ▼                                                               │
-│  ┌──────────────────────────────────────────────────────────────────┐  │
-│  │                    LAYER 5: External Integrations                 │  │
-│  │  Observability dashboards, voice servers, notification systems    │  │
-│  └──────────────────────────────────────────────────────────────────┘  │
-│                                                                         │
-└─────────────────────────────────────────────────────────────────────────┘
++-------------------------------------------------------------------------+
+|                        HOOK SYSTEM ARCHITECTURE                          |
++-------------------------------------------------------------------------+
+|                                                                         |
+|  +----------------+                                                     |
+|  |  Claude Code   | --> Events fire at every operation                  |
+|  +-------+--------+                                                     |
+|          |                                                              |
+|          v                                                              |
+|  +------------------------------------------------------------------+  |
+|  |                    LAYER 1: Event Stream                          |  |
+|  |  SessionStart --> PreToolUse --> PostToolUse --> Stop --> SessionEnd  |
+|  +------------------------------------------------------------------+  |
+|          |                                                              |
+|          v                                                              |
+|  +------------------------------------------------------------------+  |
+|  |                    LAYER 2: Hook Registry                         |  |
+|  |  settings.json defines which hooks fire on which events           |  |
+|  |  Matchers filter by tool name (Bash, Edit, *) or context          |  |
+|  +------------------------------------------------------------------+  |
+|          |                                                              |
+|          v                                                              |
+|  +------------------------------------------------------------------+  |
+|  |                    LAYER 3: Hook Implementations                  |  |
+|  |  TypeScript files that process events and take actions            |  |
+|  |  15 hooks covering security, UI, learning, and orchestration      |  |
+|  +------------------------------------------------------------------+  |
+|          |                                                              |
+|          v                                                              |
+|  +------------------------------------------------------------------+  |
+|  |                    LAYER 4: Shared Libraries                      |  |
+|  |  Common utilities: observability, notifications, identity         |  |
+|  |  Fail-safe patterns, logging, integration helpers                 |  |
+|  +------------------------------------------------------------------+  |
+|          |                                                              |
+|          v                                                              |
+|  +------------------------------------------------------------------+  |
+|  |                    LAYER 5: External Integrations                 |  |
+|  |  Observability dashboards, voice servers, notification systems    |  |
+|  +------------------------------------------------------------------+  |
+|                                                                         |
++-------------------------------------------------------------------------+
 ```
 
 ### How Data Flows Through the System
@@ -156,28 +161,28 @@ The hook system's power comes from its **event-driven middleware pattern** - a l
 
 ```
 1. Claude Code invokes Bash tool
-         │
-         ▼
+         |
+         v
 2. PreToolUse event fires with payload:
    { tool_name: "Bash", tool_input: { command: "rm -rf important/" } }
-         │
-         ▼
-3. settings.json routes to security-validator.ts (matcher: "Bash")
-         │
-         ▼
+         |
+         v
+3. settings.json routes to SecurityValidator.hook.ts (matcher: "Bash")
+         |
+         v
 4. Hook receives JSON via stdin, pattern-matches against attack tiers
-         │
-         ▼
+         |
+         v
 5. MATCH: Catastrophic deletion pattern detected
-         │
-         ▼
+         |
+         v
 6. Hook exits with code 2 (BLOCK) + outputs warning message
-         │
-         ▼
+         |
+         v
 7. Claude Code sees exit 2, BLOCKS the command
-         │
-         ▼
-8. User sees: "🚨 BLOCKED: Catastrophic deletion detected"
+         |
+         v
+8. User sees: "BLOCKED: Catastrophic deletion detected"
 ```
 
 ### Why This Architecture Matters
@@ -216,6 +221,8 @@ The hook system's power comes from its **event-driven middleware pattern** - a l
 | Work disappears | Stop/SubagentStop capture everything |
 | No visibility into operations | PostToolUse logs to observability |
 | UI doesn't show context | UserPromptSubmit updates tab titles |
+| Feedback goes uncaptured | Rating hooks capture explicit and implicit signals |
+| Learnings are lost | WorkCompletionLearning extracts insights |
 
 ## The Fundamental Insight
 
@@ -245,29 +252,81 @@ See [VERIFY.md](VERIFY.md) for testing and verification procedures.
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `PAI_DIR` | `~/.config/pai` | Root PAI directory |
+| `PAI_DIR` | `~/.claude` | Root PAI directory |
 | `TIME_ZONE` | System default | Timestamp timezone |
 | `DA` | `PAI` | AI assistant name |
 | `PAI_OBSERVABILITY_URL` | `http://localhost:4000/events` | Dashboard endpoint |
-| `PAI_TAB_PREFIX` | `🤖` | Tab title prefix |
+| `PAI_TAB_PREFIX` | ` ` | Tab title prefix |
+
+## Hook Registry
+
+### SessionStart Hooks (3)
+
+| Hook | Purpose |
+|------|---------|
+| `LoadContext.hook.ts` | Inject CORE skill into context |
+| `StartupGreeting.hook.ts` | Display PAI banner with voice |
+| `CheckVersion.hook.ts` | Check for Claude Code updates |
+
+### PreToolUse Hooks (1)
+
+| Hook | Purpose |
+|------|---------|
+| `SecurityValidator.hook.ts` | Block dangerous commands |
+
+### UserPromptSubmit Hooks (3)
+
+| Hook | Purpose |
+|------|---------|
+| `UpdateTabTitle.hook.ts` | Update tab with task context |
+| `SetQuestionTab.hook.ts` | Mark tab for questions |
+| `ExplicitRatingCapture.hook.ts` | Capture 1-10 ratings |
+
+### Stop Hooks (7)
+
+| Hook | Purpose |
+|------|---------|
+| `FormatEnforcer.hook.ts` | Enforce response format |
+| `StopOrchestrator.hook.ts` | Coordinate post-response handlers |
+| `SessionSummary.hook.ts` | Generate session summaries |
+| `QuestionAnswered.hook.ts` | Track question completion |
+| `AutoWorkCreation.hook.ts` | Create work entries |
+| `WorkCompletionLearning.hook.ts` | Extract learnings |
+| `ImplicitSentimentCapture.hook.ts` | Analyze sentiment |
+
+### SubagentStop Hooks (1)
+
+| Hook | Purpose |
+|------|---------|
+| `AgentOutputCapture.hook.ts` | Capture subagent outputs |
 
 ## Credits
 
-- **Original concept**: Daniel Miessler - developed as part of Kai personal AI infrastructure
+- **Original concept**: Daniel Miessler - developed as part of PAI personal AI infrastructure
 - **Contributors**: The PAI community
 - **Hook system**: Anthropic Claude Code team
 
 ## Related Packs
 
-- **pai-history-system** - Uses hooks for capturing session work and learnings
+- **pai-core-install** - Required foundation pack
 - **pai-voice-system** - Uses hooks for voice notification triggers
-- **pai-core-install** - Uses SessionStart hooks for CORE skill context injection
+- **pai-observability-server** - Receives hook events for dashboard display
 
 ## Changelog
+
+### 2.3.0 - 2026-01-14
+- Major release with 15 hooks (up from 4)
+- Added learning capture system (WorkCompletionLearning, ExplicitRatingCapture, ImplicitSentimentCapture)
+- Added work tracking (AutoWorkCreation, SessionSummary)
+- Added agent orchestration (AgentOutputCapture)
+- Added question tracking (QuestionAnswered, SetQuestionTab)
+- Added format enforcement (FormatEnforcer)
+- Expanded shared libraries to 12 files
+- Added handlers directory with 4 specialized handlers
+- Complete hook documentation with inter-hook dependencies
 
 ### 1.0.0 - 2025-12-29
 - Initial release
 - Four core hooks: security-validator, initialize-session, load-core-context, update-tab-titles
 - One lib file: observability
 - Complete hook event reference documentation
-- Security validation with 10 tiers of attack pattern detection

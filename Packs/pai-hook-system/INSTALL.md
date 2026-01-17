@@ -1,4 +1,4 @@
-# PAI Hook System v1.0.0 - Installation Guide
+# PAI Hook System v2.3.0 - Installation Guide
 
 **This guide is designed for AI agents installing this pack into a user's infrastructure.**
 
@@ -17,7 +17,7 @@
 
 Before starting, greet the user:
 ```
-"I'm installing PAI Hook System v1.0.0 - Event-driven automation for Claude Code. Security validation, session management, and context injection.
+"I'm installing PAI Hook System v2.3.0 - Event-driven automation for Claude Code. This major release includes 15 hooks for security validation, session management, context injection, learning capture, and sentiment analysis.
 
 Let me analyze your system and guide you through installation."
 ```
@@ -37,36 +37,36 @@ echo "PAI_DIR: $PAI_CHECK"
 
 # Check if pai-core-install is installed (REQUIRED)
 if [ -f "$PAI_CHECK/skills/CORE/SKILL.md" ]; then
-  echo "✓ pai-core-install is installed"
+  echo "OK pai-core-install is installed"
 else
-  echo "❌ pai-core-install NOT installed - REQUIRED!"
+  echo "ERROR pai-core-install NOT installed - REQUIRED!"
 fi
 
 # Check for existing hooks directory
 if [ -d "$PAI_CHECK/hooks" ]; then
-  echo "⚠️  Existing hooks directory found at: $PAI_CHECK/hooks"
-  ls "$PAI_CHECK/hooks"/*.ts 2>/dev/null | head -10
+  echo "WARNING Existing hooks directory found at: $PAI_CHECK/hooks"
+  ls "$PAI_CHECK/hooks"/*.hook.ts 2>/dev/null | head -10
 else
-  echo "✓ No existing hooks directory (clean install)"
+  echo "OK No existing hooks directory (clean install)"
 fi
 
 # Check Claude settings for existing hooks
 CLAUDE_SETTINGS="$HOME/.claude/settings.json"
 if [ -f "$CLAUDE_SETTINGS" ]; then
   if grep -q '"hooks"' "$CLAUDE_SETTINGS" 2>/dev/null; then
-    echo "⚠️  Existing hooks configuration found in settings.json"
+    echo "WARNING Existing hooks configuration found in settings.json"
   else
-    echo "✓ No hooks configured in settings.json"
+    echo "OK No hooks configured in settings.json"
   fi
 else
-  echo "✓ No Claude settings.json (will be created)"
+  echo "OK No Claude settings.json (will be created)"
 fi
 
 # Check for Bun runtime
 if command -v bun &> /dev/null; then
-  echo "✓ Bun is installed: $(bun --version)"
+  echo "OK Bun is installed: $(bun --version)"
 else
-  echo "❌ Bun not installed - REQUIRED!"
+  echo "ERROR Bun not installed - REQUIRED!"
 fi
 
 # Check environment variables
@@ -138,13 +138,16 @@ Tell the user what you found:
 ```json
 {
   "header": "Hooks",
-  "question": "Which hooks should I enable?",
+  "question": "Which hook categories should I enable?",
   "multiSelect": true,
   "options": [
-    {"label": "Security Validator (Recommended)", "description": "Blocks dangerous bash commands"},
-    {"label": "Session Initializer (Recommended)", "description": "Sets up session context at start"},
-    {"label": "Core Context Loader (Recommended)", "description": "Loads CORE skill at session start"},
-    {"label": "Tab Title Updater", "description": "Updates terminal tab with task context"}
+    {"label": "Security (Recommended)", "description": "SecurityValidator - blocks dangerous commands"},
+    {"label": "Session Management (Recommended)", "description": "LoadContext, StartupGreeting, CheckVersion"},
+    {"label": "UI Automation (Recommended)", "description": "UpdateTabTitle, SetQuestionTab"},
+    {"label": "Output Processing", "description": "FormatEnforcer, StopOrchestrator, SessionSummary"},
+    {"label": "Learning System", "description": "WorkCompletionLearning, ExplicitRatingCapture, ImplicitSentimentCapture"},
+    {"label": "Agent Orchestration", "description": "AgentOutputCapture for subagent management"},
+    {"label": "Work Tracking", "description": "AutoWorkCreation, QuestionAnswered"}
   ]
 }
 ```
@@ -154,7 +157,7 @@ Tell the user what you found:
 ```json
 {
   "header": "Install",
-  "question": "Ready to install PAI Hook System v1.0.0?",
+  "question": "Ready to install PAI Hook System v2.3.0?",
   "multiSelect": false,
   "options": [
     {"label": "Yes, install now (Recommended)", "description": "Proceeds with installation using choices above"},
@@ -196,6 +199,7 @@ echo "Backup created at: $BACKUP_DIR"
     {"content": "Create hooks directory structure", "status": "pending", "activeForm": "Creating directory structure"},
     {"content": "Copy hook files from pack", "status": "pending", "activeForm": "Copying hook files"},
     {"content": "Copy library files from pack", "status": "pending", "activeForm": "Copying library files"},
+    {"content": "Copy handler files from pack", "status": "pending", "activeForm": "Copying handler files"},
     {"content": "Set up environment variables", "status": "pending", "activeForm": "Setting up environment"},
     {"content": "Register hooks in settings.json", "status": "pending", "activeForm": "Registering hooks"},
     {"content": "Run verification", "status": "pending", "activeForm": "Running verification"}
@@ -210,6 +214,7 @@ echo "Backup created at: $BACKUP_DIR"
 ```bash
 PAI_DIR="${PAI_DIR:-$HOME/.claude}"
 mkdir -p "$PAI_DIR/hooks/lib"
+mkdir -p "$PAI_DIR/hooks/handlers"
 ```
 
 **Mark todo as completed.**
@@ -218,24 +223,33 @@ mkdir -p "$PAI_DIR/hooks/lib"
 
 **Mark todo "Copy hook files from pack" as in_progress.**
 
-Copy hook files from the pack's `src/` directory:
+Copy hook files from the pack's `src/hooks/` directory:
 
 ```bash
 # From the pack directory (where this INSTALL.md is located)
 PACK_DIR="$(pwd)"
 PAI_DIR="${PAI_DIR:-$HOME/.claude}"
 
-cp "$PACK_DIR/src/security-validator.ts" "$PAI_DIR/hooks/"
-cp "$PACK_DIR/src/initialize-session.ts" "$PAI_DIR/hooks/"
-cp "$PACK_DIR/src/load-core-context.ts" "$PAI_DIR/hooks/"
-cp "$PACK_DIR/src/update-tab-titles.ts" "$PAI_DIR/hooks/"
+# Copy all hook files
+cp "$PACK_DIR/src/hooks/"*.hook.ts "$PAI_DIR/hooks/"
 ```
 
-**Files copied:**
-- `security-validator.ts` - Blocks dangerous bash commands (PreToolUse)
-- `initialize-session.ts` - Sets up session context (SessionStart)
-- `load-core-context.ts` - Loads CORE skill context (SessionStart)
-- `update-tab-titles.ts` - Updates terminal tab title (UserPromptSubmit)
+**Hooks included (15 total):**
+- `SecurityValidator.hook.ts` - PreToolUse: Block dangerous commands
+- `LoadContext.hook.ts` - SessionStart: Load CORE skill context
+- `StartupGreeting.hook.ts` - SessionStart: Voice greeting
+- `CheckVersion.hook.ts` - SessionStart: Version compatibility
+- `UpdateTabTitle.hook.ts` - UserPromptSubmit: Tab automation
+- `SetQuestionTab.hook.ts` - UserPromptSubmit: Question tracking
+- `ExplicitRatingCapture.hook.ts` - UserPromptSubmit: Rating capture
+- `FormatEnforcer.hook.ts` - Stop: Format compliance
+- `StopOrchestrator.hook.ts` - Stop: Post-response coordination
+- `SessionSummary.hook.ts` - Stop: Session summaries
+- `QuestionAnswered.hook.ts` - Stop: Question completion
+- `AutoWorkCreation.hook.ts` - Stop: Work entry creation
+- `WorkCompletionLearning.hook.ts` - Stop: Learning capture
+- `ImplicitSentimentCapture.hook.ts` - Stop: Sentiment analysis
+- `AgentOutputCapture.hook.ts` - SubagentStop: Agent output routing
 
 **Mark todo as completed.**
 
@@ -247,12 +261,45 @@ cp "$PACK_DIR/src/update-tab-titles.ts" "$PAI_DIR/hooks/"
 PACK_DIR="$(pwd)"
 PAI_DIR="${PAI_DIR:-$HOME/.claude}"
 
-cp "$PACK_DIR/src/lib/observability.ts" "$PAI_DIR/hooks/lib/"
+cp "$PACK_DIR/src/hooks/lib/"*.ts "$PAI_DIR/hooks/lib/"
 ```
+
+**Libraries included (12 total):**
+- `observability.ts` - Event logging and dashboard integration
+- `notifications.ts` - Voice and notification system
+- `identity.ts` - Session and user identity
+- `paths.ts` - PAI directory utilities
+- `time.ts` - Timezone formatting
+- `change-detection.ts` - Response change detection
+- `learning-utils.ts` - Learning capture utilities
+- `metadata-extraction.ts` - Metadata extraction
+- `recovery-types.ts` - Error recovery types
+- `response-format.ts` - Format validation
+- `IdealState.ts` - Goal tracking
+- `TraceEmitter.ts` - Trace emission
 
 **Mark todo as completed.**
 
-### 4.4 Set Up Environment Variables (If User Chose Yes)
+### 4.4 Copy Handler Files
+
+**Mark todo "Copy handler files from pack" as in_progress.**
+
+```bash
+PACK_DIR="$(pwd)"
+PAI_DIR="${PAI_DIR:-$HOME/.claude}"
+
+cp "$PACK_DIR/src/hooks/handlers/"*.ts "$PAI_DIR/hooks/handlers/"
+```
+
+**Handlers included (4 total):**
+- `capture.ts` - Output capture coordination
+- `voice.ts` - Voice notification handling
+- `tab-state.ts` - Tab state management
+- `SystemIntegrity.ts` - System integrity checks
+
+**Mark todo as completed.**
+
+### 4.5 Set Up Environment Variables (If User Chose Yes)
 
 **Mark todo "Set up environment variables" as in_progress.**
 
@@ -287,21 +334,72 @@ You can customize:
 
 **Mark todo as completed (or skip if user declined).**
 
-### 4.5 Register Hooks in settings.json
+### 4.6 Register Hooks in settings.json
 
 **Mark todo "Register hooks in settings.json" as in_progress.**
 
-Read the hook configuration from `config/settings-hooks.json` and merge it into `~/.claude/settings.json`.
+Read the existing `~/.claude/settings.json` and merge hook configurations.
 
 **For new installations:**
 ```bash
-# If no settings.json exists, copy the template
+# If no settings.json exists, create a basic one with hooks
 mkdir -p ~/.claude
-cp "$PACK_DIR/config/settings-hooks.json" ~/.claude/settings.json
 ```
 
-**For existing installations:**
-Merge the hooks section from `config/settings-hooks.json` into the existing `~/.claude/settings.json`. Preserve existing hooks.
+**Hook configuration to add:**
+
+```json
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {"type": "command", "command": "bun run $PAI_DIR/hooks/StartupGreeting.hook.ts"},
+          {"type": "command", "command": "bun run $PAI_DIR/hooks/LoadContext.hook.ts"},
+          {"type": "command", "command": "bun run $PAI_DIR/hooks/CheckVersion.hook.ts"}
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {"type": "command", "command": "bun run $PAI_DIR/hooks/SecurityValidator.hook.ts"}
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {"type": "command", "command": "bun run $PAI_DIR/hooks/UpdateTabTitle.hook.ts"},
+          {"type": "command", "command": "bun run $PAI_DIR/hooks/SetQuestionTab.hook.ts"},
+          {"type": "command", "command": "bun run $PAI_DIR/hooks/ExplicitRatingCapture.hook.ts"}
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {"type": "command", "command": "bun run $PAI_DIR/hooks/FormatEnforcer.hook.ts"},
+          {"type": "command", "command": "bun run $PAI_DIR/hooks/StopOrchestrator.hook.ts"},
+          {"type": "command", "command": "bun run $PAI_DIR/hooks/SessionSummary.hook.ts"},
+          {"type": "command", "command": "bun run $PAI_DIR/hooks/QuestionAnswered.hook.ts"},
+          {"type": "command", "command": "bun run $PAI_DIR/hooks/AutoWorkCreation.hook.ts"},
+          {"type": "command", "command": "bun run $PAI_DIR/hooks/WorkCompletionLearning.hook.ts"},
+          {"type": "command", "command": "bun run $PAI_DIR/hooks/ImplicitSentimentCapture.hook.ts"}
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {"type": "command", "command": "bun run $PAI_DIR/hooks/AgentOutputCapture.hook.ts"}
+        ]
+      }
+    ]
+  }
+}
+```
 
 **Mark todo as completed.**
 
@@ -316,40 +414,41 @@ Merge the hooks section from `config/settings-hooks.json` into the existing `~/.
 ```bash
 PAI_DIR="${PAI_DIR:-$HOME/.claude}"
 
-echo "=== PAI Hook System Verification ==="
+echo "=== PAI Hook System v2.3.0 Verification ==="
 
-# Check hook files
+# Check hook files (15 expected)
 echo "Checking hook files..."
-[ -f "$PAI_DIR/hooks/security-validator.ts" ] && echo "✓ security-validator.ts" || echo "❌ security-validator.ts missing"
-[ -f "$PAI_DIR/hooks/initialize-session.ts" ] && echo "✓ initialize-session.ts" || echo "❌ initialize-session.ts missing"
-[ -f "$PAI_DIR/hooks/load-core-context.ts" ] && echo "✓ load-core-context.ts" || echo "❌ load-core-context.ts missing"
-[ -f "$PAI_DIR/hooks/update-tab-titles.ts" ] && echo "✓ update-tab-titles.ts" || echo "❌ update-tab-titles.ts missing"
+HOOK_COUNT=$(ls "$PAI_DIR/hooks/"*.hook.ts 2>/dev/null | wc -l)
+echo "Found $HOOK_COUNT hook files (expected: 15)"
 
-# Check library files
+# Check critical hooks
+[ -f "$PAI_DIR/hooks/SecurityValidator.hook.ts" ] && echo "OK SecurityValidator.hook.ts" || echo "ERROR SecurityValidator.hook.ts missing"
+[ -f "$PAI_DIR/hooks/LoadContext.hook.ts" ] && echo "OK LoadContext.hook.ts" || echo "ERROR LoadContext.hook.ts missing"
+[ -f "$PAI_DIR/hooks/StopOrchestrator.hook.ts" ] && echo "OK StopOrchestrator.hook.ts" || echo "ERROR StopOrchestrator.hook.ts missing"
+
+# Check library files (12 expected)
 echo ""
 echo "Checking library files..."
-[ -f "$PAI_DIR/hooks/lib/observability.ts" ] && echo "✓ observability.ts" || echo "❌ observability.ts missing"
+LIB_COUNT=$(ls "$PAI_DIR/hooks/lib/"*.ts 2>/dev/null | wc -l)
+echo "Found $LIB_COUNT library files (expected: 12)"
+
+# Check handler files (4 expected)
+echo ""
+echo "Checking handler files..."
+HANDLER_COUNT=$(ls "$PAI_DIR/hooks/handlers/"*.ts 2>/dev/null | wc -l)
+echo "Found $HANDLER_COUNT handler files (expected: 4)"
 
 # Check settings.json
 echo ""
 echo "Checking settings.json..."
 if [ -f ~/.claude/settings.json ]; then
   if grep -q '"hooks"' ~/.claude/settings.json; then
-    echo "✓ Hooks section exists in settings.json"
-    if grep -q "security-validator" ~/.claude/settings.json; then
-      echo "✓ Security validator registered"
-    fi
-    if grep -q "initialize-session" ~/.claude/settings.json; then
-      echo "✓ Initialize session registered"
-    fi
-    if grep -q "load-core-context" ~/.claude/settings.json; then
-      echo "✓ Load core context registered"
-    fi
+    echo "OK Hooks section exists in settings.json"
   else
-    echo "❌ Hooks section missing from settings.json"
+    echo "ERROR Hooks section missing from settings.json"
   fi
 else
-  echo "❌ settings.json not found"
+  echo "ERROR settings.json not found"
 fi
 
 echo "=== Verification Complete ==="
@@ -369,13 +468,16 @@ Tell the user:
 ### On Success
 
 ```
-"PAI Hook System v1.0.0 installed successfully!
+"PAI Hook System v2.3.0 installed successfully!
 
 What's available:
-- Security Validator - Blocks dangerous bash commands
-- Session Initializer - Sets up context at session start
-- Core Context Loader - Loads CORE skill automatically
-- Tab Title Updater - Shows task context in terminal tab
+- Security: SecurityValidator blocks dangerous commands
+- Session: LoadContext, StartupGreeting, CheckVersion
+- UI: UpdateTabTitle, SetQuestionTab
+- Output: FormatEnforcer, StopOrchestrator, SessionSummary
+- Learning: WorkCompletionLearning, ExplicitRatingCapture, ImplicitSentimentCapture
+- Agents: AgentOutputCapture for subagent management
+- Work: AutoWorkCreation, QuestionAnswered
 
 The hooks fire automatically on the appropriate events.
 
@@ -431,8 +533,8 @@ echo "PAI_DIR is: $PAI_DIR"
 ### Security validator blocking valid commands
 
 ```bash
-# Review attack patterns in security-validator.ts
-cat $PAI_DIR/hooks/security-validator.ts | grep -A 5 "ATTACK_PATTERNS"
+# Review attack patterns in SecurityValidator.hook.ts
+cat $PAI_DIR/hooks/SecurityValidator.hook.ts | grep -A 5 "ATTACK_PATTERNS"
 
 # Adjust patterns or add exceptions as needed
 ```
@@ -444,20 +546,58 @@ cat $PAI_DIR/hooks/security-validator.ts | grep -A 5 "ATTACK_PATTERNS"
 # Most modern terminals (iTerm2, Hyper, etc.) support this
 
 # Verify the UserPromptSubmit hook is registered
-grep "update-tab-titles" ~/.claude/settings.json
+grep "UpdateTabTitle" ~/.claude/settings.json
 ```
 
 ---
 
 ## What's Included
 
+### Hooks (15 files)
+
+| File | Event | Purpose |
+|------|-------|---------|
+| `SecurityValidator.hook.ts` | PreToolUse | Block dangerous commands |
+| `LoadContext.hook.ts` | SessionStart | Load CORE skill context |
+| `StartupGreeting.hook.ts` | SessionStart | Voice greeting |
+| `CheckVersion.hook.ts` | SessionStart | Version check |
+| `UpdateTabTitle.hook.ts` | UserPromptSubmit | Tab automation |
+| `SetQuestionTab.hook.ts` | UserPromptSubmit | Question tracking |
+| `ExplicitRatingCapture.hook.ts` | UserPromptSubmit | Rating capture |
+| `FormatEnforcer.hook.ts` | Stop | Format compliance |
+| `StopOrchestrator.hook.ts` | Stop | Post-response coordination |
+| `SessionSummary.hook.ts` | Stop | Session summaries |
+| `QuestionAnswered.hook.ts` | Stop | Question completion |
+| `AutoWorkCreation.hook.ts` | Stop | Work entry creation |
+| `WorkCompletionLearning.hook.ts` | Stop | Learning capture |
+| `ImplicitSentimentCapture.hook.ts` | Stop | Sentiment analysis |
+| `AgentOutputCapture.hook.ts` | SubagentStop | Agent output routing |
+
+### Libraries (12 files)
+
 | File | Purpose |
 |------|---------|
-| `security-validator.ts` | PreToolUse - blocks dangerous bash commands |
-| `initialize-session.ts` | SessionStart - sets up session context |
-| `load-core-context.ts` | SessionStart - loads CORE skill |
-| `update-tab-titles.ts` | UserPromptSubmit - updates terminal tab |
-| `lib/observability.ts` | Shared logging and event utilities |
+| `observability.ts` | Dashboard integration |
+| `notifications.ts` | Voice/notification system |
+| `identity.ts` | Identity management |
+| `paths.ts` | Path utilities |
+| `time.ts` | Time formatting |
+| `change-detection.ts` | Change detection |
+| `learning-utils.ts` | Learning utilities |
+| `metadata-extraction.ts` | Metadata extraction |
+| `recovery-types.ts` | Recovery types |
+| `response-format.ts` | Format validation |
+| `IdealState.ts` | Goal tracking |
+| `TraceEmitter.ts` | Trace emission |
+
+### Handlers (4 files)
+
+| File | Purpose |
+|------|---------|
+| `capture.ts` | Output capture |
+| `voice.ts` | Voice handling |
+| `tab-state.ts` | Tab management |
+| `SystemIntegrity.ts` | System checks |
 
 ---
 
@@ -466,23 +606,25 @@ grep "update-tab-titles" ~/.claude/settings.json
 ### Automatic Behavior
 
 Hooks fire automatically on their respective events:
-- **SessionStart**: Context is loaded, session initialized
-- **PreToolUse (Bash)**: Commands are validated before execution
-- **UserPromptSubmit**: Terminal tab title is updated
+- **SessionStart**: Context loaded, greeting sent, version checked
+- **PreToolUse (Bash)**: Commands validated before execution
+- **UserPromptSubmit**: Tab title updated, ratings captured
+- **Stop**: Format enforced, summaries generated, learnings captured
+- **SubagentStop**: Agent outputs captured and routed
 
 ### Hook Events
 
 | Event | When | Hooks |
 |-------|------|-------|
-| `SessionStart` | Claude Code starts | initialize-session, load-core-context |
-| `PreToolUse` | Before tool execution | security-validator (Bash only) |
-| `PostToolUse` | After tool execution | (extensible) |
-| `UserPromptSubmit` | User sends message | update-tab-titles |
-| `Stop` | Session ends | (extensible) |
+| `SessionStart` | Claude Code starts | LoadContext, StartupGreeting, CheckVersion |
+| `PreToolUse` | Before tool execution | SecurityValidator (Bash only) |
+| `UserPromptSubmit` | User sends message | UpdateTabTitle, SetQuestionTab, ExplicitRatingCapture |
+| `Stop` | Agent finishes | FormatEnforcer, StopOrchestrator, SessionSummary, QuestionAnswered, AutoWorkCreation, WorkCompletionLearning, ImplicitSentimentCapture |
+| `SubagentStop` | Subagent finishes | AgentOutputCapture |
 
 ### Adding Custom Hooks
 
-Create a new `.ts` file in `$PAI_DIR/hooks/` and register it in `~/.claude/settings.json`:
+Create a new `.hook.ts` file in `$PAI_DIR/hooks/` and register it in `~/.claude/settings.json`:
 
 ```json
 {
@@ -493,7 +635,7 @@ Create a new `.ts` file in `$PAI_DIR/hooks/` and register it in `~/.claude/setti
         "hooks": [
           {
             "type": "command",
-            "command": "bun run $PAI_DIR/hooks/my-custom-hook.ts"
+            "command": "bun run $PAI_DIR/hooks/MyCustom.hook.ts"
           }
         ]
       }

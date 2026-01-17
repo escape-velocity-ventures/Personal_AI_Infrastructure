@@ -1,10 +1,10 @@
-# Kai Core Install - Installation Guide
+# PAI Core Install v2.3.0 - Installation Guide
 
 **This guide is designed for AI agents installing this pack into a user's infrastructure.**
 
 ---
 
-## 🎯 AI Agent Instructions
+## AI Agent Instructions
 
 **This is a wizard-style installation.** Use Claude Code's native tools to guide the user through installation:
 
@@ -17,9 +17,7 @@
 
 Before starting, greet the user:
 ```
-"I'm installing the CORE skill - the foundation of your PAI system. This provides
-skill routing, response formatting, identity configuration, USER/SYSTEM architecture,
-and the CreateSkill meta-skill for building new capabilities.
+"I'm installing PAI Core v2.3.0 - Personal AI Infrastructure foundation. This is the base system that all other PAI packs build upon. It includes the CORE skill, memory system, response format, and configuration.
 
 Let me analyze your system and guide you through installation."
 ```
@@ -33,26 +31,46 @@ Let me analyze your system and guide you through installation."
 ### 1.1 Run These Commands
 
 ```bash
-PAI_CHECK="${PAI_DIR:-$HOME/.config/pai}"
+PAI_CHECK="${PAI_DIR:-$HOME/.claude}"
+echo "PAI_DIR: $PAI_CHECK"
 
-# Check if PAI_DIR is set
-echo "PAI_DIR: ${PAI_DIR:-'NOT SET - will use ~/.config/pai'}"
-
-# Check for Bun runtime
-which bun && bun --version
-
-# Check for hook system (required dependency)
-if [ -f "$PAI_CHECK/hooks/lib/observability.ts" ]; then
-  echo "✓ Hook system is installed (required)"
+# Check for existing PAI installation
+if [ -f "$PAI_CHECK/skills/CORE/SKILL.md" ]; then
+  echo "WARNING Existing PAI installation found at: $PAI_CHECK"
+  echo "CORE skill version:"
+  head -10 "$PAI_CHECK/skills/CORE/SKILL.md" | grep -i version || echo "(version not found in header)"
 else
-  echo "❌ Hook system NOT installed - install pai-hook-system first!"
+  echo "OK No existing PAI installation (clean install)"
 fi
 
-# Check for existing CORE skill
-if [ -d "$PAI_CHECK/skills/CORE" ]; then
-  echo "⚠️ Existing CORE skill found at: $PAI_CHECK/skills/CORE"
+# Check for USER content (must preserve)
+if [ -d "$PAI_CHECK/skills/CORE/USER" ]; then
+  USER_FILES=$(find "$PAI_CHECK/skills/CORE/USER" -type f -name "*.md" 2>/dev/null | wc -l)
+  echo "NOTE Found $USER_FILES USER files that should be preserved"
 else
-  echo "✓ No existing CORE skill (clean install)"
+  echo "OK No USER content to preserve"
+fi
+
+# Check for settings.json with identity
+if [ -f "$PAI_CHECK/settings.json" ]; then
+  echo "OK settings.json exists"
+  grep -o '"name"[[:space:]]*:[[:space:]]*"[^"]*"' "$PAI_CHECK/settings.json" | head -2
+else
+  echo "NOTE settings.json will be created"
+fi
+
+# Check for backup directories
+for backup in "$HOME/.claude.bak" "$HOME/.claude-backup" "$HOME/.claude-old" "$HOME/.pai-backup"; do
+  if [ -d "$backup" ]; then
+    echo "NOTE Found backup: $backup"
+  fi
+done
+
+# Check for Bun runtime
+if command -v bun &> /dev/null; then
+  echo "OK Bun is installed: $(bun --version)"
+else
+  echo "WARNING Bun not installed - some tools will not work"
 fi
 ```
 
@@ -61,10 +79,11 @@ fi
 Tell the user what you found:
 ```
 "Here's what I found on your system:
-- PAI_DIR: [path or NOT SET]
-- Bun: [installed vX.X / NOT INSTALLED]
-- Hook system: [installed / NOT INSTALLED - REQUIRED]
-- Existing CORE skill: [Yes at path / No]"
+- Existing PAI installation: [Yes / No]
+- USER content to preserve: [X files / none]
+- settings.json: [exists with identity / will be created]
+- Backup directories: [found / none]
+- Bun runtime: [installed / not installed]"
 ```
 
 ---
@@ -73,51 +92,66 @@ Tell the user what you found:
 
 **Use AskUserQuestion tool at each decision point.**
 
-### Question 1: Missing Hook System (if not installed)
+### Question 1: Installation Type (if existing installation found)
 
-**Only ask if hook system is NOT installed:**
+**Only ask if existing PAI installation detected:**
 
 ```json
 {
-  "header": "Dependency",
-  "question": "The hook system is required but not installed. How should I proceed?",
+  "header": "Upgrade",
+  "question": "I found an existing PAI installation. How should I proceed?",
   "multiSelect": false,
   "options": [
-    {"label": "Install pai-hook-system first (Recommended)", "description": "I'll install the hook system pack, then continue with CORE"},
-    {"label": "Skip and continue anyway", "description": "CORE will install but session context loading won't work"},
-    {"label": "Abort installation", "description": "Cancel - I'll install dependencies manually"}
+    {"label": "Upgrade (preserve USER content) (Recommended)", "description": "Updates SYSTEM files, keeps your personal USER content intact"},
+    {"label": "Fresh install (backup first)", "description": "Creates backup, then installs completely fresh"},
+    {"label": "Cancel", "description": "Abort installation"}
   ]
 }
 ```
 
-### Question 2: Conflict Resolution (if existing CORE found)
+### Question 2: Identity Configuration (if no settings.json or fresh install)
 
-**Only ask if existing CORE skill detected:**
-
-```json
-{
-  "header": "Conflict",
-  "question": "Existing CORE skill detected at $PAI_DIR/skills/CORE. How should I proceed?",
-  "multiSelect": false,
-  "options": [
-    {"label": "Backup and Replace (Recommended)", "description": "Creates timestamped backup, then installs new version"},
-    {"label": "Merge/Update", "description": "Keep existing customizations, add new files"},
-    {"label": "Abort Installation", "description": "Cancel installation, keep existing CORE"}
-  ]
-}
-```
-
-### Question 3: AI Identity Configuration
+**Only ask if settings.json doesn't exist or user chose fresh install:**
 
 ```json
 {
   "header": "Identity",
-  "question": "What should I name your AI assistant?",
+  "question": "What's your name? I'll use this to personalize your AI assistant.",
   "multiSelect": false,
   "options": [
-    {"label": "Kai (Recommended)", "description": "The default PAI assistant name"},
-    {"label": "Atlas", "description": "Alternative name"},
-    {"label": "Custom name", "description": "I'll ask you for a custom name"}
+    {"label": "Enter name", "description": "Type your name"}
+  ]
+}
+```
+
+Then:
+
+```json
+{
+  "header": "AI Name",
+  "question": "What would you like to name your AI assistant?",
+  "multiSelect": false,
+  "options": [
+    {"label": "PAI (Recommended)", "description": "Default PAI assistant name"},
+    {"label": "Nova", "description": "Alternative assistant name"},
+    {"label": "Atlas", "description": "Alternative assistant name"},
+    {"label": "Custom", "description": "Enter a custom name"}
+  ]
+}
+```
+
+### Question 3: Restore from Backup
+
+**Only ask if backup directories were found:**
+
+```json
+{
+  "header": "Restore",
+  "question": "I found backup directories. Would you like to restore any settings from them?",
+  "multiSelect": false,
+  "options": [
+    {"label": "Yes, check for settings to restore", "description": "Look for API keys, identity, and preferences in backups"},
+    {"label": "No, start fresh (Recommended)", "description": "Don't restore anything from backups"}
   ]
 }
 ```
@@ -127,11 +161,11 @@ Tell the user what you found:
 ```json
 {
   "header": "Install",
-  "question": "Ready to install CORE skill with USER/SYSTEM architecture?",
+  "question": "Ready to install PAI Core v2.3.0?",
   "multiSelect": false,
   "options": [
-    {"label": "Yes, install now (Recommended)", "description": "Proceeds with installation using choices above"},
-    {"label": "Show me what will change", "description": "Lists all files that will be created/modified"},
+    {"label": "Yes, install now (Recommended)", "description": "Proceeds with installation"},
+    {"label": "Show me what will change", "description": "Lists all files that will be created"},
     {"label": "Cancel", "description": "Abort installation"}
   ]
 }
@@ -141,16 +175,16 @@ Tell the user what you found:
 
 ## Phase 3: Backup (If Needed)
 
-**Only execute if user chose "Backup and Replace" for conflicts:**
+**Only execute if user chose "Fresh install (backup first)":**
 
 ```bash
-BACKUP_DIR="$HOME/.pai-backup/$(date +%Y%m%d-%H%M%S)"
-PAI_CHECK="${PAI_DIR:-$HOME/.config/pai}"
+PAI_DIR="${PAI_DIR:-$HOME/.claude}"
+BACKUP_DIR="$HOME/.pai-backup/pai-core-$(date +%Y%m%d-%H%M%S)"
 
-if [ -d "$PAI_CHECK/skills/CORE" ]; then
-  mkdir -p "$BACKUP_DIR/skills"
-  cp -r "$PAI_CHECK/skills/CORE" "$BACKUP_DIR/skills/CORE"
-  echo "✓ Backed up CORE skill to $BACKUP_DIR/skills/CORE"
+if [ -d "$PAI_DIR" ]; then
+  mkdir -p "$BACKUP_DIR"
+  cp -r "$PAI_DIR" "$BACKUP_DIR/"
+  echo "Backup created at: $BACKUP_DIR"
 fi
 ```
 
@@ -164,15 +198,11 @@ fi
 {
   "todos": [
     {"content": "Create directory structure", "status": "pending", "activeForm": "Creating directory structure"},
-    {"content": "Create MEMORY/ structure", "status": "pending", "activeForm": "Creating MEMORY structure"},
-    {"content": "Install settings.json template", "status": "pending", "activeForm": "Installing settings template"},
-    {"content": "Install USER/ templates", "status": "pending", "activeForm": "Installing USER/ templates"},
-    {"content": "Install PAISECURITYSYSTEM/ templates", "status": "pending", "activeForm": "Installing PAISECURITYSYSTEM/ templates"},
-    {"content": "Install SYSTEM/ templates", "status": "pending", "activeForm": "Installing SYSTEM/ templates"},
-    {"content": "Install tools", "status": "pending", "activeForm": "Installing tools"},
-    {"content": "Install CORE skill", "status": "pending", "activeForm": "Installing CORE skill"},
-    {"content": "Install CreateSkill meta-skill", "status": "pending", "activeForm": "Installing CreateSkill"},
-    {"content": "Generate initial index", "status": "pending", "activeForm": "Generating skill index"},
+    {"content": "Copy SYSTEM files", "status": "pending", "activeForm": "Copying SYSTEM files"},
+    {"content": "Copy USER templates (if new)", "status": "pending", "activeForm": "Copying USER templates"},
+    {"content": "Copy Workflows and Tools", "status": "pending", "activeForm": "Copying Workflows and Tools"},
+    {"content": "Configure settings.json", "status": "pending", "activeForm": "Configuring settings.json"},
+    {"content": "Set up environment", "status": "pending", "activeForm": "Setting up environment"},
     {"content": "Run verification", "status": "pending", "activeForm": "Running verification"}
   ]
 }
@@ -183,193 +213,110 @@ fi
 **Mark todo "Create directory structure" as in_progress.**
 
 ```bash
-mkdir -p $PAI_DIR/skills/CORE/USER
-mkdir -p $PAI_DIR/skills/CORE/SYSTEM
-mkdir -p $PAI_DIR/skills/CORE/Workflows
-mkdir -p $PAI_DIR/skills/CORE/Tools
-mkdir -p $PAI_DIR/skills/CreateSkill/Workflows
-mkdir -p $PAI_DIR/skills/CreateSkill/Tools
-mkdir -p $PAI_DIR/Tools
+PAI_DIR="${PAI_DIR:-$HOME/.claude}"
+
+mkdir -p "$PAI_DIR/skills/CORE/"{SYSTEM,USER,WORK,Workflows,Tools}
+mkdir -p "$PAI_DIR/skills/CORE/USER/"{PAISECURITYSYSTEM,SKILLCUSTOMIZATIONS,TELOS}
+mkdir -p "$PAI_DIR/MEMORY/"{History,LEARNING,Signals,WORK,PAISYSTEMUPDATES}
+mkdir -p "$PAI_DIR/"{hooks,Plans,Commands,Backups}
 ```
 
 **Mark todo as completed.**
 
-### 4.2 Create MEMORY/ Structure
+### 4.2 Copy SYSTEM Files
 
-**Mark todo "Create MEMORY/ structure" as in_progress.**
-
-Create the MEMORY directory skeleton:
+**Mark todo "Copy SYSTEM files" as in_progress.**
 
 ```bash
-mkdir -p $PAI_DIR/MEMORY/{research,sessions,learnings,decisions,execution,security,recovery,raw-outputs,backups,State}
-```
+PACK_DIR="$(pwd)"
+PAI_DIR="${PAI_DIR:-$HOME/.claude}"
 
-Copy the MEMORY README:
-```bash
-cp src/MEMORY/README.md $PAI_DIR/MEMORY/README.md
-```
-
-Create .gitkeep files to preserve empty directories:
-```bash
-for dir in research sessions learnings decisions execution security recovery raw-outputs backups State; do
-  touch "$PAI_DIR/MEMORY/$dir/.gitkeep"
-done
+# SYSTEM files are always safe to overwrite
+cp -r "$PACK_DIR/src/skills/CORE/SYSTEM/"* "$PAI_DIR/skills/CORE/SYSTEM/"
+cp "$PACK_DIR/src/skills/CORE/SKILL.md" "$PAI_DIR/skills/CORE/"
 ```
 
 **Mark todo as completed.**
 
-### 4.3 Install Settings Template
+### 4.3 Copy USER Templates
 
-**Mark todo "Install settings.json template" as in_progress.**
+**Mark todo "Copy USER templates (if new)" as in_progress.**
 
-Copy the settings template to the PAI directory:
-
-```bash
-cp src/config/settings.json.template $PAI_DIR/settings.json.template
-```
-
-**If no settings.json exists**, create one from the template:
+**IMPORTANT: Never overwrite existing USER content without explicit permission.**
 
 ```bash
-if [ ! -f "$PAI_DIR/settings.json" ]; then
-  cp src/config/settings.json.template $PAI_DIR/settings.json
-  echo "✓ Created settings.json from template"
+PACK_DIR="$(pwd)"
+PAI_DIR="${PAI_DIR:-$HOME/.claude}"
+
+# Only copy USER templates if USER directory is empty or doesn't exist
+if [ ! -f "$PAI_DIR/skills/CORE/USER/ABOUTME.md" ]; then
+  cp -r "$PACK_DIR/src/skills/CORE/USER/"* "$PAI_DIR/skills/CORE/USER/"
+  echo "Copied USER templates"
 else
-  echo "⚠️ settings.json already exists - template saved as settings.json.template"
+  echo "USER content exists - preserving"
 fi
 ```
 
-**IMPORTANT:** The settings.json template includes hooks from:
-- `pai-hook-system`: Session initialization, security validation, tab titles
-- `pai-history-system`: Event capture, session summaries
-
-These hooks will only work after installing those packs. The template serves as documentation for the full hook configuration.
-
 **Mark todo as completed.**
 
-### 4.4 Install USER/ Templates
+### 4.4 Copy Workflows and Tools
 
-**Mark todo "Install USER/ templates" as in_progress.**
-
-Copy all files from `src/skills/CORE/USER/` to `$PAI_DIR/skills/CORE/USER/`:
-
-| Source | Destination |
-|--------|-------------|
-| `src/skills/CORE/USER/README.md` | `$PAI_DIR/skills/CORE/USER/README.md` |
-| `src/skills/CORE/USER/BASICINFO.md` | `$PAI_DIR/skills/CORE/USER/BASICINFO.md` |
-| `src/skills/CORE/USER/CONTACTS.md` | `$PAI_DIR/skills/CORE/USER/CONTACTS.md` |
-| `src/skills/CORE/USER/DAIDENTITY.md` | `$PAI_DIR/skills/CORE/USER/DAIDENTITY.md` |
-| `src/skills/CORE/USER/TECHSTACKPREFERENCES.md` | `$PAI_DIR/skills/CORE/USER/TECHSTACKPREFERENCES.md` |
-| `src/skills/CORE/USER/ASSETMANAGEMENT.md` | `$PAI_DIR/skills/CORE/USER/ASSETMANAGEMENT.md` |
-| `src/skills/CORE/USER/DEFINITIONS.md` | `$PAI_DIR/skills/CORE/USER/DEFINITIONS.md` |
-| `src/skills/CORE/USER/CORECONTENT.md` | `$PAI_DIR/skills/CORE/USER/CORECONTENT.md` |
-| `src/skills/CORE/USER/RESUME.md` | `$PAI_DIR/skills/CORE/USER/RESUME.md` |
-| `src/skills/CORE/USER/REMINDERS.md` | `$PAI_DIR/skills/CORE/USER/REMINDERS.md` |
-| `src/skills/CORE/USER/ALGOPREFS.md` | `$PAI_DIR/skills/CORE/USER/ALGOPREFS.md` |
-| `src/skills/CORE/USER/ART.md` | `$PAI_DIR/skills/CORE/USER/ART.md` |
-| `src/skills/CORE/USER/ABOUTME.md` | `$PAI_DIR/skills/CORE/USER/ABOUTME.md` |
-| `src/skills/CORE/USER/TELOS.md` | `$PAI_DIR/skills/CORE/USER/TELOS.md` |
-
-**Mark todo as completed.**
-
-### 4.5 Install PAISECURITYSYSTEM/ Templates (v1.3.0)
-
-**Mark todo "Install PAISECURITYSYSTEM/ templates" as in_progress.**
-
-Create the security directory and copy all files:
+**Mark todo "Copy Workflows and Tools" as in_progress.**
 
 ```bash
-mkdir -p $PAI_DIR/skills/CORE/USER/PAISECURITYSYSTEM
+PACK_DIR="$(pwd)"
+PAI_DIR="${PAI_DIR:-$HOME/.claude}"
+
+cp -r "$PACK_DIR/src/skills/CORE/Workflows/"* "$PAI_DIR/skills/CORE/Workflows/"
+cp -r "$PACK_DIR/src/skills/CORE/Tools/"* "$PAI_DIR/skills/CORE/Tools/"
 ```
 
-Copy all files from `src/skills/CORE/USER/PAISECURITYSYSTEM/`:
-
-| Source | Destination |
-|--------|-------------|
-| `src/skills/CORE/USER/PAISECURITYSYSTEM/README.md` | `$PAI_DIR/skills/CORE/USER/PAISECURITYSYSTEM/README.md` |
-| `src/skills/CORE/USER/PAISECURITYSYSTEM/ARCHITECTURE.md` | `$PAI_DIR/skills/CORE/USER/PAISECURITYSYSTEM/ARCHITECTURE.md` |
-| `src/skills/CORE/USER/PAISECURITYSYSTEM/patterns.yaml` | `$PAI_DIR/skills/CORE/USER/PAISECURITYSYSTEM/patterns.yaml` |
-| `src/skills/CORE/USER/PAISECURITYSYSTEM/PROMPTINJECTION.md` | `$PAI_DIR/skills/CORE/USER/PAISECURITYSYSTEM/PROMPTINJECTION.md` |
-| `src/skills/CORE/USER/PAISECURITYSYSTEM/COMMANDINJECTION.md` | `$PAI_DIR/skills/CORE/USER/PAISECURITYSYSTEM/COMMANDINJECTION.md` |
-| `src/skills/CORE/USER/PAISECURITYSYSTEM/PROJECTRULES.md` | `$PAI_DIR/skills/CORE/USER/PAISECURITYSYSTEM/PROJECTRULES.md` |
-| `src/skills/CORE/USER/PAISECURITYSYSTEM/REPOSITORIES.md` | `$PAI_DIR/skills/CORE/USER/PAISECURITYSYSTEM/REPOSITORIES.md` |
-| `src/skills/CORE/USER/PAISECURITYSYSTEM/QUICKREF.md` | `$PAI_DIR/skills/CORE/USER/PAISECURITYSYSTEM/QUICKREF.md` |
-
 **Mark todo as completed.**
 
-### 4.6 Install SYSTEM/ Templates (renumbered)
+### 4.5 Configure settings.json
 
-**Mark todo "Install SYSTEM/ templates" as in_progress.**
+**Mark todo "Configure settings.json" as in_progress.**
 
-Copy all files from `src/skills/CORE/SYSTEM/` to `$PAI_DIR/skills/CORE/SYSTEM/`:
-
-| Source | Destination |
-|--------|-------------|
-| `src/skills/CORE/SYSTEM/README.md` | `$PAI_DIR/skills/CORE/SYSTEM/README.md` |
-| `src/skills/CORE/SYSTEM/PAISYSTEMARCHITECTURE.md` | `$PAI_DIR/skills/CORE/SYSTEM/PAISYSTEMARCHITECTURE.md` |
-| `src/skills/CORE/SYSTEM/SKILLSYSTEM.md` | `$PAI_DIR/skills/CORE/SYSTEM/SKILLSYSTEM.md` |
-| `src/skills/CORE/SYSTEM/MEMORYSYSTEM.md` | `$PAI_DIR/skills/CORE/SYSTEM/MEMORYSYSTEM.md` |
-| `src/skills/CORE/SYSTEM/THEHOOKSYSTEM.md` | `$PAI_DIR/skills/CORE/SYSTEM/THEHOOKSYSTEM.md` |
-| `src/skills/CORE/SYSTEM/THEDELEGATIONSYSTEM.md` | `$PAI_DIR/skills/CORE/SYSTEM/THEDELEGATIONSYSTEM.md` |
-| `src/skills/CORE/SYSTEM/THENOTIFICATIONSYSTEM.md` | `$PAI_DIR/skills/CORE/SYSTEM/THENOTIFICATIONSYSTEM.md` |
-| `src/skills/CORE/SYSTEM/AGENTS.md` | `$PAI_DIR/skills/CORE/SYSTEM/AGENTS.md` |
-| `src/skills/CORE/SYSTEM/ACTIONS.md` | `$PAI_DIR/skills/CORE/SYSTEM/ACTIONS.md` |
-| `src/skills/CORE/SYSTEM/PIPELINES.md` | `$PAI_DIR/skills/CORE/SYSTEM/PIPELINES.md` |
-| `src/skills/CORE/SYSTEM/TOOLS.md` | `$PAI_DIR/skills/CORE/SYSTEM/TOOLS.md` |
-| `src/skills/CORE/SYSTEM/CLIFIRSTARCHITECTURE.md` | `$PAI_DIR/skills/CORE/SYSTEM/CLIFIRSTARCHITECTURE.md` |
-| `src/skills/CORE/SYSTEM/THEFABRICSYSTEM.md` | `$PAI_DIR/skills/CORE/SYSTEM/THEFABRICSYSTEM.md` |
-| `src/skills/CORE/SYSTEM/SCRAPINGREFERENCE.md` | `$PAI_DIR/skills/CORE/SYSTEM/SCRAPINGREFERENCE.md` |
-| `src/skills/CORE/SYSTEM/TERMINALTABS.md` | `$PAI_DIR/skills/CORE/SYSTEM/TERMINALTABS.md` |
-| `src/skills/CORE/SYSTEM/DOCUMENTATIONINDEX.md` | `$PAI_DIR/skills/CORE/SYSTEM/DOCUMENTATIONINDEX.md` |
-| `src/skills/CORE/SYSTEM/BACKUPS.md` | `$PAI_DIR/skills/CORE/SYSTEM/BACKUPS.md` |
-
-**Mark todo as completed.**
-
-### 4.6 Install Tools
-
-**Mark todo "Install tools" as in_progress.**
-
-Copy the following tools to `$PAI_DIR/Tools/`:
-- `src/tools/SkillSearch.ts` → `$PAI_DIR/Tools/SkillSearch.ts`
-- `src/tools/GenerateSkillIndex.ts` → `$PAI_DIR/Tools/GenerateSkillIndex.ts`
-- `src/tools/PaiArchitecture.ts` → `$PAI_DIR/Tools/PaiArchitecture.ts`
-
-**Mark todo as completed.**
-
-### 4.7 Install CORE Skill
-
-**Mark todo "Install CORE skill" as in_progress.**
-
-Copy `src/skills/CORE/SKILL.md` to `$PAI_DIR/skills/CORE/SKILL.md`
-
-**IMPORTANT:** Replace placeholders with user's choices from Question 3:
-- `[YOUR_AI_NAME]` → User's chosen AI name
-- `[YOUR_NAME]` → Ask user for their name
-- `[YOUR_PROFESSION]` → Ask user for their profession
-
-**Mark todo as completed.**
-
-### 4.8 Install CreateSkill Meta-Skill
-
-**Mark todo "Install CreateSkill meta-skill" as in_progress.**
-
-Copy `src/skills/CreateSkill/SKILL.md` to `$PAI_DIR/skills/CreateSkill/SKILL.md`
-
-**Mark todo as completed.**
-
-### 4.9 Install Workflows
-
-Copy `src/skills/CORE/Workflows/UpdateDocumentation.md` to:
-`$PAI_DIR/skills/CORE/Workflows/UpdateDocumentation.md`
-
-### 4.10 Generate Initial Index
-
-**Mark todo "Generate initial index" as in_progress.**
+**Create or update settings.json with user's identity:**
 
 ```bash
-bun run $PAI_DIR/Tools/GenerateSkillIndex.ts
-bun run $PAI_DIR/Tools/PaiArchitecture.ts generate
-bun run $PAI_DIR/Tools/PaiArchitecture.ts log-upgrade "Initial pai-core-install v1.1.0 installation"
+PAI_DIR="${PAI_DIR:-$HOME/.claude}"
+SETTINGS_FILE="$PAI_DIR/settings.json"
+
+# Create settings.json if it doesn't exist
+if [ ! -f "$SETTINGS_FILE" ]; then
+  echo '{
+  "daidentity": {
+    "name": "AI_NAME_HERE",
+    "fullName": "AI_NAME_HERE AI Assistant"
+  },
+  "principal": {
+    "name": "USER_NAME_HERE",
+    "timezone": "America/Los_Angeles"
+  }
+}' > "$SETTINGS_FILE"
+fi
+```
+
+**Replace AI_NAME_HERE and USER_NAME_HERE with user's choices from Phase 2.**
+
+**Mark todo as completed.**
+
+### 4.6 Set Up Environment
+
+**Mark todo "Set up environment" as in_progress.**
+
+```bash
+# Add PAI_DIR to shell profile if not present
+if ! grep -q "PAI_DIR" ~/.zshrc 2>/dev/null; then
+  echo 'export PAI_DIR="$HOME/.claude"' >> ~/.zshrc
+  echo "Added PAI_DIR to ~/.zshrc"
+fi
+```
+
+Tell the user:
+```
+"Run `source ~/.zshrc` to apply the changes, or restart your terminal."
 ```
 
 **Mark todo as completed.**
@@ -380,31 +327,79 @@ bun run $PAI_DIR/Tools/PaiArchitecture.ts log-upgrade "Initial pai-core-install 
 
 **Mark todo "Run verification" as in_progress.**
 
-**Execute all checks from VERIFY.md.**
+**Execute all checks from VERIFY.md:**
 
-Quick verification:
 ```bash
-# Check CORE skill exists
-ls $PAI_DIR/skills/CORE/SKILL.md
+PAI_DIR="${PAI_DIR:-$HOME/.claude}"
 
-# Check USER/ directory (15 files)
-ls $PAI_DIR/skills/CORE/USER/ | wc -l
+echo "=== PAI Core v2.3.0 Verification ==="
 
-# Check SYSTEM/ directory (17 files)
-ls $PAI_DIR/skills/CORE/SYSTEM/ | wc -l
+# Check CORE skill
+echo "Checking CORE skill..."
+[ -f "$PAI_DIR/skills/CORE/SKILL.md" ] && echo "OK SKILL.md" || echo "ERROR SKILL.md missing"
 
-# Check tools exist
-ls $PAI_DIR/Tools/SkillSearch.ts
-ls $PAI_DIR/Tools/GenerateSkillIndex.ts
+# Check SYSTEM files
+echo ""
+echo "Checking SYSTEM files..."
+SYSTEM_COUNT=$(find "$PAI_DIR/skills/CORE/SYSTEM" -name "*.md" 2>/dev/null | wc -l)
+echo "Found $SYSTEM_COUNT SYSTEM files (expected: 15+)"
 
-# Check CreateSkill exists
-ls $PAI_DIR/skills/CreateSkill/SKILL.md
+# Check USER directory structure
+echo ""
+echo "Checking USER structure..."
+[ -d "$PAI_DIR/skills/CORE/USER" ] && echo "OK USER directory exists" || echo "ERROR USER directory missing"
 
-# Run SkillSearch
-bun run $PAI_DIR/Tools/SkillSearch.ts "test"
+# Check settings.json
+echo ""
+echo "Checking settings.json..."
+if [ -f "$PAI_DIR/settings.json" ]; then
+  echo "OK settings.json exists"
+  grep -o '"name"[[:space:]]*:[[:space:]]*"[^"]*"' "$PAI_DIR/settings.json" | head -2
+else
+  echo "ERROR settings.json missing"
+fi
+
+# Check MEMORY structure
+echo ""
+echo "Checking MEMORY structure..."
+[ -d "$PAI_DIR/MEMORY" ] && echo "OK MEMORY directory exists" || echo "ERROR MEMORY directory missing"
+
+# Check environment
+echo ""
+echo "Checking environment..."
+if [ -n "$PAI_DIR" ]; then
+  echo "OK PAI_DIR is set: $PAI_DIR"
+else
+  echo "NOTE PAI_DIR not set in current shell - run: source ~/.zshrc"
+fi
+
+echo "=== Verification Complete ==="
 ```
 
-**Mark todo as completed when all VERIFY.md checks pass.**
+**Mark todo as completed when all checks pass.**
+
+---
+
+## Phase 6: Personalization (Optional)
+
+After installation, offer to help customize:
+
+```json
+{
+  "header": "Personalize",
+  "question": "PAI is installed! Would you like to personalize it now?",
+  "multiSelect": false,
+  "options": [
+    {"label": "Yes, let's personalize", "description": "Tell me about yourself and your goals"},
+    {"label": "Skip for now", "description": "You can personalize later anytime"}
+  ]
+}
+```
+
+**If user chooses to personalize:**
+- Ask about themselves (save to USER/ABOUTME.md)
+- Ask about goals (save to USER/TELOS/GOALS.md)
+- Ask about preferences (save to USER/PREFERENCES.md)
 
 ---
 
@@ -413,23 +408,19 @@ bun run $PAI_DIR/Tools/SkillSearch.ts "test"
 ### On Success
 
 ```
-"CORE skill v1.1.0 installed successfully!
+"PAI Core v2.3.0 installed successfully!
 
 What's available:
-- Skill routing system with USE WHEN triggers
-- Structured response format
-- Identity configuration for [AI_NAME]
-- USER/ directory with 15 personal configuration templates
-- SYSTEM/ directory with 17 system architecture documents
-- CreateSkill meta-skill for building new capabilities
-- Architecture tracking with PaiArchitecture.ts
-
-Your AI assistant [AI_NAME] is now configured and ready.
+- CORE skill with response format and system architecture
+- Memory system for session history and learnings
+- USER directory for your personal customizations
+- Workflows for common operations
 
 Next steps:
-1. Customize USER/DAIDENTITY.md with your AI's personality
-2. Add your contacts to USER/CONTACTS.md
-3. Set your tech preferences in USER/TECHSTACKPREFERENCES.md"
+- Run `source ~/.zshrc` to apply environment changes
+- Ask me anything and I'll use my new capabilities
+- Say 'help me set up voice' to add spoken notifications
+- Say 'show me available skills' to see what I can do"
 ```
 
 ### On Failure
@@ -437,79 +428,106 @@ Next steps:
 ```
 "Installation encountered issues. Here's what to check:
 
-1. Hook system installed? Run: ls $PAI_DIR/hooks/lib/observability.ts
-2. Directories created? Run: ls $PAI_DIR/skills/CORE/
-3. USER/ files installed? Run: ls $PAI_DIR/skills/CORE/USER/
-4. SYSTEM/ files installed? Run: ls $PAI_DIR/skills/CORE/SYSTEM/
-5. Tools copied? Run: ls $PAI_DIR/Tools/
-6. Check VERIFY.md for the specific failing check
+1. Check directory permissions on ~/.claude/
+2. Verify settings.json is valid JSON
+3. Run the verification commands in VERIFY.md
 
-Need help? See Troubleshooting section below."
+Need help? Check the Troubleshooting section below."
 ```
-
----
-
-## Customization Guide
-
-### After Installation: Customize Your PAI
-
-**Step 1: Configure Your Identity**
-
-Edit `$PAI_DIR/skills/CORE/USER/DAIDENTITY.md`:
-- Set your AI's name
-- Configure personality traits (0-100 scale)
-- Define communication style
-
-**Step 2: Add Your Contacts**
-
-Edit `$PAI_DIR/skills/CORE/USER/CONTACTS.md`:
-- Add personal contacts
-- Add work colleagues
-- Include relationship context
-
-**Step 3: Set Tech Preferences**
-
-Edit `$PAI_DIR/skills/CORE/USER/TECHSTACKPREFERENCES.md`:
-- Language preferences (TypeScript vs Python)
-- Package managers (bun, npm, uv)
-- Deployment preferences
-
-**Step 4: Configure Security**
-
-Edit `$PAI_DIR/skills/CORE/USER/SECURITYSYSTEM.md`:
-- Define protected paths
-- Set up sanitization rules
-- Configure prompt injection defense
 
 ---
 
 ## Troubleshooting
 
-### USER/ or SYSTEM/ Files Missing
+### CORE skill not loading
 
 ```bash
-# Check if directories exist
-ls -la $PAI_DIR/skills/CORE/USER/
-ls -la $PAI_DIR/skills/CORE/SYSTEM/
+# Verify SKILL.md exists
+ls -la $PAI_DIR/skills/CORE/SKILL.md
 
-# If missing, manually copy from pack
-cp -r /path/to/pai-core-install/src/skills/CORE/USER/* $PAI_DIR/skills/CORE/USER/
-cp -r /path/to/pai-core-install/src/skills/CORE/SYSTEM/* $PAI_DIR/skills/CORE/SYSTEM/
+# Check frontmatter is valid
+head -20 $PAI_DIR/skills/CORE/SKILL.md
 ```
 
-### Skills Not Routing
+### Settings not applying
 
-1. Verify SKILL.md has single-line description with USE WHEN
-2. Run GenerateSkillIndex.ts to rebuild index
-3. Check skill frontmatter format
+```bash
+# Verify settings.json is valid JSON
+cat $PAI_DIR/settings.json | python3 -m json.tool
 
-### Format Not Being Used
+# Check file permissions
+ls -la $PAI_DIR/settings.json
+```
 
-1. Verify CORE loads at session start (check hooks)
-2. Ensure SKILL.md contains response format section
+### Lost USER content
 
-### Architecture Not Generating
+```bash
+# Check backup directory
+ls ~/.pai-backup/
 
-1. Check PaiArchitecture.ts exists in Tools/
-2. Verify write permissions to skills/CORE/
-3. Run with explicit PAI_DIR: `PAI_DIR=~/.config/pai bun run ...`
+# Restore manually if needed
+cp -r ~/.pai-backup/[backup-name]/skills/CORE/USER/* $PAI_DIR/skills/CORE/USER/
+```
+
+### Environment variable not set
+
+```bash
+# Add to shell profile
+echo 'export PAI_DIR="$HOME/.claude"' >> ~/.zshrc
+source ~/.zshrc
+```
+
+---
+
+## What's Included
+
+### Skill Structure
+
+| Directory | Purpose |
+|-----------|---------|
+| `SYSTEM/` | Core system documentation (always updated) |
+| `USER/` | Personal customizations (never overwritten) |
+| `WORK/` | Active work sessions |
+| `Workflows/` | Core workflow definitions |
+| `Tools/` | Utility scripts |
+
+### SYSTEM Files
+
+| File | Purpose |
+|------|---------|
+| `PAISYSTEMARCHITECTURE.md` | System design and principles |
+| `MEMORYSYSTEM.md` | Memory system documentation |
+| `SKILLSYSTEM.md` | Skill system documentation |
+| `RESPONSEFORMAT.md` | Response format specification |
+| `THEHOOKSYSTEM.md` | Hook system documentation |
+| `THENOTIFICATIONSYSTEM.md` | Notification system |
+| And 10+ more... | |
+
+### MEMORY Structure
+
+| Directory | Purpose |
+|-----------|---------|
+| `History/` | Session transcripts |
+| `LEARNING/` | Captured learnings |
+| `Signals/` | Rating signals |
+| `WORK/` | Work session context |
+
+---
+
+## Usage
+
+### After Installation
+
+```
+"What can you do now?"
+"Show me available skills"
+"Help me personalize PAI"
+```
+
+### Adding Skills
+
+Install additional PAI packs to add capabilities:
+- pai-voice-system - Voice notifications
+- pai-browser-skill - Browser automation
+- pai-research-skill - Multi-model research
+- And more...

@@ -1,4 +1,4 @@
-# PAI Prompting Skill v1.0.0 - Installation Guide
+# PAI Prompting Skill v2.3.0 - Installation Guide
 
 **This guide is designed for AI agents installing this pack into a user's infrastructure.**
 
@@ -17,7 +17,7 @@
 
 Before starting, greet the user:
 ```
-"I'm installing PAI Prompting Skill v1.0.0 - Meta-prompting system with Handlebars templates, primitives, and standards for dynamic prompt generation.
+"I'm installing PAI Prompting Skill v2.3.0 - Meta-prompting system with Handlebars templates, primitives, eval templates, and standards for dynamic prompt generation.
 
 Let me analyze your system and guide you through installation."
 ```
@@ -37,32 +37,32 @@ echo "PAI_DIR: $PAI_CHECK"
 
 # Check if pai-core-install is installed (REQUIRED)
 if [ -f "$PAI_CHECK/skills/CORE/SKILL.md" ]; then
-  echo "✓ pai-core-install is installed"
+  echo "OK pai-core-install is installed"
 else
-  echo "❌ pai-core-install NOT installed - REQUIRED!"
+  echo "ERROR pai-core-install NOT installed - REQUIRED!"
 fi
 
 # Check for existing Prompting skill
 if [ -d "$PAI_CHECK/skills/Prompting" ]; then
-  echo "⚠️  Existing Prompting skill found at: $PAI_CHECK/skills/Prompting"
+  echo "WARNING Existing Prompting skill found at: $PAI_CHECK/skills/Prompting"
   ls -la "$PAI_CHECK/skills/Prompting/"
 else
-  echo "✓ No existing Prompting skill (clean install)"
+  echo "OK No existing Prompting skill (clean install)"
 fi
 
 # Check for Bun runtime
 if command -v bun &> /dev/null; then
-  echo "✓ Bun is installed: $(bun --version)"
+  echo "OK Bun is installed: $(bun --version)"
 else
-  echo "❌ Bun not installed - REQUIRED!"
+  echo "ERROR Bun not installed - REQUIRED!"
 fi
 
 # Check for fabric patterns (optional integration)
 if [ -d "$PAI_CHECK/Tools/fabric/Patterns" ]; then
   PATTERN_COUNT=$(ls "$PAI_CHECK/Tools/fabric/Patterns" 2>/dev/null | wc -l)
-  echo "✓ Fabric patterns available: $PATTERN_COUNT patterns"
+  echo "OK Fabric patterns available: $PATTERN_COUNT patterns"
 else
-  echo "⚠️  Fabric patterns not found (optional - can integrate later)"
+  echo "WARNING Fabric patterns not found (optional - can integrate later)"
 fi
 ```
 
@@ -114,8 +114,8 @@ Tell the user what you found:
   "multiSelect": true,
   "options": [
     {"label": "Core Primitives (Recommended)", "description": "Roster, Voice, Structure, Briefing, Gate templates"},
-    {"label": "Eval Templates", "description": "LLM-as-Judge patterns (Judge.hbs, Rubric.hbs)"},
-    {"label": "Data Examples", "description": "Sample YAML data files for template testing"}
+    {"label": "Eval Templates (Recommended)", "description": "LLM-as-Judge patterns (Judge.hbs, Rubric.hbs, Comparison.hbs, Report.hbs, TestCase.hbs)"},
+    {"label": "Data Examples (Recommended)", "description": "Pre-configured YAML data files (Agents, ValidationGates, VoicePresets)"}
   ]
 }
 ```
@@ -125,7 +125,7 @@ Tell the user what you found:
 ```json
 {
   "header": "Install",
-  "question": "Ready to install PAI Prompting Skill v1.0.0?",
+  "question": "Ready to install PAI Prompting Skill v2.3.0?",
   "multiSelect": false,
   "options": [
     {"label": "Yes, install now (Recommended)", "description": "Proceeds with installation using choices above"},
@@ -161,6 +161,8 @@ echo "Backup created at: $BACKUP_DIR"
     {"content": "Create skill directory structure", "status": "pending", "activeForm": "Creating directory structure"},
     {"content": "Copy skill files from pack", "status": "pending", "activeForm": "Copying skill files"},
     {"content": "Copy template primitives", "status": "pending", "activeForm": "Copying template primitives"},
+    {"content": "Copy eval templates", "status": "pending", "activeForm": "Copying eval templates"},
+    {"content": "Copy data files", "status": "pending", "activeForm": "Copying data files"},
     {"content": "Copy tools", "status": "pending", "activeForm": "Copying tools"},
     {"content": "Install dependencies", "status": "pending", "activeForm": "Installing dependencies"},
     {"content": "Run verification", "status": "pending", "activeForm": "Running verification"}
@@ -175,10 +177,11 @@ echo "Backup created at: $BACKUP_DIR"
 ```bash
 PAI_DIR="${PAI_DIR:-$HOME/.claude}"
 mkdir -p "$PAI_DIR/skills/Prompting/Templates/Primitives"
-mkdir -p "$PAI_DIR/skills/Prompting/Templates/Data/Examples"
+mkdir -p "$PAI_DIR/skills/Prompting/Templates/Data"
 mkdir -p "$PAI_DIR/skills/Prompting/Templates/Compiled"
 mkdir -p "$PAI_DIR/skills/Prompting/Templates/Evals"
 mkdir -p "$PAI_DIR/skills/Prompting/Templates/Partials"
+mkdir -p "$PAI_DIR/skills/Prompting/Templates/Tools"
 mkdir -p "$PAI_DIR/skills/Prompting/Tools"
 ```
 
@@ -230,7 +233,53 @@ cp "$PACK_DIR/src/skills/Prompting/Templates/Primitives/Gate.hbs" "$PAI_DIR/skil
 
 **Mark todo as completed.**
 
-### 4.4 Copy Tools
+### 4.4 Copy Eval Templates
+
+**Mark todo "Copy eval templates" as in_progress.**
+
+```bash
+PACK_DIR="$(pwd)"
+PAI_DIR="${PAI_DIR:-$HOME/.claude}"
+
+# Copy eval templates
+cp "$PACK_DIR/src/skills/Prompting/Templates/Evals/Judge.hbs" "$PAI_DIR/skills/Prompting/Templates/Evals/"
+cp "$PACK_DIR/src/skills/Prompting/Templates/Evals/Rubric.hbs" "$PAI_DIR/skills/Prompting/Templates/Evals/"
+cp "$PACK_DIR/src/skills/Prompting/Templates/Evals/Comparison.hbs" "$PAI_DIR/skills/Prompting/Templates/Evals/"
+cp "$PACK_DIR/src/skills/Prompting/Templates/Evals/Report.hbs" "$PAI_DIR/skills/Prompting/Templates/Evals/"
+cp "$PACK_DIR/src/skills/Prompting/Templates/Evals/TestCase.hbs" "$PAI_DIR/skills/Prompting/Templates/Evals/"
+```
+
+**Eval templates copied:**
+- `Judge.hbs` - LLM-as-Judge evaluation template
+- `Rubric.hbs` - Scoring rubric template
+- `Comparison.hbs` - Side-by-side comparison template
+- `Report.hbs` - Evaluation report template
+- `TestCase.hbs` - Test case generation template
+
+**Mark todo as completed.**
+
+### 4.5 Copy Data Files
+
+**Mark todo "Copy data files" as in_progress.**
+
+```bash
+PACK_DIR="$(pwd)"
+PAI_DIR="${PAI_DIR:-$HOME/.claude}"
+
+# Copy data files
+cp "$PACK_DIR/src/skills/Prompting/Templates/Data/Agents.yaml" "$PAI_DIR/skills/Prompting/Templates/Data/"
+cp "$PACK_DIR/src/skills/Prompting/Templates/Data/ValidationGates.yaml" "$PAI_DIR/skills/Prompting/Templates/Data/"
+cp "$PACK_DIR/src/skills/Prompting/Templates/Data/VoicePresets.yaml" "$PAI_DIR/skills/Prompting/Templates/Data/"
+```
+
+**Data files copied:**
+- `Agents.yaml` - Pre-configured agent definitions
+- `ValidationGates.yaml` - Pre-configured validation gate definitions
+- `VoicePresets.yaml` - Pre-configured voice/persona presets
+
+**Mark todo as completed.**
+
+### 4.6 Copy Tools
 
 **Mark todo "Copy tools" as in_progress.**
 
@@ -240,20 +289,32 @@ PAI_DIR="${PAI_DIR:-$HOME/.claude}"
 
 cp "$PACK_DIR/src/skills/Prompting/Tools/RenderTemplate.ts" "$PAI_DIR/skills/Prompting/Tools/"
 cp "$PACK_DIR/src/skills/Prompting/Tools/ValidateTemplate.ts" "$PAI_DIR/skills/Prompting/Tools/"
+cp "$PACK_DIR/src/skills/Prompting/Tools/index.ts" "$PAI_DIR/skills/Prompting/Tools/"
+
+# Also copy Templates/Tools for template-specific tooling
+cp -r "$PACK_DIR/src/skills/Prompting/Templates/Tools/"* "$PAI_DIR/skills/Prompting/Templates/Tools/"
 ```
 
 **Tools copied:**
 - `RenderTemplate.ts` - Renders Handlebars templates with YAML data
 - `ValidateTemplate.ts` - Validates template syntax and data structure
+- `index.ts` - Tool exports
+- `Templates/Tools/*` - Template-specific CLI tools and configs
 
 **Mark todo as completed.**
 
-### 4.5 Install Dependencies
+### 4.7 Install Dependencies
 
 **Mark todo "Install dependencies" as in_progress.**
 
 ```bash
 PAI_DIR="${PAI_DIR:-$HOME/.claude}"
+
+# Install dependencies in Templates/Tools
+cd "$PAI_DIR/skills/Prompting/Templates/Tools"
+bun install
+
+# Install dependencies in main Tools
 cd "$PAI_DIR/skills/Prompting/Tools"
 bun add handlebars yaml
 ```
@@ -275,23 +336,39 @@ echo "=== PAI Prompting Skill Verification ==="
 
 # Check skill files exist
 echo "Checking skill files..."
-[ -f "$PAI_DIR/skills/Prompting/SKILL.md" ] && echo "✓ SKILL.md" || echo "❌ SKILL.md missing"
-[ -f "$PAI_DIR/skills/Prompting/Standards.md" ] && echo "✓ Standards.md" || echo "❌ Standards.md missing"
+[ -f "$PAI_DIR/skills/Prompting/SKILL.md" ] && echo "OK SKILL.md" || echo "ERROR SKILL.md missing"
+[ -f "$PAI_DIR/skills/Prompting/Standards.md" ] && echo "OK Standards.md" || echo "ERROR Standards.md missing"
 
 # Check template files
 echo ""
 echo "Checking template primitives..."
-[ -f "$PAI_DIR/skills/Prompting/Templates/Primitives/Roster.hbs" ] && echo "✓ Roster.hbs" || echo "❌ Roster.hbs missing"
-[ -f "$PAI_DIR/skills/Prompting/Templates/Primitives/Voice.hbs" ] && echo "✓ Voice.hbs" || echo "❌ Voice.hbs missing"
-[ -f "$PAI_DIR/skills/Prompting/Templates/Primitives/Structure.hbs" ] && echo "✓ Structure.hbs" || echo "❌ Structure.hbs missing"
-[ -f "$PAI_DIR/skills/Prompting/Templates/Primitives/Briefing.hbs" ] && echo "✓ Briefing.hbs" || echo "❌ Briefing.hbs missing"
-[ -f "$PAI_DIR/skills/Prompting/Templates/Primitives/Gate.hbs" ] && echo "✓ Gate.hbs" || echo "❌ Gate.hbs missing"
+[ -f "$PAI_DIR/skills/Prompting/Templates/Primitives/Roster.hbs" ] && echo "OK Roster.hbs" || echo "ERROR Roster.hbs missing"
+[ -f "$PAI_DIR/skills/Prompting/Templates/Primitives/Voice.hbs" ] && echo "OK Voice.hbs" || echo "ERROR Voice.hbs missing"
+[ -f "$PAI_DIR/skills/Prompting/Templates/Primitives/Structure.hbs" ] && echo "OK Structure.hbs" || echo "ERROR Structure.hbs missing"
+[ -f "$PAI_DIR/skills/Prompting/Templates/Primitives/Briefing.hbs" ] && echo "OK Briefing.hbs" || echo "ERROR Briefing.hbs missing"
+[ -f "$PAI_DIR/skills/Prompting/Templates/Primitives/Gate.hbs" ] && echo "OK Gate.hbs" || echo "ERROR Gate.hbs missing"
+
+# Check eval templates
+echo ""
+echo "Checking eval templates..."
+[ -f "$PAI_DIR/skills/Prompting/Templates/Evals/Judge.hbs" ] && echo "OK Judge.hbs" || echo "ERROR Judge.hbs missing"
+[ -f "$PAI_DIR/skills/Prompting/Templates/Evals/Rubric.hbs" ] && echo "OK Rubric.hbs" || echo "ERROR Rubric.hbs missing"
+[ -f "$PAI_DIR/skills/Prompting/Templates/Evals/Comparison.hbs" ] && echo "OK Comparison.hbs" || echo "ERROR Comparison.hbs missing"
+[ -f "$PAI_DIR/skills/Prompting/Templates/Evals/Report.hbs" ] && echo "OK Report.hbs" || echo "ERROR Report.hbs missing"
+[ -f "$PAI_DIR/skills/Prompting/Templates/Evals/TestCase.hbs" ] && echo "OK TestCase.hbs" || echo "ERROR TestCase.hbs missing"
+
+# Check data files
+echo ""
+echo "Checking data files..."
+[ -f "$PAI_DIR/skills/Prompting/Templates/Data/Agents.yaml" ] && echo "OK Agents.yaml" || echo "ERROR Agents.yaml missing"
+[ -f "$PAI_DIR/skills/Prompting/Templates/Data/ValidationGates.yaml" ] && echo "OK ValidationGates.yaml" || echo "ERROR ValidationGates.yaml missing"
+[ -f "$PAI_DIR/skills/Prompting/Templates/Data/VoicePresets.yaml" ] && echo "OK VoicePresets.yaml" || echo "ERROR VoicePresets.yaml missing"
 
 # Check tools
 echo ""
 echo "Checking tools..."
-[ -f "$PAI_DIR/skills/Prompting/Tools/RenderTemplate.ts" ] && echo "✓ RenderTemplate.ts" || echo "❌ RenderTemplate.ts missing"
-[ -f "$PAI_DIR/skills/Prompting/Tools/ValidateTemplate.ts" ] && echo "✓ ValidateTemplate.ts" || echo "❌ ValidateTemplate.ts missing"
+[ -f "$PAI_DIR/skills/Prompting/Tools/RenderTemplate.ts" ] && echo "OK RenderTemplate.ts" || echo "ERROR RenderTemplate.ts missing"
+[ -f "$PAI_DIR/skills/Prompting/Tools/ValidateTemplate.ts" ] && echo "OK ValidateTemplate.ts" || echo "ERROR ValidateTemplate.ts missing"
 
 # Test RenderTemplate CLI
 echo ""
@@ -310,10 +387,12 @@ echo "=== Verification Complete ==="
 ### On Success
 
 ```
-"PAI Prompting Skill v1.0.0 installed successfully!
+"PAI Prompting Skill v2.3.0 installed successfully!
 
 What's available:
 - 5 template primitives (Roster, Voice, Structure, Briefing, Gate)
+- 5 eval templates (Judge, Rubric, Comparison, Report, TestCase)
+- 3 pre-configured data files (Agents, ValidationGates, VoicePresets)
 - RenderTemplate.ts - Compile templates with YAML data
 - ValidateTemplate.ts - Validate template syntax
 - Standards.md - Prompt engineering best practices
@@ -396,6 +475,15 @@ bun run $PAI_DIR/skills/Prompting/Tools/ValidateTemplate.ts \
 | `Templates/Primitives/Structure.hbs` | Output structure template |
 | `Templates/Primitives/Briefing.hbs` | Task briefing template |
 | `Templates/Primitives/Gate.hbs` | Quality gate template |
+| `Templates/Evals/Judge.hbs` | LLM-as-Judge evaluation template |
+| `Templates/Evals/Rubric.hbs` | Scoring rubric template |
+| `Templates/Evals/Comparison.hbs` | Side-by-side comparison template |
+| `Templates/Evals/Report.hbs` | Evaluation report template |
+| `Templates/Evals/TestCase.hbs` | Test case generation template |
+| `Templates/Data/Agents.yaml` | Pre-configured agent definitions |
+| `Templates/Data/ValidationGates.yaml` | Pre-configured validation gates |
+| `Templates/Data/VoicePresets.yaml` | Pre-configured voice presets |
+| `Templates/Tools/*` | Template-specific CLI tools |
 | `Tools/RenderTemplate.ts` | Template rendering CLI |
 | `Tools/ValidateTemplate.ts` | Template validation CLI |
 

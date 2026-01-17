@@ -1,27 +1,123 @@
 ---
-name: THE ALGORITHM Skill
-pack-id: danielmiessler-algorithm-skill-core-v0.5.0
-version: 0.5.0
+name: PAI Algorithm Skill
+pack-id: danielmiessler-pai-algorithm-skill-v2.3.0
+version: 2.3.0
 author: danielmiessler
-description: Universal execution engine using the scientific method to achieve ideal state. ISC (Ideal State Criteria) tracking, effort-based capability selection, and the Ralph Loop for persistent iteration.
+description: Universal execution engine using scientific method to achieve ideal state with ISC (Ideal State Criteria) tracking
 type: skill
-purpose-type: [productivity, automation, development, workflow]
+purpose-type: [execution, orchestration, methodology, quality-assurance]
 platform: claude-code
-dependencies: [danielmiessler-core-install-core-v1.0.0, danielmiessler-agents-skill-core-v1.0.0]
-keywords: [algorithm, execution, isc, ideal-state, effort, scientific-method, phases, ralph-loop, iteration, capability, orchestration]
+dependencies: [pai-core-install, pai-agents-skill]
+keywords: [algorithm, ISC, ideal-state, execution, scientific-method, effort-classification, capabilities, verification, orchestration]
 ---
 
 <p align="center">
-  <img src="../icons/pai-algorithm-skill.png" alt="THE ALGORITHM Skill" width="256">
+  <img src="../icons/pai-algorithm-skill.png" alt="PAI Algorithm Skill" width="256">
 </p>
 
-# THE ALGORITHM Skill
+# PAI Algorithm Skill (THE ALGORITHM)
 
-> Universal execution engine using the scientific method to achieve ideal state - from current state to ideal state through structured phases and capability-driven execution.
+> Universal execution engine using the scientific method to achieve ideal state. Produces euphoric, highly surprising, exceptional results that solve problems better than expected.
 
-> **Version 0.5.0** - Early release. Core concepts are solid, but expect refinements as the system evolves.
+> **Installation:** This pack is designed for AI-assisted installation. Give this directory to your AI and ask it to install using `INSTALL.md`.
 
-> **Installation:** This pack is designed for AI-assisted installation. Give this directory to your AI and ask it to install using the wizard in `INSTALL.md`. The installation dynamically adapts to your system state. See [AI-First Installation Philosophy](../../README.md#ai-first-installation-philosophy) for details.
+---
+
+## What This Pack Provides
+
+THE ALGORITHM is the core execution methodology of PAI. It transforms any request into structured work toward an ideal state:
+
+- **Effort Classification** - Automatically determine task complexity (TRIVIAL to DETERMINED)
+- **Capability Loading** - Unlock appropriate tools based on effort level
+- **ISC Management** - Track Ideal State Criteria as work progresses
+- **7-Phase Execution** - OBSERVE, THINK, PLAN, BUILD, EXECUTE, VERIFY, LEARN
+- **Visual Display** - LCARS-style progress tracking with voice announcements
+- **Agent Composition** - Dynamic agent selection based on task requirements
+
+---
+
+## Core Concept: Ideal State Criteria (ISC)
+
+Every non-trivial task has an ISC table that captures what "ideal" looks like:
+
+```markdown
+## ISC Table
+
+| # | What Ideal Looks Like | Source | Capability | Status |
+|---|----------------------|--------|------------|--------|
+| 1 | Research good patterns | INFERRED | research | PENDING |
+| 2 | Toggle component works | EXPLICIT | engineer | ACTIVE |
+| 3 | Theme state persists | EXPLICIT | engineer | PENDING |
+| 4 | Uses TypeScript | INFERRED | - | DONE |
+| 5 | Tests pass | IMPLICIT | qa_tester | PENDING |
+```
+
+The ISC grows as capabilities discover more requirements. Higher effort = larger, higher quality ISC.
+
+---
+
+## Effort Levels & Capabilities
+
+| Effort | Models | Thinking | Debate | Research | Parallel |
+|--------|--------|----------|--------|----------|----------|
+| **TRIVIAL** | - | - | - | - | 0 |
+| **QUICK** | haiku | - | - | - | 1 |
+| **STANDARD** | haiku, sonnet | deep thinking | - | 1 agent | 1-3 |
+| **THOROUGH** | haiku, sonnet | All | Council | parallel | 3-5 |
+| **DETERMINED** | all + opus | All | Council + RedTeam | all | 10 |
+
+---
+
+## The 7 Phases
+
+Execute IN ORDER. Each phase mutates the ISC:
+
+```
+OBSERVE  --> THINK --> PLAN --> BUILD --> EXECUTE --> VERIFY --> LEARN
+   |           |         |        |          |           |          |
+CREATE    COMPLETE   ORDER    REFINE    ADVANCE     CONFIRM    OUTPUT
+ rows      rows      rows     rows      status      status    results
+```
+
+1. **OBSERVE** - Understand request + user context, create ISC rows
+2. **THINK** - Ensure nothing missing, complete ISC rows
+3. **PLAN** - Sequence and assign capabilities
+4. **BUILD** - Make rows testable and specific
+5. **EXECUTE** - Do the work with appropriate agents
+6. **VERIFY** - Test each completed row skeptically
+7. **LEARN** - Output results for user rating
+
+---
+
+## Architecture
+
+```
+THEALGORITHM/
++-- SKILL.md                    # Core documentation and workflow
++-- Data/
+|   +-- Capabilities.yaml       # Source of truth for all capabilities
+|   +-- VerificationMethods.yaml # Verification method registry
++-- Tools/
+|   +-- AlgorithmDisplay.ts     # LCARS visual display + voice
+|   +-- EffortClassifier.ts     # Classify TRIVIAL to DETERMINED
+|   +-- CapabilityLoader.ts     # Load capabilities by effort
+|   +-- CapabilitySelector.ts   # Select capabilities for ISC rows
+|   +-- ISCManager.ts           # Create, update, track ISC tables
+|   +-- TraitModifiers.ts       # Effort to trait mappings
+|   +-- RalphLoopExecutor.ts    # Persistent iteration loops
++-- Phases/
+|   +-- Observe.md              # Phase documentation
+|   +-- Think.md
+|   +-- Plan.md
+|   +-- Build.md
+|   +-- Execute.md
+|   +-- Verify.md
+|   +-- Learn.md
++-- Reference/
+    +-- CapabilityMatrix.md     # Effort to capability documentation
+    +-- EffortMatrix.md         # Detailed effort level guide
+    +-- ISCFormat.md            # ISC table format specification
+```
 
 ---
 
@@ -29,172 +125,74 @@ keywords: [algorithm, execution, isc, ideal-state, effort, scientific-method, ph
 
 | Component | File | Purpose |
 |-----------|------|---------|
-| Skill definition | `src/skills/THEALGORITHM/SKILL.md` | Main skill file with routing and quick reference |
-| Capabilities registry | `src/skills/THEALGORITHM/Data/Capabilities.yaml` | Source of truth for all orchestratable capabilities |
-| Algorithm display | `src/skills/THEALGORITHM/Tools/AlgorithmDisplay.ts` | LCARS-style visual display with voice support |
-| Effort classifier | `src/skills/THEALGORITHM/Tools/EffortClassifier.ts` | Classify requests by effort level |
-| Capability loader | `src/skills/THEALGORITHM/Tools/CapabilityLoader.ts` | Load capabilities by effort level |
-| Capability selector | `src/skills/THEALGORITHM/Tools/CapabilitySelector.ts` | Select capabilities for ISC rows |
-| ISC manager | `src/skills/THEALGORITHM/Tools/ISCManager.ts` | Create, update, query ISC tables |
-| Trait modifiers | `src/skills/THEALGORITHM/Tools/TraitModifiers.ts` | Effort-to-trait mappings |
-| Ralph loop executor | `src/skills/THEALGORITHM/Tools/RalphLoopExecutor.ts` | Persistent iteration until success |
-| Phase docs | `src/skills/THEALGORITHM/Phases/*.md` | Detailed documentation for each phase |
-| Reference docs | `src/skills/THEALGORITHM/Reference/*.md` | Capability and effort matrices |
+| Main Skill | src/skills/THEALGORITHM/SKILL.md | Complete algorithm documentation |
+| Capabilities Registry | src/skills/THEALGORITHM/Data/Capabilities.yaml | All orchestratable capabilities |
+| Verification Methods | src/skills/THEALGORITHM/Data/VerificationMethods.yaml | How to verify each ISC row |
+| Algorithm Display | src/skills/THEALGORITHM/Tools/AlgorithmDisplay.ts | Visual progress + voice |
+| Effort Classifier | src/skills/THEALGORITHM/Tools/EffortClassifier.ts | TRIVIAL to DETERMINED classification |
+| Capability Loader | src/skills/THEALGORITHM/Tools/CapabilityLoader.ts | Load capabilities by effort |
+| Capability Selector | src/skills/THEALGORITHM/Tools/CapabilitySelector.ts | Select capabilities for ISC rows |
+| ISC Manager | src/skills/THEALGORITHM/Tools/ISCManager.ts | Full ISC lifecycle management |
+| Trait Modifiers | src/skills/THEALGORITHM/Tools/TraitModifiers.ts | Agent trait configuration |
+| Ralph Loop Executor | src/skills/THEALGORITHM/Tools/RalphLoopExecutor.ts | Persistent iteration until success |
+| Phase Documentation | src/skills/THEALGORITHM/Phases/*.md | Detailed phase guidance |
+| Reference Docs | src/skills/THEALGORITHM/Reference/*.md | Matrix and format documentation |
 
-## The Problem
+---
 
-AI assistants often approach tasks with a one-size-fits-all mentality:
-
-**Inconsistent Effort:**
-- Simple tasks get over-engineered
-- Complex tasks get under-analyzed
-- No clear framework for matching effort to task complexity
-
-**Missing Structure:**
-- No systematic way to track progress toward ideal state
-- Unclear success criteria
-- Verification is an afterthought
-
-**Limited Iteration:**
-- Tasks are "done" after first attempt
-- No persistent iteration until truly complete
-- No feedback loop for continuous improvement
-
-## The Solution
-
-### Effort-Based Capability Selection
-
-Match computational resources to task complexity:
-
-| Effort | When | Capabilities |
-|--------|------|--------------|
-| **TRIVIAL** | Greetings, acknowledgments | Skip algorithm entirely |
-| **QUICK** | Simple fixes, lookups | haiku, Intern agents |
-| **STANDARD** | Most development work | sonnet, research, Engineer, verification |
-| **THOROUGH** | Complex architectural work | Council debate, Architect, parallel research |
-| **DETERMINED** | Mission-critical, unlimited | opus, RedTeam, unlimited iteration |
-
-### The 7 Phases
-
-Execute in order, each phase mutates the ISC:
-
-```
-OBSERVE → THINK → PLAN → BUILD → EXECUTE → VERIFY → LEARN
-```
-
-1. **OBSERVE** - CREATE ISC rows from request + context
-2. **THINK** - COMPLETE rows, ensure nothing missing
-3. **PLAN** - ORDER rows, identify dependencies and parallelization
-4. **BUILD** - REFINE rows to be testable
-5. **EXECUTE** - DO the work, spawn agents by capability
-6. **VERIFY** - TEST each row against success criteria
-7. **LEARN** - OUTPUT results for user evaluation
-
-### ISC (Ideal State Criteria)
-
-The ISC is the central artifact - a living document tracking the gap between current and ideal state:
-
-```markdown
-## ISC: Add dark mode
-
-**Effort:** STANDARD | **Phase:** EXECUTE | **Iteration:** 1
-
-| # | What Ideal Looks Like | Source | Capability | Status |
-|---|----------------------|--------|------------|--------|
-| 1 | Research good patterns | INFERRED | research.perplexity | DONE |
-| 2 | Toggle component works | EXPLICIT | execution.engineer | ACTIVE |
-| 3 | Theme state persists | EXPLICIT | execution.engineer | PENDING |
-| 4 | Uses TypeScript | INFERRED | - | DONE |
-| 5 | Tests pass | IMPLICIT | verification.qa | PENDING |
-```
-
-### The Ralph Loop
-
-Persistent iteration until success criteria are met:
+## Quick Start
 
 ```bash
-# Start a Ralph loop
-bun run RalphLoopExecutor.ts \
-  --prompt "Fix the auth bug" \
-  --completion-promise "All tests pass" \
-  --max-iterations 15
+# 1. START WITH VISUAL DISPLAY (shows banner + voice announcement)
+bun run ~/.claude/skills/THEALGORITHM/Tools/AlgorithmDisplay.ts start STANDARD -r "your request"
+
+# 2. CLASSIFY EFFORT (if not using display start)
+bun run ~/.claude/skills/THEALGORITHM/Tools/EffortClassifier.ts --request "your request"
+
+# 3. LOAD CAPABILITIES for effort level
+bun run ~/.claude/skills/THEALGORITHM/Tools/CapabilityLoader.ts --effort STANDARD
+
+# 4. CREATE ISC
+bun run ~/.claude/skills/THEALGORITHM/Tools/ISCManager.ts create --request "your request"
+
+# 5. MANAGE ISC during EXECUTE
+bun run ~/.claude/skills/THEALGORITHM/Tools/ISCManager.ts capability --row 1 -c research.perplexity
+bun run ~/.claude/skills/THEALGORITHM/Tools/ISCManager.ts update --row 1 --status DONE
+bun run ~/.claude/skills/THEALGORITHM/Tools/ISCManager.ts show
 ```
 
-The Ralph Loop continues iterating until:
-- Completion promise is detected in output
-- Max iterations reached
+---
 
-Named after the persistent, never-give-up spirit of iteration.
+## Integration with Other Skills
 
-## Example Usage
+THE ALGORITHM integrates with the broader PAI ecosystem:
 
-```bash
-# 1. START with visual display
-bun run AlgorithmDisplay.ts start STANDARD -r "Add dark mode toggle"
+- **Agents Skill** - AgentFactory for dynamic agent composition
+- **CORE Skill** - User context for ISC inference
+- **Browser Skill** - Web verification in VERIFY phase
+- **BeCreative Skill** - Deep thinking for THINK phase
+- **Council Skill** - Multi-perspective debate (THOROUGH+)
+- **RedTeam Skill** - Adversarial analysis (DETERMINED)
+- **FirstPrinciples Skill** - Assumption challenging
 
-# 2. CLASSIFY effort (or use display start)
-bun run EffortClassifier.ts --request "Add dark mode toggle"
+---
 
-# 3. CREATE ISC
-bun run ISCManager.ts create --request "Add dark mode toggle"
+## Credits
 
-# 4. TRANSITION phases with voice
-bun run AlgorithmDisplay.ts phase THINK
-bun run AlgorithmDisplay.ts phase EXECUTE
+- **Author:** Daniel Miessler
+- **Origin:** Extracted from production PAI system
+- **License:** MIT
 
-# 5. MANAGE ISC during execution
-bun run ISCManager.ts update --row 1 --status DONE
-bun run ISCManager.ts show
-```
-
-## Core Concepts
-
-### Capability Categories
-
-- **Models:** haiku, sonnet, opus - compute resources
-- **Thinking:** UltraThink, TreeOfThought - enhanced reasoning
-- **Debate:** Council (4 agents), RedTeam (32 agents)
-- **Analysis:** FirstPrinciples, Science - structured analysis
-- **Research:** Perplexity, Gemini, Grok, Claude, Codex
-- **Execution:** Intern, Engineer, Designer, Architect, Pentester
-- **Verification:** Browser, Skeptical Verifier
-
-### Source Types
-
-- **EXPLICIT** - User literally said this
-- **INFERRED** - Derived from user context/preferences
-- **IMPLICIT** - Universal standards (security, quality)
-
-### Status Progression
-
-```
-PENDING → ACTIVE → DONE
-                 → ADJUSTED (acceptable deviation)
-                 → BLOCKED (cannot proceed)
-```
-
-## Philosophy
-
-**PURPOSE:** Produce euphoric, highly surprising, exceptional results that solve the problem better than expected.
-
-**METHOD:** Scientific method applied to execution:
-1. Observe the problem
-2. Form hypothesis (ISC rows)
-3. Plan experiments (capability selection)
-4. Execute and measure
-5. Verify results
-6. Learn and iterate
-
-**PRINCIPLE:** The ISC captures what "ideal" looks like. Execute against it. Verify against it. Iterate until achieved.
+---
 
 ## Changelog
 
-### 0.5.0 - 2026-01-08
-- Initial public release
-- Core 7-phase execution engine
-- ISC (Ideal State Criteria) tracking
-- Effort-based capability selection (TRIVIAL → DETERMINED)
-- Ralph Loop for persistent iteration
-- LCARS-style visual display with voice support
-- Capability registry with 30+ orchestratable capabilities
-- Integration with Agents skill for dynamic agent composition
+### 2.3.0 - 2026-01-14
+- Initial pack release for PAI v2.3
+- Includes full ISC management with verification pairing
+- Agent claim system for parallel work
+- Research override system
+- Nested algorithm support
+- Interview protocol for unclear requests
+- LCARS-style visual display with voice announcements
+- Ralph Loop executor for persistent iteration

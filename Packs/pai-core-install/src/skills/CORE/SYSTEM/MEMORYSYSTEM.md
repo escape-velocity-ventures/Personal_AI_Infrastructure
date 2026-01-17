@@ -1,215 +1,315 @@
-<!--
-================================================================================
-PAI CORE - SYSTEM/MEMORYSYSTEM.md
-================================================================================
-
-PURPOSE:
-The unified memory system - what happened, what we learned, what we're working
-on. Combines historical archives, learning artifacts, operational state, and
-per-task work directories.
-
-LOCATION:
-- Kai (Private): ${PAI_DIR}/skills/CORE/SYSTEM/MEMORYSYSTEM.md
-- PAI Pack: Packs/pai-core-install/src/skills/CORE/SYSTEM/MEMORYSYSTEM.md
-
-CUSTOMIZATION:
-- Paths use ${PAI_DIR} - replace with your installation directory
-- Directory structure is standard, but you can add categories
-
-RELATED FILES:
-- BACKUPS.md - Backup strategies
-- PAISYSTEMARCHITECTURE.md - Core architecture
-
-LAST UPDATED: 2026-01-08
-VERSION: 1.1.0
-================================================================================
--->
-
 # Memory System
 
 **The unified system memory - what happened, what we learned, what we're working on.**
 
-The Memory System combines historical archives, learning artifacts, operational state, and per-task work directories into one coherent architecture.
+**Version:** 7.0 (Projects-native architecture, 2026-01-12)
+**Location:** `~/.claude/MEMORY/`
 
-**Location:** `${PAI_DIR}/MEMORY/`
+---
+
+## Architecture
+
+**Claude Code's `projects/` is the source of truth. Hooks capture domain-specific events directly. Harvesting tools extract learnings from session transcripts.**
+
+```
+User Request
+    ↓
+Claude Code projects/ (native transcript storage - 30-day retention)
+    ↓
+Hook Events trigger domain-specific captures:
+    ├── AutoWorkCreation → WORK/
+    ├── ResponseCapture → WORK/, LEARNING/
+    ├── RatingCapture → LEARNING/SIGNALS/
+    ├── WorkCompletionLearning → LEARNING/
+    ├── AgentOutputCapture → RESEARCH/
+    └── SecurityValidator → SECURITY/
+    ↓
+Harvesting (periodic):
+    ├── SessionHarvester → LEARNING/ (extracts corrections, errors, insights)
+    ├── LearningPatternSynthesis → LEARNING/SYNTHESIS/ (aggregates ratings)
+    └── Observability reads from projects/
+```
+
+**Key insight:** Hooks write directly to specialized directories. There is no intermediate "firehose" layer - Claude Code's `projects/` serves that purpose natively.
 
 ---
 
 ## Directory Structure
 
 ```
-${PAI_DIR}/MEMORY/
-├── research/          # Research session outputs
-├── sessions/          # Session summaries (auto-captured)
-├── learnings/         # Learning moments
-├── decisions/         # Architectural decisions
-├── execution/         # Feature/bug/refactor executions
-├── security/          # Security event logs
-├── recovery/          # Recovery snapshots and journals
-├── raw-outputs/       # JSONL event streams
-├── backups/           # Pre-refactoring backups
-├── archive/           # Compressed historical archives
-├── analysis/          # Analysis documents
-├── ideas/             # Brainstorm captures
-├── releases/          # Release notes
-├── skills/            # Skill-related history
-├── session-events.jsonl  # Main session event log
-├── Learning/          # Phase-based curated learnings
-│   ├── OBSERVE/
-│   ├── THINK/
-│   ├── PLAN/
-│   ├── BUILD/
-│   ├── EXECUTE/
-│   ├── VERIFY/
-│   ├── ALGORITHM/
-│   └── sessions/
-├── State/             # Real-time operational state
-│   ├── algorithm-stats.json
-│   ├── algorithm-streak.json
+~/.claude/MEMORY/
+├── WORK/                   # PRIMARY work tracking
+│   └── {work_id}/
+│       ├── META.yaml       # Status, session, lineage
+│       ├── IDEAL.md        # Success criteria
+│       ├── IdealState.jsonl
+│       ├── items/          # Individual work items
+│       ├── agents/         # Sub-agent work
+│       ├── research/       # Research findings
+│       ├── scratch/        # Iterative artifacts (diagrams, prototypes, drafts)
+│       ├── verification/   # Evidence
+│       └── children/       # Nested work
+├── LEARNING/               # Learnings (includes signals)
+│   ├── SYSTEM/             # PAI/tooling learnings
+│   │   └── YYYY-MM/
+│   ├── ALGORITHM/          # Task execution learnings
+│   │   └── YYYY-MM/
+│   ├── SYNTHESIS/          # Aggregated pattern analysis
+│   │   └── YYYY-MM/
+│   │       └── weekly-patterns.md
+│   └── SIGNALS/            # User satisfaction ratings
+│       └── ratings.jsonl
+├── RESEARCH/               # Agent output captures
+│   └── YYYY-MM/
+├── SECURITY/               # Security audit events
+│   └── security-events.jsonl
+├── STATE/                  # Operational state
+│   ├── algorithm-state.json
+│   ├── current-work.json
 │   ├── format-streak.json
-│   ├── last-judge-rating.json
-│   └── active-work.json
-├── Signals/           # Pattern detection and anomalies
-│   ├── failures.jsonl
-│   ├── loopbacks.jsonl
-│   ├── patterns.jsonl
-│   └── agent-routing.jsonl
-└── Work/              # Per-task memory (active work items)
-    └── [Task-Name_TIMESTAMP]/
+│   ├── algorithm-streak.json
+│   ├── trending-cache.json
+│   ├── progress/           # Multi-session project tracking
+│   └── integrity/          # System health checks
+├── PAISYSTEMUPDATES/         # Architecture change history
+│   ├── index.json
+│   ├── CHANGELOG.md
+│   └── YYYY/MM/
+└── README.md
 ```
 
 ---
 
-## Three-Tier Memory Model
+## Directory Details
 
-### 1. CAPTURE (Hot) - Per-Task Work
+### Claude Code projects/ - Native Session Storage
 
-Current work items with real-time traces.
+**Location:** `~/.claude/projects/-Users-{username}--claude/`
+*(Replace `{username}` with your system username, e.g., `-Users-john--claude`)*
+**What populates it:** Claude Code automatically (every conversation)
+**Content:** Complete session transcripts in JSONL format
+**Format:** `{uuid}.jsonl` - one file per session
+**Retention:** 30 days (Claude Code manages cleanup)
+**Purpose:** Source of truth for all session data; Observability and harvesting tools read from here
 
-**Each work item directory:**
-```
-Work/[Task-Name_TIMESTAMP]/
-├── Work.md           # Goal, result, signal tracking
-├── IdealState.jsonl  # Success criteria evolution (append-only)
-├── TRACE.jsonl       # Decision trace (theory of mind)
-├── Output/           # Deliverables produced
-└── Learning/         # Per-phase learnings
-```
+This is the actual "firehose" - every message, tool call, and response. PAI leverages this native storage rather than duplicating it.
 
-### 2. SYNTHESIS (Warm) - Aggregated Learning
+### WORK/ - Primary Work Tracking
 
-Learnings organized by algorithm phase for targeted retrieval.
+**What populates it:**
+- `AutoWorkCreation.hook.ts` on UserPromptSubmit (creates work dir)
+- `ResponseCapture.hook.ts` on Stop (updates work items)
+- `SessionSummary.hook.ts` on SessionEnd (marks COMPLETED)
 
-```
-Learning/
-├── OBSERVE/     # Learnings about gathering context
-├── THINK/       # Learnings about hypothesis generation
-├── PLAN/        # Learnings about execution planning
-├── BUILD/       # Learnings about success criteria
-├── EXECUTE/     # Learnings about implementation
-└── VERIFY/      # Learnings about verification
-```
+**Content:** Work directories with metadata, items, verification artifacts
+**Format:** `WORK/{work_id}/` with META.yaml, items/, verification/, etc.
+**Purpose:** Track all discrete work units with lineage, verification, and feedback
 
-**Curation criteria - learning bubbles up if it is:**
-- **Generalizable** - Applies beyond this specific task
-- **Algorithm-focused** - Improves how we execute phases
-- **Actionable** - Contains specific pattern or recommendation
-- **Non-obvious** - Wasn't already in permanent learnings
+**Work Directory Lifecycle:**
+1. `UserPromptSubmit` → AutoWorkCreation creates work dir + first item
+2. `Stop` → ResponseCapture updates item with response summary
+3. `SessionEnd` → SessionSummary marks work COMPLETED, clears state
 
-### 3. APPLICATION (Cold) - Archived History
+### LEARNING/ - Categorized Learnings
 
-Immutable archive of all historical data (directly in MEMORY/).
+**What populates it:**
+- `ResponseCapture.hook.ts` (if content qualifies as learning)
+- `ExplicitRatingCapture.hook.ts` (explicit ratings + low-rating learnings)
+- `ImplicitSentimentCapture.hook.ts` (detected frustration)
+- `WorkCompletionLearning.hook.ts` (significant work session completions)
+- `SessionHarvester.ts` (periodic extraction from projects/ transcripts)
+- `LearningPatternSynthesis.ts` (aggregates ratings into pattern reports)
 
-```
-${PAI_DIR}/MEMORY/
-├── research/YYYY-MM/        # Investigation reports
-├── sessions/YYYY-MM/        # Session summaries
-├── learnings/YYYY-MM/       # Learning moments
-├── decisions/YYYY-MM/       # Architectural decisions
-├── execution/               # Feature/bug/refactor work
-├── security/                # Security event logs
-├── recovery/                # Recovery snapshots
-│   ├── journal/YYYY-MM-DD.jsonl
-│   ├── snapshots/YYYY-MM-DD/
-│   └── index.json
-├── raw-outputs/YYYY-MM/     # JSONL event streams
-└── archive/                 # Compressed old months
-```
+**Structure:**
+- `LEARNING/SYSTEM/YYYY-MM/` - PAI/tooling learnings (infrastructure issues)
+- `LEARNING/ALGORITHM/YYYY-MM/` - Task execution learnings (approach errors)
+- `LEARNING/SYNTHESIS/YYYY-MM/` - Aggregated pattern analysis (weekly/monthly reports)
+- `LEARNING/SIGNALS/ratings.jsonl` - All user satisfaction ratings
+
+**Categorization logic:**
+| Directory | When Used | Example Triggers |
+|-----------|-----------|------------------|
+| `SYSTEM/` | Tooling/infrastructure failures | hook crash, config error, deploy failure |
+| `ALGORITHM/` | Task execution issues | wrong approach, over-engineered, missed the point |
+| `SYNTHESIS/` | Pattern aggregation | weekly analysis, recurring issues |
+
+### RESEARCH/ - Agent Outputs
+
+**What populates it:** `AgentOutputCapture.hook.ts` on SubagentStop
+**Content:** Agent completion outputs (researchers, architects, engineers, etc.)
+**Format:** `RESEARCH/YYYY-MM/YYYY-MM-DD-HHMMSS_AGENT-type_description.md`
+**Purpose:** Archive of all spawned agent work
+
+### SECURITY/ - Security Events
+
+**What populates it:** `SecurityValidator.hook.ts` on tool validation
+**Content:** Security audit events (blocks, confirmations, alerts)
+**Format:** `SECURITY/security-events.jsonl`
+**Purpose:** Security decision audit trail
+
+### STATE/ - Fast Runtime Data
+
+**What populates it:** Various tools and hooks
+**Content:** High-frequency read/write JSON files for runtime state
+**Key Property:** Ephemeral - can be rebuilt from RAW or other sources. Optimized for speed, not permanence.
+
+**Files:**
+- `current-work.json` - Active work directory pointer
+- `algorithm-state.json` - THEALGORITHM execution phase
+- `format-streak.json`, `algorithm-streak.json` - Performance metrics
+- `trending-cache.json` - Cached analysis (TTL-based)
+- `progress/` - Multi-session project tracking
+- `integrity/` - System health check results
+
+This is mutable state that changes during execution - not historical records. If deleted, system recovers gracefully.
+
+### PAISYSTEMUPDATES/ - Change History
+
+**What populates it:** Manual via CreateUpdate.ts tool
+**Content:** Canonical tracking of all system changes
+**Purpose:** Track architectural decisions and system changes over time
 
 ---
 
-## State Tracking
+## Hook Integration
 
-Real-time operational state at `${PAI_DIR}/MEMORY/State/`:
+| Hook | Trigger | Writes To |
+|------|---------|-----------|
+| AutoWorkCreation.hook.ts | UserPromptSubmit | WORK/, STATE/current-work.json |
+| ResponseCapture.hook.ts | Stop | WORK/items, LEARNING/ (if applicable) |
+| WorkCompletionLearning.hook.ts | SessionEnd | LEARNING/ (significant work) |
+| SessionSummary.hook.ts | SessionEnd | WORK/META.yaml (status), clears STATE |
+| ExplicitRatingCapture.hook.ts | UserPromptSubmit | LEARNING/SIGNALS/, LEARNING/ (low ratings) |
+| ImplicitSentimentCapture.hook.ts | UserPromptSubmit | LEARNING/SIGNALS/, LEARNING/ (frustration) |
+| AgentOutputCapture.hook.ts | SubagentStop | RESEARCH/ |
+| SecurityValidator.hook.ts | PreToolUse | SECURITY/ |
 
-| File | Purpose |
-|------|---------|
-| `algorithm-stats.json` | Total/compliant task counts |
-| `algorithm-streak.json` | Consecutive compliant tasks |
-| `format-streak.json` | Consecutive correct format |
-| `last-judge-rating.json` | Most recent quality rating |
-| `active-work.json` | Currently active work item |
+## Harvesting Tools
+
+| Tool | Purpose | Reads From | Writes To |
+|------|---------|------------|-----------|
+| SessionHarvester.ts | Extract learnings from transcripts | projects/ | LEARNING/ |
+| LearningPatternSynthesis.ts | Aggregate ratings into patterns | LEARNING/SIGNALS/ | LEARNING/SYNTHESIS/ |
+| ActivityParser.ts | Parse recent file changes | projects/ | (analysis only) |
 
 ---
 
-## Signal Files
+## Data Flow
 
-Real-time pattern detection at `${PAI_DIR}/MEMORY/Signals/`:
-
-### failures.jsonl
-Every VERIFY failure with context.
-```json
-{"timestamp": "...", "work_item": "...", "phase": "VERIFY", "criterion": "...", "expected": "...", "observed": "...", "root_cause": "..."}
 ```
+User Request
+    ↓
+Claude Code → projects/{uuid}.jsonl (native transcript)
+    ↓
+AutoWorkCreation → WORK/{id}/ + STATE/current-work.json
+    ↓
+[Work happens - all tool calls captured in projects/]
+    ↓
+ResponseCapture → Updates WORK/items, optionally LEARNING/
+    ↓
+RatingCapture/SentimentCapture → LEARNING/SIGNALS/ + LEARNING/
+    ↓
+WorkCompletionLearning → LEARNING/ (for significant work)
+    ↓
+SessionSummary → WORK/META.yaml (COMPLETED), clears STATE/current-work.json
 
-### loopbacks.jsonl
-When execution loops back to earlier phases.
-```json
-{"timestamp": "...", "work_item": "...", "from_phase": "VERIFY", "to_phase": "THINK", "reason": "...", "iteration": 2}
+[Periodic harvesting]
+    ↓
+SessionHarvester → scans projects/ → writes LEARNING/
+LearningPatternSynthesis → analyzes SIGNALS/ → writes SYNTHESIS/
 ```
-
-### patterns.jsonl
-Weekly aggregated patterns from failures and loopbacks.
-```json
-{"week": "2026-W01", "pattern": "...", "frequency": 4, "recommendation": "...", "source_items": [...]}
-```
-
-### ratings.jsonl
-User satisfaction ratings (both explicit and implicit).
 
 ---
 
 ## Quick Reference
 
-### Find work items
+### Check current work
 ```bash
-ls ${PAI_DIR}/MEMORY/Work/              # All work
-ls -lt ${PAI_DIR}/MEMORY/Work/ | head   # Most recent
-grep -r "search" ${PAI_DIR}/MEMORY/     # Search content
+cat ~/.claude/MEMORY/STATE/current-work.json
+ls ~/.claude/MEMORY/WORK/ | tail -5
 ```
 
-### Check state
+### Check ratings
 ```bash
-cat ${PAI_DIR}/MEMORY/State/algorithm-stats.json
-cat ${PAI_DIR}/MEMORY/State/algorithm-streak.json
+tail ~/.claude/MEMORY/LEARNING/SIGNALS/ratings.jsonl
 ```
 
-### Check signals
+### View session transcripts
 ```bash
-tail ${PAI_DIR}/MEMORY/Signals/failures.jsonl
-cat ${PAI_DIR}/MEMORY/Signals/loopbacks.jsonl | jq .
+# List recent sessions (newest first)
+# Replace {username} with your system username
+ls -lt ~/.claude/projects/-Users-{username}--claude/*.jsonl | head -5
+
+# View last session events
+tail ~/.claude/projects/-Users-{username}--claude/$(ls -t ~/.claude/projects/-Users-{username}--claude/*.jsonl | head -1) | jq .
 ```
 
-### Search history
+### Check learnings
 ```bash
-ls ${PAI_DIR}/MEMORY/research/2026-01/
-grep -r "pattern" ${PAI_DIR}/MEMORY/
+ls ~/.claude/MEMORY/LEARNING/SYSTEM/
+ls ~/.claude/MEMORY/LEARNING/ALGORITHM/
+ls ~/.claude/MEMORY/LEARNING/SYNTHESIS/
 ```
+
+### Check multi-session progress
+```bash
+ls ~/.claude/MEMORY/STATE/progress/
+```
+
+### Run harvesting tools
+```bash
+# Harvest learnings from recent sessions
+bun run ~/.claude/skills/CORE/Tools/SessionHarvester.ts --recent 10
+
+# Generate pattern synthesis
+bun run ~/.claude/skills/CORE/Tools/LearningPatternSynthesis.ts --week
+```
+
+---
+
+## Migration History
+
+**2026-01-12:** v7.0 - Projects-native architecture
+- Eliminated RAW/ directory entirely - Claude Code's `projects/` is the source of truth
+- Removed EventLogger.hook.ts (was duplicating what projects/ already captures)
+- Created SessionHarvester.ts to extract learnings from projects/ transcripts
+- Created WorkCompletionLearning.hook.ts for session-end learning capture
+- Created LearningPatternSynthesis.ts for rating pattern aggregation
+- Added LEARNING/SYNTHESIS/ for pattern reports
+- Updated Observability to read from projects/ instead of RAW/
+- Updated ActivityParser.ts to use projects/ as data source
+- Removed archive functionality from pai.ts (Claude Code handles 30-day cleanup)
+
+**2026-01-11:** v6.1 - Removed RECOVERY system
+- Deleted RECOVERY/ directory (5GB of redundant snapshots)
+- Removed RecoveryJournal.hook.ts, recovery-engine.ts, snapshot-manager.ts
+- Git provides all necessary rollback capability
+
+**2026-01-11:** v6.0 - Major consolidation
+- WORK is now the PRIMARY work tracking system (not SESSIONS)
+- Deleted SESSIONS/ directory entirely
+- Merged SIGNALS/ into LEARNING/SIGNALS/
+- Merged PROGRESS/ into STATE/progress/
+- Merged integrity-checks/ into STATE/integrity/
+- Fixed AutoWorkCreation hook (prompt vs user_prompt field)
+- Updated all hooks to use correct paths
+
+**2026-01-10:** v5.0 - Documentation consolidation
+- Consolidated WORKSYSTEM.md into MEMORYSYSTEM.md
+
+**2026-01-09:** v4.0 - Major restructure
+- Moved BACKUPS to `~/.claude/BACKUPS/` (outside MEMORY)
+- Renamed RAW-OUTPUTS to RAW
+- All directories now ALL CAPS
+
+**2026-01-05:** v1.0 - Unified Memory System migration
+- Previous: `~/.claude/history/`, `~/.claude/context/`, `~/.claude/progress/`
+- Current: `~/.claude/MEMORY/`
+- Files migrated: 8,415+
 
 ---
 
 ## Related Documentation
 
-- **Architecture:** `PAISYSTEMARCHITECTURE.md`
 - **Hook System:** `THEHOOKSYSTEM.md`
-- **Backups:** `BACKUPS.md`
+- **Architecture:** `PAISYSTEMARCHITECTURE.md`

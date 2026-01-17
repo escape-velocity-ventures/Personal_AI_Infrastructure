@@ -14,6 +14,23 @@ import { readFileSync, existsSync } from 'fs';
 import { join } from 'path';
 import { execSync } from 'child_process';
 
+interface PatternCategory {
+  description: string;
+  patterns: string[];
+}
+
+interface ProtectedPatterns {
+  description: string;
+  categories: {
+    [name: string]: PatternCategory;
+  };
+  exception_files: string[];
+  exception_contexts?: {
+    description: string;
+    allowed_prefixes: string[];
+  };
+}
+
 interface ProtectedManifest {
   version: string;
   protected: {
@@ -24,6 +41,7 @@ interface ProtectedManifest {
       exception_files?: string[];
       validation?: string;
     };
+    protected_patterns?: ProtectedPatterns;
   };
 }
 
@@ -78,22 +96,75 @@ function checkForbiddenDirectories(stagedFiles: string[], manifest: ProtectedMan
   return violations;
 }
 
+/**
+ * Extract all patterns from the categorized structure
+ */
+function getAllPatterns(patternCategory: ProtectedPatterns): { category: string; pattern: string }[] {
+  const allPatterns: { category: string; pattern: string }[] = [];
+
+  if (!patternCategory.categories) {
+    return allPatterns;
+  }
+
+  for (const [categoryName, category] of Object.entries(patternCategory.categories)) {
+    if (category.patterns) {
+      for (const pattern of category.patterns) {
+        allPatterns.push({ category: categoryName, pattern });
+      }
+    }
+  }
+
+  return allPatterns;
+}
+
+/**
+ * Check if content has an allowed exception context (e.g., "# Example:", "placeholder")
+ */
+function hasExceptionContext(line: string, patternCategory: ProtectedPatterns): boolean {
+  const allowedPrefixes = patternCategory.exception_contexts?.allowed_prefixes || [];
+
+  for (const prefix of allowedPrefixes) {
+    if (line.toLowerCase().includes(prefix.toLowerCase())) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 function scanAllFilesForSensitiveContent(stagedFiles: string[], manifest: ProtectedManifest): {
   file: string;
   violations: string[];
 }[] {
   const results: { file: string; violations: string[] }[] = [];
-  const patternCategory = manifest.protected.protected_patterns;
+  const patternCategory = manifest.protected.protected_patterns as ProtectedPatterns | undefined;
 
-  if (!patternCategory || !patternCategory.patterns) {
+  if (!patternCategory || !patternCategory.categories) {
     return results;
   }
 
   const exceptions = patternCategory.exception_files || [];
+  const allPatterns = getAllPatterns(patternCategory);
 
   for (const file of stagedFiles) {
     // Skip exception files
     if (exceptions.includes(file)) {
+      continue;
+    }
+
+    // Check wildcard exceptions (e.g., "Packs/*/README.md", "Releases/*/.claude/skills/*/SKILL.md")
+    const isWildcardException = exceptions.some(exc => {
+      if (exc.includes('*')) {
+        // Escape special regex characters except *, then replace * with [^/]+
+        const escapedPattern = exc
+          .replace(/[.+?^${}()|[\]\\]/g, '\\$&')  // Escape special chars
+          .replace(/\*/g, '[^/]+');               // Replace * with path segment matcher
+        return new RegExp(`^${escapedPattern}$`).test(file);
+      }
+      return false;
+    });
+
+    if (isWildcardException) {
       continue;
     }
 
@@ -107,28 +178,30 @@ function scanAllFilesForSensitiveContent(stagedFiles: string[], manifest: Protec
     // Skip binary files
     try {
       const content = readFileSync(fullPath, 'utf-8');
+      const lines = content.split('\n');
       const violations: string[] = [];
 
-      for (const pattern of patternCategory.patterns) {
+      for (const { category, pattern } of allPatterns) {
         try {
           const regex = new RegExp(pattern, 'gi');
-          const matches = content.match(regex);
+          const matchingLines: { line: number; text: string }[] = [];
 
-          if (matches) {
-            // Get line numbers for context
-            const lines = content.split('\n');
-            const matchingLines: number[] = [];
-            lines.forEach((line, idx) => {
-              if (regex.test(line)) {
-                matchingLines.push(idx + 1);
+          lines.forEach((lineText, idx) => {
+            regex.lastIndex = 0; // Reset regex state
+            if (regex.test(lineText)) {
+              // Check if this line has an exception context
+              if (!hasExceptionContext(lineText, patternCategory)) {
+                matchingLines.push({ line: idx + 1, text: lineText.trim().slice(0, 60) });
               }
-              regex.lastIndex = 0; // Reset regex state
-            });
+            }
+          });
 
-            const lineInfo = matchingLines.length > 0
-              ? ` (lines: ${matchingLines.slice(0, 3).join(', ')}${matchingLines.length > 3 ? '...' : ''})`
-              : '';
-            violations.push(`Sensitive pattern "${pattern}"${lineInfo}`);
+          if (matchingLines.length > 0) {
+            const lineInfo = matchingLines.slice(0, 3)
+              .map(m => `L${m.line}`)
+              .join(', ');
+            const moreInfo = matchingLines.length > 3 ? ` (+${matchingLines.length - 3} more)` : '';
+            violations.push(`[${category}] Pattern: ${pattern.slice(0, 40)}${pattern.length > 40 ? '...' : ''} at ${lineInfo}${moreInfo}`);
           }
         } catch {
           // Invalid regex, skip
@@ -169,21 +242,45 @@ function checkFileContent(filePath: string, manifest: ProtectedManifest): {
   }
 
   const content = readFileSync(fullPath, 'utf-8');
+  const lines = content.split('\n');
   const violations: string[] = [];
 
   // Get exception files list (applies to ALL checks, not just patterns)
-  const patternCategory = manifest.protected.protected_patterns;
+  const patternCategory = manifest.protected.protected_patterns as ProtectedPatterns | undefined;
   const exceptions = patternCategory?.exception_files || [];
   const isException = exceptions.includes(filePath);
 
-  // Check for forbidden patterns (skip if exception)
-  if (patternCategory && patternCategory.patterns && !isException) {
-    for (const pattern of patternCategory.patterns) {
-      const regex = new RegExp(pattern, 'g');
-      const matches = content.match(regex);
+  // Check for forbidden patterns from categorized structure (skip if exception)
+  if (patternCategory && patternCategory.categories && !isException) {
+    const allPatterns = getAllPatterns(patternCategory);
 
-      if (matches) {
-        violations.push(`Found forbidden pattern: "${pattern}" (${matches.length} occurrence(s))`);
+    for (const { category, pattern } of allPatterns) {
+      try {
+        const regex = new RegExp(pattern, 'gi');
+        let matchCount = 0;
+        const matchingLineNums: number[] = [];
+
+        lines.forEach((lineText, idx) => {
+          regex.lastIndex = 0;
+          if (regex.test(lineText)) {
+            // Check for exception context
+            if (!hasExceptionContext(lineText, patternCategory)) {
+              matchCount++;
+              if (matchingLineNums.length < 3) {
+                matchingLineNums.push(idx + 1);
+              }
+            }
+          }
+        });
+
+        if (matchCount > 0) {
+          const lineInfo = matchingLineNums.length > 0
+            ? ` (lines: ${matchingLineNums.join(', ')}${matchCount > 3 ? '...' : ''})`
+            : '';
+          violations.push(`[${category}] Found: "${pattern.slice(0, 50)}${pattern.length > 50 ? '...' : ''}" (${matchCount} occurrence(s))${lineInfo}`);
+        }
+      } catch {
+        // Invalid regex, skip
       }
     }
   }
@@ -284,15 +381,29 @@ async function main() {
       }
       console.log('\n' + '='.repeat(60));
       console.log(`\n${RED}🚫 COMMIT BLOCKED${RESET}\n`);
-      console.log('Files contain sensitive content that must NOT be in public PAI:');
-      console.log('  - API keys, tokens, secrets');
-      console.log('  - Personal information (emails, contacts, family)');
-      console.log('  - Customer/confidential data');
-      console.log('  - Private file paths');
+      console.log('Files contain sensitive content that must NOT be in public PAI:\n');
+      console.log('  Categories checked:');
+      console.log('  - api_keys          (Anthropic, OpenAI, AWS, Stripe, etc.)');
+      console.log('  - github_tokens     (ghp_, gho_, github_pat_, etc.)');
+      console.log('  - slack_tokens      (xoxb-, xoxp-, etc.)');
+      console.log('  - webhooks          (Discord, Slack, ntfy, Zapier)');
+      console.log('  - database_credentials');
+      console.log('  - private_keys      (RSA, SSH, PGP, etc.)');
+      console.log('  - pii_ssn_financial (SSN, EIN, credit cards)');
+      console.log('  - pii_phone         (phone numbers)');
+      console.log('  - personal_emails   (@gmail, @yahoo, etc.)');
+      console.log('  - private_paths     (/Users/daniel/, ~/.claude/)');
+      console.log('  - internal_infrastructure (private IPs, .internal.)');
+      console.log('  - customer_data     (customer_id, client_name)');
+      console.log('  - team_members      (real names of team members)');
+      console.log('  - credentials_inline (password=, secret=)');
+      console.log('  - cloudflare        (CF tokens and zone IDs)');
+      console.log('  - misc_sensitive    (.pem, .key, service accounts)');
       console.log('\n' + YELLOW + 'To fix:' + RESET);
       console.log('  1. Remove or redact the sensitive content');
-      console.log('  2. Use placeholder values (e.g., "your_api_key_here")');
-      console.log('  3. Add file to exception_files if it\'s intentional\n');
+      console.log('  2. Use placeholder values (e.g., "YOUR_API_KEY_HERE")');
+      console.log('  3. Wrap in example context (e.g., "# Example: sk-...")');
+      console.log('  4. Add file to exception_files if intentional\n');
       process.exit(1);
     }
 

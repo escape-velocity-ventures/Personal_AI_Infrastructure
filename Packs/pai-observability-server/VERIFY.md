@@ -1,4 +1,4 @@
-# Kai Observability Server - Verification Checklist
+# PAI Observability Server v2.3.0 - Verification Checklist
 
 ## Mandatory Completion Checklist
 
@@ -9,20 +9,31 @@
 - [ ] `$PAI_DIR/observability/` directory exists
 - [ ] `$PAI_DIR/observability/apps/server/src/` directory exists
 - [ ] `$PAI_DIR/observability/apps/client/src/` directory exists
+- [ ] `$PAI_DIR/observability/apps/client/src/components/` directory exists
+- [ ] `$PAI_DIR/observability/apps/client/src/composables/` directory exists
+- [ ] `$PAI_DIR/observability/MenuBarApp/` directory exists (macOS)
+- [ ] `$PAI_DIR/observability/Tools/` directory exists
+- [ ] `$PAI_DIR/observability/scripts/` directory exists
 - [ ] `$PAI_DIR/hooks/lib/` directory exists
 - [ ] `$PAI_DIR/history/raw-outputs/` directory exists
 
 ### Core Files
 
 - [ ] `$PAI_DIR/hooks/lib/metadata-extraction.ts` exists
-- [ ] `$PAI_DIR/hooks/capture-all-events.ts` exists
+- [ ] `$PAI_DIR/hooks/lib/observability.ts` exists
+- [ ] `$PAI_DIR/hooks/AgentOutputCapture.hook.ts` exists
 - [ ] `$PAI_DIR/observability/apps/server/src/index.ts` exists
 - [ ] `$PAI_DIR/observability/apps/server/src/file-ingest.ts` exists
+- [ ] `$PAI_DIR/observability/apps/server/src/task-watcher.ts` exists
+- [ ] `$PAI_DIR/observability/apps/server/src/db.ts` exists
+- [ ] `$PAI_DIR/observability/apps/server/src/theme.ts` exists
 - [ ] `$PAI_DIR/observability/apps/server/src/types.ts` exists
 - [ ] `$PAI_DIR/observability/apps/server/package.json` exists
 - [ ] `$PAI_DIR/observability/apps/client/src/App.vue` exists
 - [ ] `$PAI_DIR/observability/apps/client/package.json` exists
 - [ ] `$PAI_DIR/observability/manage.sh` exists and is executable
+- [ ] `$PAI_DIR/observability/Tools/ManageServer.ts` exists
+- [ ] `$PAI_DIR/observability/MenuBarApp/ObservabilityApp.swift` exists (macOS)
 
 ### Dependencies
 
@@ -41,13 +52,13 @@
 
 ```bash
 ls -la $PAI_DIR/observability/
-# Expected: manage.sh, apps/
+# Expected: manage.sh, apps/, MenuBarApp/, Tools/, scripts/
 
 ls -la $PAI_DIR/observability/apps/server/src/
-# Expected: index.ts, file-ingest.ts, types.ts
+# Expected: index.ts, file-ingest.ts, task-watcher.ts, db.ts, theme.ts, types.ts
 
 ls -la $PAI_DIR/observability/apps/client/src/
-# Expected: App.vue, main.ts, style.css
+# Expected: App.vue, main.ts, style.css, components/, composables/, styles/, utils/, types/
 ```
 
 ### Test 2: Start Server
@@ -60,8 +71,8 @@ $PAI_DIR/observability/manage.sh start
 ### Test 3: Health Check
 
 ```bash
-curl http://localhost:4000/health
-# Expected: {"status":"ok","timestamp":...}
+curl http://localhost:4000/events/filter-options
+# Expected: JSON object with "agents", "tools", etc.
 ```
 
 ### Test 4: WebSocket Connection
@@ -86,14 +97,14 @@ ls -la $PAI_DIR/history/raw-outputs/$(date +%Y-%m)/
 $PAI_DIR/observability/manage.sh stop
 # Expected: "Observability stopped"
 
-curl http://localhost:4000/health
+curl http://localhost:4000/events/filter-options
 # Expected: Connection refused
 ```
 
 ### Test 7: Check Hook Registration
 
 ```bash
-grep -A 2 "capture-all-events" ~/.claude/settings.json
+grep -A 2 "AgentOutputCapture" ~/.claude/settings.json
 # Expected: Shows hook configuration
 ```
 
@@ -145,19 +156,31 @@ $PAI_DIR/observability/manage.sh status
 $PAI_DIR/observability/manage.sh stop
 ```
 
+### Test E: MenuBar App (macOS)
+
+```bash
+# If MenuBar app was installed, verify it exists
+ls -la $PAI_DIR/observability/MenuBarApp/Observability.app
+# Expected: App bundle exists
+
+# Launch the app
+open $PAI_DIR/observability/MenuBarApp/Observability.app
+# Expected: Menu bar icon appears
+```
+
 ---
 
 ## Quick Verification Script
 
 ```bash
 #!/bin/bash
-PAI_CHECK="${PAI_DIR:-$HOME/.config/pai}"
+PAI_CHECK="${PAI_DIR:-$HOME/.claude}"
 
-echo "=== Kai Observability Server Verification ==="
+echo "=== PAI Observability Server v2.3.0 Verification ==="
 echo ""
 
 # Check directories
-for dir in "observability" "observability/apps/server/src" "observability/apps/client/src" "hooks/lib" "history/raw-outputs"; do
+for dir in "observability" "observability/apps/server/src" "observability/apps/client/src" "observability/apps/client/src/components" "observability/apps/client/src/composables" "observability/MenuBarApp" "observability/Tools" "observability/scripts" "hooks/lib" "history/raw-outputs"; do
   if [ -d "$PAI_CHECK/$dir" ]; then
     echo "✓ $dir/"
   else
@@ -168,7 +191,7 @@ done
 echo ""
 
 # Check files
-for file in "observability/manage.sh" "observability/apps/server/src/index.ts" "observability/apps/client/src/App.vue" "hooks/capture-all-events.ts" "hooks/lib/metadata-extraction.ts"; do
+for file in "observability/manage.sh" "observability/apps/server/src/index.ts" "observability/apps/server/src/task-watcher.ts" "observability/apps/server/src/db.ts" "observability/apps/client/src/App.vue" "hooks/AgentOutputCapture.hook.ts" "hooks/lib/metadata-extraction.ts" "hooks/lib/observability.ts" "observability/Tools/ManageServer.ts"; do
   if [ -f "$PAI_CHECK/$file" ]; then
     echo "✓ $file"
   else

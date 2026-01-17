@@ -1,25 +1,44 @@
 ---
-name: Kai Art Skill
-pack-id: danielmiessler-pai-art-skill-core-v1.1.0
-version: 1.1.0
+name: PAI Art Skill
+pack-id: danielmiessler-art-skill-core-v2.3.0
+version: 2.3.0
 author: danielmiessler
-description: Visual content generation with Excalidraw hand-drawn aesthetic - technical diagrams, comics, editorial illustrations
+description: Complete visual content system for AI-generated illustrations, diagrams, and data visualizations with consistent editorial aesthetic
 type: skill
-purpose-type: [creativity, productivity, development]
+purpose-type: [creativity, productivity, automation]
 platform: claude-code
 dependencies: []
-keywords: [art, visualization, diagrams, comics, excalidraw, hand-drawn, technical-diagrams, image-generation, illustrations, dark-mode]
+keywords: [art, images, illustrations, diagrams, visualizations, mermaid, technical-diagrams, stats, frameworks, editorial, visual-content, ai-generation]
 ---
 
 <p align="center">
-  <img src="../icons/pai-art-skill.png" alt="PAI Art Skill" width="256">
+  <img src="../../icons/pai-art-skill.png" alt="PAI Art Skill" width="256">
 </p>
 
 # PAI Art Skill
 
-> Visual content generation system with Excalidraw hand-drawn aesthetic - technical diagrams, comics, and editorial illustrations with consistent dark-mode styling
+> Complete visual content system for creating illustrations, diagrams, and data visualizations with consistent editorial aesthetic using AI image generation.
 
-> **Installation:** This pack is designed for AI-assisted installation. Give this directory to your AI and ask it to install using the wizard in `INSTALL.md`. The installation dynamically adapts to your system state. See [AI-First Installation Philosophy](../../README.md#ai-first-installation-philosophy) for details.
+## Installation Prompt
+
+You are receiving a PAI Pack - a modular upgrade for AI agent systems.
+
+**What is PAI?** See: [PAI Project Overview](../../../README.md#what-is-pai)
+
+**What is a Pack?** See: [Pack System](../../../README.md#the-journey-pai-v1x--v20)
+
+This pack adds a complete visual content creation system to your AI infrastructure. The Art Skill provides:
+
+- **Consistent Aesthetic**: All generated images follow a unified editorial style with defined typography and color palette
+- **Multiple Workflows**: Purpose-built workflows for essays, technical diagrams, frameworks, statistics, and more
+- **AI Image Generation**: TypeScript tool that interfaces with multiple AI image models (Nano Banana Pro, Flux)
+- **Background Removal**: Automatic background removal for transparent PNGs
+
+**Core principle:** Professional visual content with zero design skills required.
+
+No more inconsistent images. No more hiring designers for simple illustrations. Your AI creates publication-ready visuals on demand.
+
+Please follow the installation instructions in INSTALL.md to integrate this pack into your infrastructure.
 
 ---
 
@@ -27,104 +46,214 @@ keywords: [art, visualization, diagrams, comics, excalidraw, hand-drawn, technic
 
 | Component | File | Purpose |
 |-----------|------|---------|
-| Art skill | `src/skills/Art/SKILL.md` | Routing and quick reference |
-| Aesthetic config | `src/skills/Art/Aesthetic.md` | Style preferences and palette |
-| Generate tool | `src/skills/Art/Tools/Generate.ts` | Multi-model image generation CLI |
-| Technical diagrams | `src/skills/Art/Workflows/TechnicalDiagrams.md` | Architecture diagram workflow |
-| Essay headers | `src/skills/Art/Workflows/Essay.md` | Blog header image workflow |
-| Comics workflow | `src/skills/Art/Workflows/Comics.md` | Sequential panel generation |
+| Art Skill Definition | `src/skills/Art/SKILL.md` | Main skill entry point with routing |
+| Generate Tool | `src/skills/Art/Tools/Generate.ts` | AI image generation CLI |
+| Essay Workflow | `src/skills/Art/Workflows/Essay.md` | Editorial illustrations for articles |
+| Visualize Workflow | `src/skills/Art/Workflows/Visualize.md` | Data visualizations and charts |
+| Technical Diagrams | `src/skills/Art/Workflows/TechnicalDiagrams.md` | Architecture and process diagrams |
+| Mermaid Workflow | `src/skills/Art/Workflows/Mermaid.md` | Excalidraw-style structured diagrams |
+| Frameworks Workflow | `src/skills/Art/Workflows/Frameworks.md` | Mental models and 2x2 matrices |
+| Stats Workflow | `src/skills/Art/Workflows/Stats.md` | Illustrated statistics cards |
+| PAI Icon Workflow | `src/skills/Art/Workflows/CreatePAIPackIcon.md` | Generate PAI pack icons |
 
-## The Problem
+**Summary:**
+- **Files created:** 9
+- **Workflows included:** 7
+- **Tools included:** 1
+- **Dependencies:** Bun runtime, FAL_KEY environment variable
 
-AI image generation is powerful but inconsistent. Each request requires:
+---
 
-1. **Prompt Engineering**: Figuring out what words produce the desired style
-2. **Model Selection**: Choosing between Flux, DALL-E, Gemini, etc.
-3. **Size/Format Decisions**: Aspect ratios, resolutions, file formats
-4. **Post-Processing**: Background removal, thumbnails, optimization
-5. **Style Consistency**: Making sure each image matches your brand
+## The Concept and/or Problem
+
+Visual content is essential for modern communication - blog posts need header images, presentations need diagrams, newsletters need illustrated statistics. But creating consistent, professional visuals is challenging:
 
 **The Problems:**
 
-- **Inconsistent Results**: Same prompt produces wildly different styles across sessions
-- **Prompt Overhead**: Re-discovering effective prompts each time
-- **Technical Complexity**: Different models have different APIs and parameters
-- **Quality Control**: No validation that output matches intent
+1. **Inconsistent Style**: Every AI-generated image looks different. No brand cohesion.
+2. **No Design System**: Random prompts produce random results. Typography varies wildly.
+3. **Manual Every Time**: Each image requires crafting a new prompt from scratch.
+4. **Poor Text Rendering**: AI images often have garbled or illegible text.
+5. **No Specialization**: A diagram prompt differs from an illustration prompt - different requirements.
+
+**Who Faces This:**
+- Content creators who need header images for articles
+- Technical writers who need architecture diagrams
+- Newsletter authors who need illustrated statistics
+- Presenters who need professional visuals
+- Anyone who needs consistent brand imagery
+
+**The Consequences:**
+- Hours spent iterating on prompts
+- Inconsistent visual identity across content
+- Settling for "good enough" instead of great
+- Avoiding visual content altogether
+- Hiring designers for simple illustrations
 
 ## The Solution
 
-The Art Skill solves this through **workflow-based generation**:
+The Art Skill provides a **complete visual content system** with:
 
+### 1. Unified Aesthetic Framework
+
+A defined color palette and typography system that ensures consistency:
+
+**Color Palette (UL Editorial):**
 ```
-User Request ("create a diagram of the auth flow")
-     |
-     v
-[SKILL.md Routing] --- Routes based on request type
-     |
-     v
-[Workflow] --- TechnicalDiagrams.md / Essay.md / Comics.md
-     |          - Aesthetic guidelines
-     |          - Prompt template
-     |          - Validation checklist
-     v
-[Generate.ts CLI] --- Deterministic image generation
-     |               - Model selection
-     |               - Size/aspect handling
-     |               - Background removal
-     |               - Thumbnail generation
-     v
-[Output] --- Validated image ready for use
+Background: Light Cream #F5E6D3 or White #FFFFFF
+Primary Accent: Deep Purple #4A148C (strategic, 10-20%)
+Secondary Accent: Deep Teal #00796B (5-10%)
+Structure: Black #000000
+Text: Charcoal #2D2D2D
 ```
 
-**Key Innovations:**
+**Typography System (3-Tier):**
+- **Tier 1 (Headers)**: Valkyrie-style elegant wedge-serif italic
+- **Tier 2 (Labels)**: Concourse-style geometric sans-serif
+- **Tier 3 (Insights)**: Advocate-style condensed italic for callouts
 
-1. **Aesthetic as Code**: Visual style documented in Aesthetic.md
-2. **Workflow Templates**: Proven prompt structures that consistently produce quality
-3. **Intent-to-Flag Mapping**: User intent maps to specific CLI flags
-4. **Validation Checklists**: Must-have and must-not-have criteria
-5. **CLI Determinism**: Same flags, same behavior across models
+### 2. Purpose-Built Workflows
 
-## Invocation Scenarios
+Seven specialized workflows for different visual needs:
 
-| User Request | Workflow | Output |
-|--------------|----------|--------|
-| "create a diagram of the auth flow" | TechnicalDiagrams | Architecture diagram PNG |
-| "create a header for my blog post about Y" | Essay | Editorial illustration PNG |
-| "make a comic showing before/after" | Comics | 3-4 panel comic strip PNG |
+| Workflow | Output Type | Use Case |
+|----------|-------------|----------|
+| Essay | Editorial illustration | Blog header images |
+| Visualize | Data visualization | Charts, graphs, infographics |
+| Technical Diagrams | Architecture diagrams | System designs, process flows |
+| Mermaid | Structured diagrams | Flowcharts, sequence diagrams |
+| Frameworks | Mental models | 2x2 matrices, Venn diagrams |
+| Stats | Stat cards | "78% of developers..." visuals |
+| PAI Icon | Pack icons | 256x256 transparent PNGs |
 
-## Example Usage
+### 3. Story-Driven Generation
 
-### Technical Diagram
+Most workflows use the `/cse` (Create Story Explanation) pattern:
+1. Analyze input content to extract key concepts
+2. Determine visual structure based on content analysis
+3. Construct optimized prompt using workflow guidelines
+4. Generate with appropriate model and settings
+5. Validate against workflow criteria
 
-```bash
-bun run $PAI_DIR/skills/Art/Tools/Generate.ts \
-  --model nano-banana-pro \
-  --prompt "Clean Excalidraw-style technical diagram..." \
-  --size 2K \
-  --aspect-ratio 16:9 \
-  --output ~/Downloads/auth-diagram.png
+### 4. Generation Tool
+
+TypeScript CLI that handles:
+- Model selection (nano-banana-pro for text, flux for variety)
+- Size selection (1K/2K/4K resolution)
+- Aspect ratio (1:1, 16:9, 9:16, 21:9)
+- Background removal for transparency
+- Thumbnail generation for web use
+
+## What Makes This Different
+
+This sounds similar to DALL-E or Midjourney which also do AI image generation. What makes this approach different?
+
+The Art Skill is not just image generation - it's a complete visual content SYSTEM with defined aesthetics, specialized workflows, and consistent output. Raw AI models produce random results; this skill produces brand-consistent visuals through structured workflows that ensure typography, color, composition, and style match your editorial identity every time.
+
+- Unified color palette ensures visual brand consistency
+- Three-tier typography system for professional text rendering
+- Seven specialized workflows for different content types
+- Story-driven prompting extracts concepts from content automatically
+
+---
+
+## Architecture
+
+```
+Art Skill Architecture
+======================
+
+         User Request
+              |
+              v
+    +-------------------+
+    |    SKILL.md       |  <-- Routing layer
+    |  (Skill Router)   |      Matches intent to workflow
+    +-------------------+
+              |
+              v
+    +-------------------+
+    |    Workflows/     |  <-- Workflow layer
+    | - Essay.md        |      Specialized visual recipes
+    | - Visualize.md    |
+    | - Mermaid.md      |
+    | - TechnicalDiag.. |
+    | - Frameworks.md   |
+    | - Stats.md        |
+    | - CreatePAI...    |
+    +-------------------+
+              |
+              v
+    +-------------------+
+    |    Generate.ts    |  <-- Tool layer
+    |  (CLI Tool)       |      Interfaces with AI models
+    +-------------------+
+              |
+              v
+    +-------------------+
+    |   FAL AI API      |  <-- External service
+    |  (Image Models)   |
+    +-------------------+
+              |
+              v
+         Output PNG
 ```
 
-### Blog Header with Thumbnail
+**Layer Responsibilities:**
 
-```bash
-bun run $PAI_DIR/skills/Art/Tools/Generate.ts \
-  --model nano-banana-pro \
-  --prompt "Hand-drawn Excalidraw-style illustration..." \
-  --size 2K \
-  --aspect-ratio 1:1 \
-  --thumbnail \
-  --output ~/Downloads/header.png
+1. **SKILL.md**: Routes user intent to appropriate workflow
+2. **Workflows/**: Contains specialized prompting recipes and validation criteria
+3. **Generate.ts**: CLI tool that constructs API calls and handles output
+4. **FAL AI**: External image generation service
+
+**Data Flow:**
 ```
+Intent -> Routing -> Workflow Selection -> CSE Analysis ->
+Prompt Construction -> Model Selection -> Generation ->
+Validation -> Output
+```
+
+---
+
+## Credits
+
+- **Original concept**: Daniel Miessler - developed as part of PAI (Personal AI Infrastructure)
+- **Typography inspiration**: Matthew Butterick's Practical Typography
+- **Color system**: UL (Unsupervised Learning) editorial guidelines
+- **Aesthetic reference**: Excalidraw for hand-drawn technical diagrams
+
+## Related Work
+
+*None specified.*
+
+## Works Well With
+
+- **pai-core-install**: Required base system
+- **CORE skill**: Uses `/cse` command for story extraction
+- **Blogging skill**: Header image generation for articles
+
+## Recommended
+
+*None specified.*
+
+## Relationships
+
+### Parent Of
+*None specified.*
+
+### Child Of
+- pai-core-install (requires base PAI infrastructure)
+
+### Sibling Of
+*None specified.*
+
+### Part Of Collection
+- PAI Skills Collection
 
 ## Changelog
 
-### 1.1.0 - 2025-12-29
-- **Multiple reference images**: Support up to 14 reference images for improved character/style consistency
-- Added `PAI_DIR` constant to fix help text paths
-
-### 1.0.0 - 2025-12-29
-- Initial release
-- Three workflows: TechnicalDiagrams, Essay, Comics
-- Excalidraw hand-drawn aesthetic with dark-mode colors
-- Generate.ts CLI with multi-model support
+### 2.3.0 - 2026-01-14
+- Initial PAI Pack release
+- Seven specialized workflows included
+- TypeScript generation tool
+- Complete documentation for all workflows

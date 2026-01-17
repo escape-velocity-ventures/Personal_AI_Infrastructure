@@ -1,299 +1,227 @@
 ---
 name: PAI Core Install
-pack-id: danielmiessler-pai-core-install-v1.4.0
-version: 1.4.0
+pack-id: danielmiessler-pai-core-install-v2.3.0
+version: 2.3.0
 author: danielmiessler
-description: Complete PAI core installation - skill routing, identity system, USER/SYSTEM configuration, MEMORY structure, security system, and settings template. The foundation pack that makes everything else work.
-type: feature
-purpose-type: [productivity, automation, development]
+description: Complete CORE skill installation - the foundational skill that governs PAI system operation, architecture, and all system-level configuration
+type: skill
+purpose-type: [infrastructure, configuration, foundation]
 platform: claude-code
-dependencies:
-  - pai-hook-system (required) - Hooks enable session context loading and events
-  - pai-history-system (optional) - History capture for skill usage and learnings
-keywords: [core, identity, skills, routing, architecture, installation, foundation, personality, response-format, principles, user-config, system-config]
+dependencies: []
+keywords: [core, foundation, system, architecture, configuration, response-format, workflows, delegation, skills, memory, hooks, security, pai]
 ---
 
 <p align="center">
-  <img src="../icons/pai-core-install.png" alt="Kai Core Install" width="256">
+  <img src="../icons/pai-core-install.png" alt="PAI Core Install" width="256">
 </p>
 
-# PAI Core Install (pai-core-install)
+# PAI Core Install
 
-> The complete foundation for Personal AI Infrastructure - skill routing, identity framework, USER/SYSTEM configuration, MEMORY system, settings template, and architecture tracking in one unified pack.
+> The foundational skill that governs PAI system operation - auto-loads at session start to provide architecture documentation, response formats, workflow routing, and system-level configuration.
 
-> **Installation:** This pack is designed for AI-assisted installation. Give this directory to your AI and ask it to install using the wizard in `INSTALL.md`. The installation dynamically adapts to your system state. See [AI-First Installation Philosophy](../../README.md#ai-first-installation-philosophy) for details.
+## Installation Prompt
+
+You are receiving a PAI Pack - a modular upgrade for AI agent systems.
+
+**What is PAI?** See: [PAI Project Overview](../../README.md#what-is-pai)
+
+**What is a Pack?** See: [Pack System](../../README.md#the-journey-pai-v1x--v20)
+
+This pack installs the **CORE skill** - the brain of PAI. CORE is:
+
+- **Auto-loading** - Activates at every session start
+- **Authoritative** - The single source of truth for how PAI operates
+- **Foundational** - Other skills depend on CORE for configuration and routing
+
+Without CORE, your PAI system has no:
+- Response format standards
+- Workflow routing
+- System architecture documentation
+- Security protocols
+- Memory system integration
+
+**Core principle:** CORE is the operating system of PAI - everything else builds on it.
+
+Please follow the installation instructions in INSTALL.md to integrate this pack into your infrastructure.
 
 ---
 
-## What This Pack Provides
-
-**Part 1: Skill System**
-- **SKILL.md Format**: Standardized structure for all capabilities
-- **Intent Matching**: AI activates skills based on natural language triggers
-- **Workflow Routing**: Skills route to specific step-by-step procedures
-- **Dynamic Loading**: Only load context when actually needed
-- **Skill Discovery**: Search and browse available skills
-
-**Part 2: Identity Framework**
-- **Mandatory Response Format**: Structured output with emoji sections
-- **Personality Calibration**: Numeric precision for traits (enthusiasm, precision, etc.)
-- **Operating Constitution**: Core values and non-negotiable principles
-- **15 Founding Principles**: Architectural philosophy for building AI infrastructure
-- **First-Person Voice**: Natural, embodied communication
-
-**Part 3: USER/SYSTEM Configuration Architecture** (NEW in v1.1.0)
-- **USER/ Directory**: Personal configuration (identity, contacts, preferences)
-- **SYSTEM/ Directory**: System architecture (skill system, hooks, memory, delegation)
-- **Separation of Concerns**: User data stays private, system config is shareable
-- **Extensive Documentation**: Every file has comprehensive headers
-
-**Part 4: MEMORY System** (NEW in v1.2.0)
-- **Skeleton Structure**: Pre-built directory tree for session data
-- **11 Subdirectories**: research, sessions, learnings, decisions, execution, security, recovery, raw-outputs, backups, State, History
-- **Documentation**: README explaining each directory's purpose
-- **Privacy-Aware**: Guidelines for what to gitignore
-
-**Part 5: Settings Template** (NEW in v1.2.0)
-- **settings.json.template**: Complete hook configuration template
-- **Full Hook Structure**: All hook events pre-configured with $PAI_DIR paths
-- **Source Annotations**: Each hook marked with source pack (pai-hook-system, pai-history-system)
-- **Environment Variables**: PAI_DIR, token limits, timeouts
-
-**Part 6: Security System** (NEW in v1.3.0)
-- **PAISECURITYSYSTEM/ Directory**: 8-file comprehensive security architecture
-- **Three-Layer Model**: settings.json permissions → SecurityValidator hook → RecoveryJournal hook
-- **patterns.yaml**: Single source of truth for security rules (blocked, confirm, alert)
-- **Prompt Injection Defense**: Protocol for handling external content attacks
-- **Command Injection Prevention**: Shell safety and input validation patterns
-- **Repository Separation**: Private vs public repo management
-
-**Part 7: Architecture Tracking**
-- **PAI Architecture.md**: Auto-generated tracking of installed packs, bundles, plugins
-- **Upgrade History**: Running record of all changes to your PAI system
-- **System Health**: Status checks for all installed components
-
-## Architecture Overview
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│              PAI CORE STRUCTURE                                  │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                 │
-│  skills/CORE/                                                   │
-│  ├── SKILL.md              # Main entry point                   │
-│  ├── USER/                 # Personal configuration (v1.1.0)    │
-│  │   ├── BASICINFO.md      # Name, email, social handles        │
-│  │   ├── CONTACTS.md       # Contact directory                  │
-│  │   ├── DAIDENTITY.md     # AI name, voice, personality        │
-│  │   ├── TECHSTACKPREFERENCES.md  # Tech preferences            │
-│  │   ├── ASSETMANAGEMENT.md       # Digital assets              │
-│  │   ├── PAISECURITYSYSTEM/       # Security architecture (v1.3.0)│
-│  │   │   ├── README.md     # Security overview                  │
-│  │   │   ├── ARCHITECTURE.md # Three-layer model                │
-│  │   │   ├── patterns.yaml # Security rules                     │
-│  │   │   └── ...           # More security docs                 │
-│  │   └── ...               # More user config                   │
-│  └── SYSTEM/               # System architecture (v1.1.0)       │
-│      ├── PAISYSTEMARCHITECTURE.md  # 15 Founding Principles     │
-│      ├── SKILLSYSTEM.md    # Skill configuration                │
-│      ├── MEMORYSYSTEM.md   # Memory architecture                │
-│      ├── THEHOOKSYSTEM.md  # Hook lifecycle                     │
-│      ├── AGENTS.md         # Agent trait system                 │
-│      └── ...               # More system docs                   │
-│                                                                 │
-└─────────────────────────────────────────────────────────────────┘
-```
-
-### Skill Loading Tiers
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│              SKILL LOADING TIERS                                 │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                 │
-│  TIER 0: CORE (Automatic)                                       │
-│  ════════════════════════                                       │
-│  • Loads at session start                                       │
-│  • NO trigger required                                          │
-│  • ALWAYS present                                               │
-│                                                                 │
-│─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─│
-│                                                                 │
-│  TIER 1: Frontmatter Only (System Prompt)                       │
-│  ════════════════════════════════════════                       │
-│  • SKILL.md frontmatter always in context                       │
-│  • USE WHEN triggers enable intent routing                      │
-│  • Minimal token cost                                           │
-│                                                                 │
-│─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─│
-│                                                                 │
-│  TIER 2: Full Skill (On Invoke)                                 │
-│  ════════════════════════════════                               │
-│  • SKILL.md body loads when triggered                           │
-│  • Workflow routing table available                             │
-│                                                                 │
-│─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─│
-│                                                                 │
-│  TIER 3: Workflow (On Route)                                    │
-│  ════════════════════════════                                   │
-│  • Specific workflow.md loads on routing                        │
-│  • Step-by-step instructions                                    │
-│                                                                 │
-└─────────────────────────────────────────────────────────────────┘
-```
-
 ## What's Included
 
-### Core Files
-
-| Component | File | Purpose |
-|-----------|------|---------|
-| CORE skill template | `src/skills/CORE/SKILL.md` | Main identity and routing hub |
-| CreateSkill skill | `src/skills/CreateSkill/SKILL.md` | Meta-skill for creating skills |
-| UpdateDocumentation | `src/skills/CORE/Workflows/UpdateDocumentation.md` | Architecture refresh workflow |
-
-### USER/ Templates (v1.1.0, updated v1.4.0)
-
-| File | Purpose |
-|------|---------|
-| `README.md` | Directory overview |
-| `BASICINFO.md` | Name, email, social handles |
-| `CONTACTS.md` | Contact directory |
-| `DAIDENTITY.md` | AI name, voice, personality (hooks read this) |
-| `TECHSTACKPREFERENCES.md` | Tech stack preferences |
-| `ASSETMANAGEMENT.md` | Digital assets registry |
-| `DEFINITIONS.md` | Canonical definitions |
-| `CORECONTENT.md` | Essential content registry |
-| `RESUME.md` | Professional background |
-| `REMINDERS.md` | Reminder system |
-| `ALGOPREFS.md` | AI behavior customizations |
-| `ART.md` | Visual style guidelines |
-| `ABOUTME.md` | Personal background |
-| `TELOS.md` | Life operating system |
-
-### PAISECURITYSYSTEM/ Templates (v1.3.0)
-
-| File | Purpose |
-|------|---------|
-| `README.md` | Security system overview and philosophy |
-| `ARCHITECTURE.md` | Three-layer security model |
-| `patterns.yaml` | Security rules (blocked, confirm, alert) |
-| `PROMPTINJECTION.md` | Prompt injection defense protocol |
-| `COMMANDINJECTION.md` | Shell safety and input validation |
-| `PROJECTRULES.md` | Project-specific security rules |
-| `REPOSITORIES.md` | Private vs public repo separation |
-| `QUICKREF.md` | Quick reference card |
-
-### SYSTEM/ Templates (v1.1.0)
-
-| File | Purpose |
-|------|---------|
-| `README.md` | Directory overview |
-| `PAISYSTEMARCHITECTURE.md` | 15 Founding Principles |
-| `SKILLSYSTEM.md` | Skill configuration system |
-| `MEMORYSYSTEM.md` | Memory architecture |
-| `THEHOOKSYSTEM.md` | Hook lifecycle |
-| `THEDELEGATIONSYSTEM.md` | Delegation patterns |
-| `THENOTIFICATIONSYSTEM.md` | Notification channels |
-| `AGENTS.md` | Agent trait system |
-| `ACTIONS.md` | Multi-step workflows |
-| `PIPELINES.md` | Pipeline orchestration |
-| `TOOLS.md` | CLI utilities reference |
-| `CLIFIRSTARCHITECTURE.md` | CLI-First pattern |
-| `THEFABRICSYSTEM.md` | Fabric patterns |
-| `SCRAPINGREFERENCE.md` | Web scraping |
-| `TERMINALTABS.md` | Terminal management |
-| `DOCUMENTATIONINDEX.md` | Documentation index |
-| `BACKUPS.md` | Backup strategies |
-
-### Tools
-
-| Tool | Purpose |
-|------|---------|
-| `SkillSearch.ts` | Search skill index |
-| `GenerateSkillIndex.ts` | Build skill index |
-| `PaiArchitecture.ts` | Generate architecture tracking |
+| Component | Location | Purpose |
+|-----------|----------|---------|
+| SKILL.md | `skills/CORE/SKILL.md` | Main skill definition with routing and configuration |
+| SYSTEM docs | `skills/CORE/SYSTEM/` | 19 architecture and system documentation files |
+| USER templates | `skills/CORE/USER/` | Empty user customization structure with READMEs |
+| WORK templates | `skills/CORE/WORK/` | Sensitive work directory placeholder |
+| Workflows | `skills/CORE/Workflows/` | 4 core workflows (Delegation, SessionContinuity, etc.) |
+| Tools | `skills/CORE/Tools/` | 4 CLI tools (Inference, SessionProgress, etc.) |
 
 **Summary:**
-- **USER/ files:** 14 templates
-- **PAISECURITYSYSTEM/ files:** 8 templates (directory-based security)
-- **SYSTEM/ files:** 17 templates
-- **MEMORY/ directories:** 11 skeleton directories
-- **Config files:** 1 (settings.json.template)
-- **Total files created:** 62+
-- **Hooks registered:** 0 (uses hook system from pai-hook-system)
-- **Dependencies:** pai-hook-system (required), pai-history-system (optional)
+- **Files created:** 34
+- **SYSTEM docs:** 19 architecture files
+- **Workflows:** 4
+- **Tools:** 4
+- **Dependencies:** None (foundation pack)
 
-## The 15 Founding Principles
+---
 
-1. **Clear Thinking + Prompting is King** - Good prompts come from clear thinking
-2. **Scaffolding > Model** - Architecture matters more than which model
-3. **As Deterministic as Possible** - Same input → Same output
-4. **Code Before Prompts** - Use AI only for what needs intelligence
-5. **Spec / Test / Evals First** - Define expected behavior before building
-6. **UNIX Philosophy** - Do one thing well, compose tools
-7. **ENG / SRE Principles** - Apply software engineering to AI systems
-8. **CLI as Interface** - Every operation accessible via command line
-9. **Goal → Code → CLI → Prompts → Agents** - The proper pipeline
-10. **Meta / Self Update System** - System should improve itself
-11. **Custom Skill Management** - Skills are the organizational unit
-12. **Custom History System** - Automatic capture of valuable work
-13. **Custom Agent Personalities** - Different voices for different tasks
-14. **Science as Cognitive Loop** - Hypothesis → Experiment → Measure → Iterate
-15. **Permission to Fail** - Uncertainty is honest, guessing is not
+## The Concept and/or Problem
+
+AI agents are powerful but lack structure. Without a foundational system:
+
+**Without Response Standards:**
+- Every response has different format
+- No consistent way to communicate
+- Voice integration impossible
+- Users can't predict what they'll get
+
+**Without Architecture Documentation:**
+- No single source of truth
+- Configuration scattered everywhere
+- New features break old ones
+- Debugging is guesswork
+
+**Without Workflow Routing:**
+- User intent to action is fuzzy
+- Same request handled differently each time
+- No way to extend functionality predictably
+- Integration points undefined
+
+**Without SYSTEM/USER Separation:**
+- Updates overwrite customizations
+- Personal data leaks to public repos
+- No safe way to personalize
+
+**The Fundamental Problem:**
+
+AI systems need scaffolding - not just capabilities, but the organizational structure that makes capabilities reliable, extensible, and maintainable. CORE provides that scaffolding.
+
+---
+
+## The Solution
+
+CORE solves this through **layered architecture with explicit contracts**:
+
+### Layer 1: Response Format
+Every AI response follows a predictable structure:
+- SUMMARY for quick understanding
+- ANALYSIS for findings
+- ACTIONS for what was done
+- RESULTS for outcomes
+- Voice output for TTS integration
+
+### Layer 2: SYSTEM/USER Two-Tier
+Configuration that never conflicts:
+- SYSTEM: Base defaults, updated with PAI
+- USER: Your customizations, never touched
+
+### Layer 3: Workflow Routing
+Intent maps to action predictably:
+- Triggers in SKILL.md route to workflows
+- Workflows document exact procedures
+- Tools provide CLI interfaces
+
+### Layer 4: Documentation as Code
+Architecture docs that stay current:
+- PAISYSTEMARCHITECTURE.md: Founding principles
+- SKILLSYSTEM.md: How skills work
+- MEMORYSYSTEM.md: How history works
+- And 16 more specialized docs
+
+---
+
+## What Makes This Different
+
+This sounds similar to "system prompts" which also configure AI behavior. What makes this approach different?
+
+CORE is not a prompt - it's an operating system. While system prompts are static text that gets prepended to conversations, CORE is a dynamic skill with routing tables, documentation hierarchies, and tool integrations. It loads selectively based on context, routes intent to specific workflows, and maintains separation between system defaults and user customizations.
+
+- System prompts are static; CORE routes dynamically
+- Prompts overwrite on update; USER tier is protected
+- Instructions are flat; CORE has explicit layer hierarchy
+- Configuration is scattered; CORE centralizes everything
+
+---
+
+## Configuration
+
+**Environment variables (add to shell profile or .env):**
+
+```bash
+# Required
+export PAI_DIR="$HOME/.claude"
+
+# Optional - for voice integration
+export DA="YourAIName"
+export TIME_ZONE="America/Los_Angeles"
+```
+
+**settings.json configuration:**
+
+```json
+{
+  "daidentity": {
+    "name": "YourAIName",
+    "fullName": "Your AI Full Name",
+    "voiceId": "your-elevenlabs-voice-id"
+  },
+  "principal": {
+    "name": "YourName",
+    "timezone": "America/Los_Angeles"
+  }
+}
+```
+
+---
+
+## Customization
+
+### Recommended Customization
+
+**Populate your USER directory:**
+
+After installing CORE, personalize your PAI by creating files in `USER/`:
+
+1. **ABOUTME.md** - Tell your AI about yourself
+2. **BASICINFO.md** - Name, timezone, location
+3. **DAIDENTITY.md** - Customize your AI's personality
+4. **RESPONSEFORMAT.md** - Override default response format
+
+**Why:** USER files make PAI *yours*. Without them, you get generic defaults.
+
+**Process:**
+1. Read the README.md files in each USER subdirectory
+2. Create the recommended files with your personal content
+3. Your AI will use this context in every session
+
+**Expected Outcome:** An AI that knows you, speaks in your preferred style, and maintains your preferences across sessions.
+
+### Optional Customization
+
+| Customization | Location | Impact |
+|---------------|----------|--------|
+| Security patterns | `USER/PAISECURITYSYSTEM/patterns.yaml` | Custom sensitive data detection |
+| Skill preferences | `USER/SKILLCUSTOMIZATIONS/{Skill}/` | Per-skill behavior overrides |
+| Banner config | `USER/BANNER/config.yaml` | Session start display |
+| Terminal settings | `USER/TERMINAL/preferences.yaml` | Terminal appearance |
+
+---
 
 ## Credits
 
-- **Author:** Daniel Miessler
-- **Origin:** Extracted from production Kai system (2024-2026)
-- **License:** MIT
+- **Original concept**: Daniel Miessler - developed as the foundation of PAI (Personal AI Infrastructure)
+- **Inspired by**: Unix philosophy (modular tooling), Anthropic's agent harness patterns, and engineering best practices
 
-## Works Well With
-
-- **pai-hook-system** (required) - Enables automatic CORE loading at session start
-- **pai-history-system** - Skills can reference past learnings and capture new ones
-- **pai-voice-system** - Response format drives voice output
+---
 
 ## Changelog
 
-### 1.4.0 - 2026-01-08
-- **NEW: DAIDENTITY.md** - Consolidated identity file that hooks read from (replaces IDENTITY.md)
-- **Response format update** - Changed `🎯 COMPLETED:` to `🗣️ [AI_NAME]:` for voice integration
-- SKILL.md now includes curl pattern for voice server notifications
-- THENOTIFICATIONSYSTEM.md updated with workflow invocation patterns
-- AGENTS.md now references pai-voice-system for voice implementation
-- All files updated to reference DAIDENTITY.md instead of IDENTITY.md
-
-### 1.3.0 - 2026-01-08
-- **NEW: PAISECURITYSYSTEM/** - 8-file directory-based security architecture replacing SECURITYSYSTEM.md
-- Three-layer security model (settings.json → SecurityValidator → RecoveryJournal)
-- patterns.yaml for centralized security rules (blocked, confirm, alert levels)
-- Prompt injection defense protocol
-- Command injection and shell safety guide
-- Repository separation (private vs public) documentation
-- Project-specific security rules template
-- Quick reference card for common security questions
-- Removed single-file SECURITYSYSTEM.md (superseded by PAISECURITYSYSTEM/)
-
-### 1.2.0 - 2026-01-08
-- **NEW: MEMORY/ skeleton** - 11-directory structure for session history, learnings, state
-- **NEW: settings.json.template** - Complete hook configuration with all events
-- Hook template includes source annotations (pai-hook-system, pai-history-system)
-- MEMORY README with directory purpose documentation
-- Updated INSTALL.md with MEMORY and settings installation steps
-- Updated VERIFY.md with new verification checks
-
-### 1.1.0 - 2026-01-08
-- **NEW: USER/ directory** - 15 personal configuration templates
-- **NEW: SYSTEM/ directory** - 17 system architecture templates
-- Added extensive documentation headers to all files
-- Files include customization checklists and related file references
-- Separation of personal data (USER/) from system architecture (SYSTEM/)
-- Updated installation and verification guides
-
-### 1.0.1 - 2026-01-03
-- Fixed CreateSkill SKILL.md - removed broken workflow references, now points to SkillSystem.md
-- Improved skill validation compliance
-
-### 1.0.0 - 2025-12-29
-- Initial release
+### 2.3.0 - 2026-01-14
+- Initial pack release for PAI v2.3
+- Includes complete SYSTEM documentation (19 files)
+- USER directory templates with README guides
+- WORK directory template for sensitive content
+- 4 core workflows (Delegation, SessionContinuity, ImageProcessing, Transcription)
+- 4 CLI tools (Inference, SessionProgress, FeatureRegistry, SkillSearch)
+- CRITICAL: USER directory is empty template - populate with your personal content

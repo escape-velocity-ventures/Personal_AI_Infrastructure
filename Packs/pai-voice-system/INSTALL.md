@@ -1,4 +1,4 @@
-# PAI Voice System v1.0.0 - Installation Guide
+# PAI Voice System v2.3.0 - Installation Guide
 
 **This guide is designed for AI agents installing this pack into a user's infrastructure.**
 
@@ -17,7 +17,7 @@
 
 Before starting, greet the user:
 ```
-"I'm installing PAI Voice System v1.0.0 - Text-to-speech voice output for your AI assistant using ElevenLabs.
+"I'm installing PAI Voice System v2.3.0 - Voice notification server. This enables spoken notifications using ElevenLabs for natural speech, with fallback to macOS built-in voice.
 
 Let me analyze your system and guide you through installation."
 ```
@@ -31,57 +31,60 @@ Let me analyze your system and guide you through installation."
 ### 1.1 Run These Commands
 
 ```bash
-# Check for PAI directory
 PAI_CHECK="${PAI_DIR:-$HOME/.claude}"
 echo "PAI_DIR: $PAI_CHECK"
 
 # Check if pai-core-install is installed (REQUIRED)
 if [ -f "$PAI_CHECK/skills/CORE/SKILL.md" ]; then
-  echo "✓ pai-core-install is installed"
+  echo "OK pai-core-install is installed"
 else
-  echo "❌ pai-core-install NOT installed - REQUIRED!"
-fi
-
-# Check if pai-hook-system is installed (REQUIRED)
-if [ -f "$PAI_CHECK/hooks/lib/observability.ts" ]; then
-  echo "✓ pai-hook-system is installed"
-else
-  echo "❌ pai-hook-system NOT installed - REQUIRED!"
+  echo "ERROR pai-core-install NOT installed - REQUIRED!"
 fi
 
 # Check for existing VoiceServer
 if [ -d "$PAI_CHECK/VoiceServer" ]; then
-  echo "⚠️  Existing VoiceServer found at: $PAI_CHECK/VoiceServer"
-  ls -la "$PAI_CHECK/VoiceServer/"
+  echo "WARNING Existing VoiceServer found at: $PAI_CHECK/VoiceServer"
+  ls "$PAI_CHECK/VoiceServer/"
 else
-  echo "✓ No existing VoiceServer (clean install)"
+  echo "OK No existing VoiceServer (clean install)"
 fi
 
-# Check for Bun runtime
+# Check for Bun runtime (REQUIRED)
 if command -v bun &> /dev/null; then
-  echo "✓ Bun is installed: $(bun --version)"
+  echo "OK Bun is installed: $(bun --version)"
 else
-  echo "❌ Bun not installed - REQUIRED!"
+  echo "ERROR Bun not installed - REQUIRED!"
 fi
 
-# Check for ElevenLabs API key
-echo ""
-echo "API Key Status:"
-[ -n "$ELEVENLABS_API_KEY" ] && echo "✓ ELEVENLABS_API_KEY: Set" || echo "⚠️  ELEVENLABS_API_KEY: NOT SET (required for voice)"
-
-# Check for port availability
+# Check if port 8888 is in use
 if lsof -i :8888 &> /dev/null; then
-  echo "⚠️  Port 8888 is in use"
+  echo "WARNING Port 8888 is in use (existing voice server?)"
   lsof -i :8888 | head -3
 else
-  echo "✓ Port 8888 is available (voice server)"
+  echo "OK Port 8888 is available"
 fi
 
-# Check macOS audio
-if command -v afplay &> /dev/null; then
-  echo "✓ afplay available (macOS audio)"
+# Check for ElevenLabs credentials
+if [ -n "$ELEVENLABS_API_KEY" ]; then
+  echo "OK ELEVENLABS_API_KEY is set in environment"
+elif grep -q "ELEVENLABS_API_KEY" ~/.env 2>/dev/null; then
+  echo "OK ELEVENLABS_API_KEY found in ~/.env"
 else
-  echo "⚠️  afplay not found (may need alternative audio player)"
+  echo "NOTE ELEVENLABS_API_KEY not set (will use macOS voice)"
+fi
+
+# Check for backup directories with credentials
+for backup in "$HOME/.claude.bak" "$HOME/.claude-backup" "$HOME/.claude-old" "$HOME/.pai-backup"; do
+  if [ -f "$backup/.env" ]; then
+    echo "NOTE Found backup with .env: $backup"
+  fi
+done
+
+# Check macOS version (for audio playback)
+if [[ "$OSTYPE" == "darwin"* ]]; then
+  echo "OK macOS detected - audio playback available"
+else
+  echo "WARNING Not macOS - audio playback may not work"
 fi
 ```
 
@@ -91,22 +94,16 @@ Tell the user what you found:
 ```
 "Here's what I found on your system:
 - pai-core-install: [installed / NOT INSTALLED - REQUIRED]
-- pai-hook-system: [installed / NOT INSTALLED - REQUIRED]
-- Existing VoiceServer: [Yes at path / No]
+- Existing VoiceServer: [Yes / No]
 - Bun runtime: [installed vX.X / NOT INSTALLED - REQUIRED]
-- ELEVENLABS_API_KEY: [set / not set]
 - Port 8888: [available / in use]
-- Audio playback: [afplay available / not available]"
+- ElevenLabs API key: [configured / not configured]
+- Backup directories with credentials: [found / none]"
 ```
 
-**STOP if pai-core-install, pai-hook-system, or Bun is not installed.** Tell the user:
+**STOP if pai-core-install or Bun is not installed.** Tell the user:
 ```
-"pai-core-install and pai-hook-system are required. Please install them first, then return to install this pack.
-
-Install order:
-1. pai-core-install
-2. pai-hook-system
-3. pai-voice-system (this pack)"
+"pai-core-install and Bun are required. Please install them first, then return to install this pack."
 ```
 
 ---
@@ -115,9 +112,9 @@ Install order:
 
 **Use AskUserQuestion tool at each decision point.**
 
-### Question 1: Conflict Resolution (if existing found)
+### Question 1: Conflict Resolution (if existing VoiceServer found)
 
-**Only ask if existing VoiceServer detected:**
+**Only ask if existing VoiceServer directory detected:**
 
 ```json
 {
@@ -125,54 +122,82 @@ Install order:
   "question": "Existing VoiceServer detected. How should I proceed?",
   "multiSelect": false,
   "options": [
-    {"label": "Backup and Replace (Recommended)", "description": "Creates timestamped backup, then installs new version"},
-    {"label": "Replace Without Backup", "description": "Overwrites existing without backup"},
-    {"label": "Abort Installation", "description": "Cancel installation, keep existing"}
+    {"label": "Backup and replace (Recommended)", "description": "Creates timestamped backup, stops existing server, installs fresh"},
+    {"label": "Replace without backup", "description": "Stops existing server and overwrites files"},
+    {"label": "Cancel", "description": "Abort installation"}
   ]
 }
 ```
 
-### Question 2: ElevenLabs Setup
+### Question 2: Port 8888 Conflict (if port in use)
 
-**Only ask if ELEVENLABS_API_KEY is not set:**
+**Only ask if port 8888 is in use:**
 
 ```json
 {
-  "header": "API Key",
-  "question": "ElevenLabs API key not found. How should I proceed?",
+  "header": "Port Conflict",
+  "question": "Port 8888 is in use. Should I stop the existing process?",
   "multiSelect": false,
   "options": [
-    {"label": "Create .env template (Recommended)", "description": "Creates template file for you to add API key later"},
-    {"label": "I'll set it manually", "description": "Skip .env creation, set key in shell profile"},
-    {"label": "Continue without voice", "description": "Install server but voice won't work until key is set"}
+    {"label": "Yes, stop it (Recommended)", "description": "Kill the process using port 8888"},
+    {"label": "Cancel", "description": "Abort installation - resolve manually"}
   ]
 }
 ```
 
-### Question 3: Auto-Start Configuration
+### Question 3: ElevenLabs Configuration
+
+**Only ask if no ElevenLabs key detected:**
 
 ```json
 {
-  "header": "Auto-Start",
-  "question": "How should the voice server start?",
+  "header": "Voice",
+  "question": "Voice notifications use ElevenLabs for natural speech. Do you have an ElevenLabs account?",
   "multiSelect": false,
   "options": [
-    {"label": "Manual start (Recommended)", "description": "Start with manage.sh when you want voice output"},
-    {"label": "Start on login", "description": "Create a LaunchAgent to auto-start (macOS only)"}
+    {"label": "Yes, I have an API key", "description": "I'll configure ElevenLabs for natural voice"},
+    {"label": "Help me get one", "description": "Guide me through ElevenLabs signup"},
+    {"label": "Use macOS voice (Recommended)", "description": "Use built-in macOS voice - can add ElevenLabs later"}
   ]
 }
 ```
 
-### Question 4: Final Confirmation
+**If user chooses "Help me get one":**
+```
+"Here's how to get an ElevenLabs API key:
+1. Go to https://elevenlabs.io
+2. Create a free account
+3. Go to Settings > API Keys
+4. Copy your API key
+5. Come back and we'll configure it"
+```
+
+### Question 4: Restore from Backup
+
+**Only ask if backup directories with .env files were found:**
+
+```json
+{
+  "header": "Restore",
+  "question": "I found ElevenLabs credentials in a backup. Should I restore them?",
+  "multiSelect": false,
+  "options": [
+    {"label": "Yes, restore credentials (Recommended)", "description": "Copy API key and voice ID from backup"},
+    {"label": "No, start fresh", "description": "Don't restore anything from backups"}
+  ]
+}
+```
+
+### Question 5: Final Confirmation
 
 ```json
 {
   "header": "Install",
-  "question": "Ready to install PAI Voice System v1.0.0?",
+  "question": "Ready to install PAI Voice System v2.3.0?",
   "multiSelect": false,
   "options": [
-    {"label": "Yes, install now (Recommended)", "description": "Proceeds with installation using choices above"},
-    {"label": "Show me what will change", "description": "Lists all files that will be created/modified"},
+    {"label": "Yes, install now (Recommended)", "description": "Proceeds with installation"},
+    {"label": "Show me what will change", "description": "Lists all files that will be created"},
     {"label": "Cancel", "description": "Abort installation"}
   ]
 }
@@ -180,16 +205,28 @@ Install order:
 
 ---
 
-## Phase 3: Backup (If Needed)
+## Phase 3: Backup and Cleanup
 
-**Only execute if user chose "Backup and Replace":**
+**Execute based on user choices:**
+
+### Backup (if user chose "Backup and replace")
 
 ```bash
 PAI_DIR="${PAI_DIR:-$HOME/.claude}"
 BACKUP_DIR="$PAI_DIR/Backups/voice-system-$(date +%Y%m%d-%H%M%S)"
-mkdir -p "$BACKUP_DIR"
-[ -d "$PAI_DIR/VoiceServer" ] && cp -r "$PAI_DIR/VoiceServer" "$BACKUP_DIR/"
-echo "Backup created at: $BACKUP_DIR"
+
+if [ -d "$PAI_DIR/VoiceServer" ]; then
+  mkdir -p "$BACKUP_DIR"
+  cp -r "$PAI_DIR/VoiceServer" "$BACKUP_DIR/"
+  echo "Backup created at: $BACKUP_DIR"
+fi
+```
+
+### Stop Existing Server (if port 8888 was in use)
+
+```bash
+lsof -ti :8888 | xargs kill -9 2>/dev/null || true
+echo "Stopped existing process on port 8888"
 ```
 
 ---
@@ -201,167 +238,121 @@ echo "Backup created at: $BACKUP_DIR"
 ```json
 {
   "todos": [
-    {"content": "Create VoiceServer directory", "status": "pending", "activeForm": "Creating VoiceServer directory"},
-    {"content": "Copy voice server files", "status": "pending", "activeForm": "Copying voice server files"},
-    {"content": "Copy voice hooks", "status": "pending", "activeForm": "Copying voice hooks"},
-    {"content": "Copy prosody enhancer", "status": "pending", "activeForm": "Copying prosody enhancer"},
-    {"content": "Install dependencies", "status": "pending", "activeForm": "Installing dependencies"},
-    {"content": "Configure environment", "status": "pending", "activeForm": "Configuring environment"},
-    {"content": "Register hooks in settings.json", "status": "pending", "activeForm": "Registering hooks"},
+    {"content": "Create directory structure", "status": "pending", "activeForm": "Creating directory structure"},
+    {"content": "Copy VoiceServer files from pack", "status": "pending", "activeForm": "Copying VoiceServer files"},
+    {"content": "Configure credentials", "status": "pending", "activeForm": "Configuring credentials"},
+    {"content": "Start voice server", "status": "pending", "activeForm": "Starting voice server"},
+    {"content": "Test voice notification", "status": "pending", "activeForm": "Testing voice notification"},
     {"content": "Run verification", "status": "pending", "activeForm": "Running verification"}
   ]
 }
 ```
 
-### 4.1 Create VoiceServer Directory
+### 4.1 Create Directory Structure
 
-**Mark todo "Create VoiceServer directory" as in_progress.**
+**Mark todo "Create directory structure" as in_progress.**
 
 ```bash
 PAI_DIR="${PAI_DIR:-$HOME/.claude}"
 mkdir -p "$PAI_DIR/VoiceServer"
-mkdir -p "$PAI_DIR/hooks/lib"
 ```
 
 **Mark todo as completed.**
 
-### 4.2 Copy Voice Server Files
+### 4.2 Copy VoiceServer Files
 
-**Mark todo "Copy voice server files" as in_progress.**
+**Mark todo "Copy VoiceServer files from pack" as in_progress.**
 
 ```bash
 PACK_DIR="$(pwd)"
 PAI_DIR="${PAI_DIR:-$HOME/.claude}"
 
-# Copy voice server
-cp "$PACK_DIR/src/voice/server.ts" "$PAI_DIR/VoiceServer/"
-
-# Copy voice personalities configuration
-cp "$PACK_DIR/config/voice-personalities.json" "$PAI_DIR/VoiceServer/"
-
-# Copy management script
-cp "$PACK_DIR/src/voice/manage.sh" "$PAI_DIR/VoiceServer/"
-
-# Make scripts executable
-chmod +x "$PAI_DIR/VoiceServer/"*.sh
+cp -r "$PACK_DIR/src/VoiceServer/"* "$PAI_DIR/VoiceServer/"
+chmod +x "$PAI_DIR/VoiceServer/"*.sh 2>/dev/null || true
 ```
 
-**Files copied:**
-- `server.ts` - ElevenLabs TTS HTTP server (port 8888)
-- `voice-personalities.json` - Agent voice configurations with stability/similarity settings
-- `manage.sh` - Unified management script (start/stop/restart/status/test)
+**Files included:**
+- `server.ts` - Main voice server
+- `package.json` - Dependencies
+- Management scripts
 
 **Mark todo as completed.**
 
-### 4.3 Copy Voice Hooks
+### 4.3 Configure Credentials
 
-**Mark todo "Copy voice hooks" as in_progress.**
+**Mark todo "Configure credentials" as in_progress.**
 
-```bash
-PACK_DIR="$(pwd)"
-PAI_DIR="${PAI_DIR:-$HOME/.claude}"
-
-cp "$PACK_DIR/src/hooks/stop-hook-voice.ts" "$PAI_DIR/hooks/"
-cp "$PACK_DIR/src/hooks/subagent-stop-hook-voice.ts" "$PAI_DIR/hooks/"
-```
-
-**Files copied:**
-- `stop-hook-voice.ts` - Extracts and speaks 🗣️ line on session stop
-- `subagent-stop-hook-voice.ts` - Speaks subagent completions
-
-**Mark todo as completed.**
-
-### 4.4 Copy Prosody Enhancer
-
-**Mark todo "Copy prosody enhancer" as in_progress.**
+**If user provided an ElevenLabs API key:**
 
 ```bash
-PACK_DIR="$(pwd)"
-PAI_DIR="${PAI_DIR:-$HOME/.claude}"
-
-cp "$PACK_DIR/src/hooks/lib/prosody-enhancer.ts" "$PAI_DIR/hooks/lib/"
-```
-
-**Files copied:**
-- `prosody-enhancer.ts` - Adds SSML prosody tags for natural speech
-
-**Mark todo as completed.**
-
-### 4.5 Install Dependencies
-
-**Mark todo "Install dependencies" as in_progress.**
-
-```bash
-PAI_DIR="${PAI_DIR:-$HOME/.claude}"
-cd "$PAI_DIR/VoiceServer"
-bun add @elysiajs/cors
-```
-
-**Mark todo as completed.**
-
-### 4.6 Configure Environment (If User Chose Yes)
-
-**Mark todo "Configure environment" as in_progress.**
-
-**Only execute if user chose to create .env template:**
-
-```bash
-PAI_DIR="${PAI_DIR:-$HOME/.claude}"
-
-# Create or append to .env
-if [ ! -f "$PAI_DIR/.env" ]; then
-  cat > "$PAI_DIR/.env" << 'EOF'
-# PAI Voice System Configuration
-
-# ElevenLabs API (REQUIRED for voice)
-# Get your key from: https://elevenlabs.io → Profile → API key
-ELEVENLABS_API_KEY=your-api-key-here
-
-# Default voice ID (optional - uses default if not set)
-# Browse voices at: https://elevenlabs.io/voice-library
-ELEVENLABS_VOICE_ID=your-voice-id-here
-
-# Voice server port (optional - default 8888)
-VOICE_SERVER_PORT=8888
-EOF
-  echo "Created $PAI_DIR/.env - Please add your ElevenLabs API key"
-else
-  # Check if ElevenLabs config already exists
-  if ! grep -q "ELEVENLABS_API_KEY" "$PAI_DIR/.env"; then
-    cat >> "$PAI_DIR/.env" << 'EOF'
-
-# PAI Voice System Configuration
-ELEVENLABS_API_KEY=your-api-key-here
-ELEVENLABS_VOICE_ID=your-voice-id-here
-VOICE_SERVER_PORT=8888
-EOF
-    echo "Added ElevenLabs config to $PAI_DIR/.env"
-  else
-    echo "ElevenLabs config already exists in $PAI_DIR/.env"
-  fi
+# Add to ~/.env if not already present
+if ! grep -q "ELEVENLABS_API_KEY" ~/.env 2>/dev/null; then
+  echo 'ELEVENLABS_API_KEY="USER_PROVIDED_KEY"' >> ~/.env
+  echo "Added ELEVENLABS_API_KEY to ~/.env"
 fi
 ```
 
-Tell the user:
+**If user chose to restore from backup:**
+
+```bash
+# Copy credentials from backup
+BACKUP_ENV="$BACKUP_PATH/.env"
+if [ -f "$BACKUP_ENV" ]; then
+  grep "ELEVENLABS" "$BACKUP_ENV" >> ~/.env
+  echo "Restored ElevenLabs credentials from backup"
+fi
 ```
-"Created/updated .env at $PAI_DIR/.env
 
-Please add your ElevenLabs credentials:
-1. Sign up at https://elevenlabs.io
-2. Get API key from Profile → API key
-3. Choose a voice from the Voice Library
-4. Add both to your .env file"
+**If user chose macOS voice:**
+```
+"Skipping ElevenLabs configuration. Voice server will use macOS built-in voice.
+To enable ElevenLabs later:
+1. Get a key from https://elevenlabs.io
+2. Add to ~/.env: ELEVENLABS_API_KEY=\"your-key-here\""
 ```
 
-**Mark todo as completed (or skip if user declined).**
+**Mark todo as completed.**
 
-### 4.7 Register Hooks in settings.json
+### 4.4 Start Voice Server
 
-**Mark todo "Register hooks in settings.json" as in_progress.**
+**Mark todo "Start voice server" as in_progress.**
 
-Read the hook configuration from `config/settings-hooks.json` and merge it into the user's `~/.claude/settings.json`.
+```bash
+PAI_DIR="${PAI_DIR:-$HOME/.claude}"
 
-**Important:** Merge the hooks, don't replace existing hooks.
+# Kill any existing voice server
+lsof -ti :8888 | xargs kill -9 2>/dev/null || true
+
+# Start the voice server in background
+cd "$PAI_DIR/VoiceServer" && bun run server.ts &
+
+# Wait for server to start
+sleep 2
+
+# Verify it's running
+if curl -s http://localhost:8888/health > /dev/null; then
+  echo "Voice server started on port 8888"
+else
+  echo "WARNING: Voice server may not have started correctly"
+fi
+```
+
+**Mark todo as completed.**
+
+### 4.5 Test Voice Notification
+
+**Mark todo "Test voice notification" as in_progress.**
+
+```bash
+curl -X POST http://localhost:8888/notify \
+  -H "Content-Type: application/json" \
+  -d '{"message": "Voice system installed successfully."}'
+```
+
+Ask the user:
+```
+"How did that sound? Would you like to adjust anything?"
+```
 
 **Mark todo as completed.**
 
@@ -376,41 +367,43 @@ Read the hook configuration from `config/settings-hooks.json` and merge it into 
 ```bash
 PAI_DIR="${PAI_DIR:-$HOME/.claude}"
 
-echo "=== PAI Voice System Verification ==="
+echo "=== PAI Voice System v2.3.0 Verification ==="
 
-# Check VoiceServer files
-echo "Checking VoiceServer files..."
-[ -f "$PAI_DIR/VoiceServer/server.ts" ] && echo "✓ server.ts" || echo "❌ server.ts missing"
-[ -f "$PAI_DIR/VoiceServer/voice-personalities.json" ] && echo "✓ voice-personalities.json" || echo "❌ voice-personalities.json missing"
-[ -x "$PAI_DIR/VoiceServer/manage.sh" ] && echo "✓ manage.sh (executable)" || echo "❌ manage.sh not executable"
+# Check VoiceServer directory
+echo "Checking VoiceServer directory..."
+[ -d "$PAI_DIR/VoiceServer" ] && echo "OK VoiceServer directory exists" || echo "ERROR VoiceServer directory missing"
 
-# Check hook files
+# Check server.ts
 echo ""
-echo "Checking hook files..."
-[ -f "$PAI_DIR/hooks/stop-hook-voice.ts" ] && echo "✓ stop-hook-voice.ts" || echo "❌ stop-hook-voice.ts missing"
-[ -f "$PAI_DIR/hooks/subagent-stop-hook-voice.ts" ] && echo "✓ subagent-stop-hook-voice.ts" || echo "❌ subagent-stop-hook-voice.ts missing"
-[ -f "$PAI_DIR/hooks/lib/prosody-enhancer.ts" ] && echo "✓ prosody-enhancer.ts" || echo "❌ prosody-enhancer.ts missing"
+echo "Checking server files..."
+[ -f "$PAI_DIR/VoiceServer/server.ts" ] && echo "OK server.ts" || echo "ERROR server.ts missing"
 
-# Check API key
+# Check server is running
 echo ""
-echo "Checking configuration..."
-if [ -n "$ELEVENLABS_API_KEY" ]; then
-  echo "✓ ELEVENLABS_API_KEY is set"
+echo "Checking server status..."
+if lsof -i :8888 &> /dev/null; then
+  echo "OK Voice server is running on port 8888"
 else
-  echo "⚠️  ELEVENLABS_API_KEY not set (voice won't work)"
+  echo "ERROR Voice server is not running"
 fi
 
-# Test server start
+# Check health endpoint
 echo ""
-echo "Testing voice server..."
-$PAI_DIR/VoiceServer/manage.sh start &
-sleep 3
-if curl -s http://localhost:8888/health | grep -q "ok"; then
-  echo "✓ Voice server responding on port 8888"
+echo "Checking health endpoint..."
+if curl -s http://localhost:8888/health > /dev/null; then
+  echo "OK Health endpoint responds"
 else
-  echo "⚠️  Voice server not responding (may need API key)"
+  echo "ERROR Health endpoint not responding"
 fi
-$PAI_DIR/VoiceServer/manage.sh stop
+
+# Check credentials
+echo ""
+echo "Checking credentials..."
+if [ -n "$ELEVENLABS_API_KEY" ] || grep -q "ELEVENLABS_API_KEY" ~/.env 2>/dev/null; then
+  echo "OK ElevenLabs credentials configured"
+else
+  echo "NOTE Using macOS voice (ElevenLabs not configured)"
+fi
 
 echo "=== Verification Complete ==="
 ```
@@ -424,23 +417,21 @@ echo "=== Verification Complete ==="
 ### On Success
 
 ```
-"PAI Voice System v1.0.0 installed successfully!
+"PAI Voice System v2.3.0 installed successfully!
 
 What's available:
-- ElevenLabs TTS voice server
-- Prosody enhancement for natural speech
-- Multi-agent voice personalities
-- Session and subagent voice hooks
+- Voice notifications on port 8888
+- ElevenLabs natural speech (if configured)
+- macOS voice fallback
+- Hook integration for automatic notifications
 
-To start the voice server:
-  $PAI_DIR/VoiceServer/manage.sh start
+Management commands:
+- Check status: curl http://localhost:8888/health
+- Stop server: lsof -ti :8888 | xargs kill
+- Start server: cd ~/.claude/VoiceServer && bun run server.ts &
+- View logs: tail -f ~/Library/Logs/pai-voice-server.log
 
-To test voice output:
-  curl -X POST http://localhost:8888/notify \
-    -H 'Content-Type: application/json' \
-    -d '{\"message\": \"Hello, voice is working!\"}'
-
-To stop: $PAI_DIR/VoiceServer/manage.sh stop"
+Test it: 'Say hello'"
 ```
 
 ### On Failure
@@ -449,12 +440,10 @@ To stop: $PAI_DIR/VoiceServer/manage.sh stop"
 "Installation encountered issues. Here's what to check:
 
 1. Ensure pai-core-install is installed first
-2. Ensure pai-hook-system is installed second
-3. Verify Bun is installed: `bun --version`
-4. Set ELEVENLABS_API_KEY in ~/.env
-5. Check port 8888 is available
-6. Check directory permissions on $PAI_DIR/
-7. Run the verification commands in VERIFY.md
+2. Verify Bun is installed: `bun --version`
+3. Check port 8888 is available: `lsof -i :8888`
+4. Start server manually: `cd ~/.claude/VoiceServer && bun run server.ts`
+5. Run the verification commands in VERIFY.md
 
 Need help? Check the Troubleshooting section below."
 ```
@@ -470,181 +459,101 @@ This pack requires pai-core-install. Install it first:
 Give the AI the pai-core-install pack directory and ask it to install.
 ```
 
-### "pai-hook-system not found"
-
-This pack requires pai-hook-system for hook infrastructure. Install it:
-```
-Give the AI the pai-hook-system pack directory and ask it to install.
-```
-
 ### "bun: command not found"
 
 ```bash
-# Install Bun
 curl -fsSL https://bun.sh/install | bash
-# Restart terminal or source ~/.bashrc
+source ~/.zshrc  # or restart terminal
 ```
 
-### No voice output
+### No audio output
 
 ```bash
-# 1. Check server is running
-curl http://localhost:8888/health
-
-# 2. Check API key is set
+# Check ElevenLabs key
 echo $ELEVENLABS_API_KEY
+grep ELEVENLABS ~/.env
 
-# 3. Check logs
-tail -f /tmp/pai-voice-server.log
+# Test macOS audio
+say "test"
+
+# Check API key at elevenlabs.io
 ```
 
-### ElevenLabs errors
-
-| Error | Solution |
-|-------|----------|
-| `invalid_uid` | Remove quotes from API key in .env |
-| `quota_exceeded` | Free tier exhausted (~10K chars/month) |
-| `missing_permissions` | Enable TTS permission in ElevenLabs dashboard |
-| `voice_not_found` | Check voice ID is correct |
-
-### Port already in use
+### Port 8888 conflict
 
 ```bash
-# Check what's using the port
+# Find process
 lsof -i :8888
 
-# Kill existing processes
-$PAI_DIR/VoiceServer/manage.sh stop
-
-# Or use a different port
-export VOICE_SERVER_PORT=9999
+# Kill it
+lsof -ti :8888 | xargs kill -9
 ```
 
-### Audio playback issues (macOS)
+### Server won't start
 
 ```bash
-# Verify afplay works
-afplay /System/Library/Sounds/Ping.aiff
+# Check Bun
+bun --version
 
-# Check system volume
-# System Preferences → Sound
+# Start manually and see errors
+cd ~/.claude/VoiceServer && bun run server.ts
+```
 
-# Check audio permissions
-# System Preferences → Security & Privacy → Microphone
+### Voice sounds robotic
+
+ElevenLabs provides natural voice. Without it, macOS voice is used.
+```bash
+# Add ElevenLabs key
+echo 'ELEVENLABS_API_KEY="your-key"' >> ~/.env
+
+# Restart server
+lsof -ti :8888 | xargs kill
+cd ~/.claude/VoiceServer && bun run server.ts &
 ```
 
 ---
 
 ## What's Included
 
+### VoiceServer Files
+
 | File | Purpose |
 |------|---------|
-| `VoiceServer/server.ts` | ElevenLabs TTS HTTP server (port 8888) |
-| `VoiceServer/voice-personalities.json` | Agent voice configurations with stability/similarity settings |
-| `VoiceServer/manage.sh` | Unified management script (start/stop/restart/status/test) |
-| `hooks/stop-hook-voice.ts` | Session stop voice hook |
-| `hooks/subagent-stop-hook-voice.ts` | Subagent stop voice hook |
-| `hooks/lib/prosody-enhancer.ts` | Prosody enhancement with 13 emotional markers |
+| `server.ts` | Main voice server |
+| `package.json` | Dependencies |
+| `*.sh` | Management scripts |
 
 ---
 
 ## Usage
 
-### Starting the Voice Server
+### Send Notification
 
 ```bash
-# Start
-$PAI_DIR/VoiceServer/manage.sh start
-
-# Check status
-$PAI_DIR/VoiceServer/manage.sh status
-
-# Stop
-$PAI_DIR/VoiceServer/manage.sh stop
-
-# Restart
-$PAI_DIR/VoiceServer/manage.sh restart
-```
-
-### Testing Voice Output
-
-```bash
-# Send a test notification
 curl -X POST http://localhost:8888/notify \
   -H "Content-Type: application/json" \
-  -d '{"message": "Hello, this is a test."}'
+  -d '{"message": "Your message here"}'
 ```
 
-### From Claude Code
+### Management
 
-Once installed, the voice system works automatically:
-- Your AI's 🗣️ response line is spoken aloud
-- Subagent completions are announced
-- Session endings are narrated
+| Action | Command |
+|--------|---------|
+| Check status | `curl http://localhost:8888/health` |
+| Stop server | `lsof -ti :8888 \| xargs kill` |
+| Start server | `cd ~/.claude/VoiceServer && bun run server.ts &` |
+| View logs | `tail -f ~/Library/Logs/pai-voice-server.log` |
 
-### CLI Examples
+### Integration with Hooks
 
-```bash
-# Quick notification
-curl -s -X POST http://localhost:8888/notify \
-  -H "Content-Type: application/json" \
-  -d '{"message": "Task completed successfully."}' \
-  > /dev/null 2>&1 &
+The voice server integrates with PAI hooks for automatic notifications. Install pai-hook-system for session start/stop notifications.
 
-# With specific speaker/voice
-curl -X POST http://localhost:8888/notify \
-  -H "Content-Type: application/json" \
-  -d '{"message": "Research complete.", "speaker": "Intern"}'
-```
+### Voice Customization
 
----
+**With ElevenLabs:**
+- Custom voice cloning available
+- Set voice ID in settings.json: `daidentity.voiceId`
 
-## Voice Personalities
-
-The voice system supports multiple agent voices via `voice-personalities.json`:
-
-| Agent | Voice Style |
-|-------|-------------|
-| Main Assistant | Default configured voice |
-| Intern | Slightly faster, enthusiastic |
-| Architect | Measured, thoughtful pace |
-| Engineer | Clear, technical tone |
-
-Configure voices in `$PAI_DIR/VoiceServer/voice-personalities.json`.
-
----
-
-## Auto-Start on Login (macOS)
-
-If you chose auto-start during installation, a LaunchAgent was created:
-
-```bash
-# Check LaunchAgent status
-launchctl list | grep pai-voice
-
-# View LaunchAgent
-cat ~/Library/LaunchAgents/com.pai.voice-server.plist
-
-# Reload if needed
-launchctl unload ~/Library/LaunchAgents/com.pai.voice-server.plist
-launchctl load ~/Library/LaunchAgents/com.pai.voice-server.plist
-```
-
----
-
-## Configuration
-
-**Environment variables:**
-
-| Variable | Default | Purpose |
-|----------|---------|---------|
-| `PAI_DIR` | `~/.claude` | Root PAI directory |
-| `ELEVENLABS_API_KEY` | (required) | ElevenLabs API authentication |
-| `ELEVENLABS_VOICE_ID` | (optional) | Default voice ID |
-| `VOICE_SERVER_PORT` | `8888` | Voice server HTTP port |
-
-**Ports:**
-
-| Service | Port | Purpose |
-|---------|------|---------|
-| Voice Server | 8888 | TTS HTTP API |
+**With macOS:**
+- Uses system default voice
+- Change in System Settings > Accessibility > Spoken Content

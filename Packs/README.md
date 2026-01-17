@@ -22,9 +22,9 @@ The old approach was "here's my whole system—clone it and customize." That cre
 - **Self-contained** - Works without understanding the rest of the system
 - **Independently installable** - Add what you need, skip what you don't
 - **Platform-agnostic** - Works with Claude Code, OpenCode, Cursor, or custom systems
-- **AI-installable** - Give your AI the pack directory, it handles the rest
+- **AI-installable** - Give your DA the pack directory, it handles the rest
 
-**The key insight:** Give your AI the complete context it needs, and it can integrate the pack into *your* system autonomously.
+**The key insight:** Give your DA the complete context it needs, and it can integrate the pack into *your* system autonomously.
 
 ---
 
@@ -164,20 +164,40 @@ PAI System
 
 ---
 
-## Available Packs
+## Available Packs (23 Total)
 
-| Pack | Version | Category | Description |
-|------|---------|----------|-------------|
-| [**pai-hook-system**](pai-hook-system/) | 1.0.0 | Foundation | Event-driven automation framework - the foundation for all hook-based capabilities |
-| [**pai-history-system**](pai-history-system/) | 1.0.0 | Infrastructure | Granular context-tracking that captures all work, decisions, and learnings automatically |
-| [**pai-core-install**](pai-core-install/) | 1.2.0 | Core | Skills + Identity + Architecture - the complete foundation with routing, response format, and tracking |
-| [**pai-voice-system**](pai-voice-system/) | 1.1.0 | Notifications | Voice notifications with ElevenLabs TTS and prosody enhancement for natural speech |
-| [**pai-observability-server**](pai-observability-server/) | 1.0.0 | Observability | Real-time multi-agent monitoring dashboard with WebSocket streaming |
-| [**pai-art-skill**](pai-art-skill/) | 1.0.0 | Creativity | Visual content generation with Excalidraw hand-drawn aesthetic - diagrams, comics, illustrations |
-| [**pai-agents-skill**](pai-agents-skill/) | 1.0.0 | Delegation | Dynamic agent composition - create custom agents with unique personalities, voices, and trait combinations |
-| [**pai-prompting-skill**](pai-prompting-skill/) | 1.0.0 | Methodology | Meta-prompting system with Handlebars templates, Claude 4.x best practices, and the Ultimate Prompt Template |
-| [**pai-browser-skill**](pai-browser-skill/) | 1.2.0 | Automation | Debug-first browser automation with Playwright - always-on diagnostics, session auto-start, 99% token savings |
-| [**pai-upgrades-skill**](pai-upgrades-skill/) | 1.0.0 | Maintenance | Track and manage PAI system upgrades - monitors for new features, tracks opportunities, maintains upgrade history |
+### Infrastructure Packs (5)
+
+| Pack | Category | Description |
+|------|----------|-------------|
+| [**pai-hook-system**](pai-hook-system/) | Foundation | Event-driven automation framework - the foundation for all hook-based capabilities |
+| [**pai-core-install**](pai-core-install/) | Core | Skills + Identity + Architecture - the complete foundation with routing, response format, MEMORY system |
+| [**pai-voice-system**](pai-voice-system/) | Notifications | Voice notifications with ElevenLabs TTS and prosody enhancement for natural speech |
+| [**pai-observability-server**](pai-observability-server/) | Observability | Real-time multi-agent monitoring dashboard with WebSocket streaming |
+| [**pai-statusline**](pai-statusline/) | Display | 4-mode responsive status line with learning signal, context usage, and trend indicators |
+
+### Skill Packs (18)
+
+| Pack | Category | Description |
+|------|----------|-------------|
+| [**pai-agents-skill**](pai-agents-skill/) | Delegation | Dynamic agent composition with unique personalities, voices, and trait combinations |
+| [**pai-algorithm-skill**](pai-algorithm-skill/) | Methodology | The Algorithm implementation - ISC management, effort classification, verifiable iteration |
+| [**pai-annualreports-skill**](pai-annualreports-skill/) | Research | Annual security report aggregation and threat landscape analysis |
+| [**pai-art-skill**](pai-art-skill/) | Creativity | Visual content generation with multi-reference image support and technical diagrams |
+| [**pai-brightdata-skill**](pai-brightdata-skill/) | Scraping | Progressive URL scraping with Bright Data integration and tier escalation |
+| [**pai-browser-skill**](pai-browser-skill/) | Automation | Debug-first browser automation with Playwright - always-on diagnostics, session auto-start |
+| [**pai-council-skill**](pai-council-skill/) | Analysis | Multi-agent debate system for exploring perspectives and reaching consensus |
+| [**pai-createcli-skill**](pai-createcli-skill/) | Development | Generate TypeScript CLI tools with bun runtime |
+| [**pai-createskill-skill**](pai-createskill-skill/) | Development | Create and validate PAI skills with proper structure |
+| [**pai-firstprinciples-skill**](pai-firstprinciples-skill/) | Analysis | First principles decomposition and root cause analysis |
+| [**pai-osint-skill**](pai-osint-skill/) | Research | Open source intelligence gathering and due diligence |
+| [**pai-privateinvestigator-skill**](pai-privateinvestigator-skill/) | Research | Ethical people-finding for reconnection and verification |
+| [**pai-prompting-skill**](pai-prompting-skill/) | Methodology | Meta-prompting system with Handlebars templates and Claude best practices |
+| [**pai-recon-skill**](pai-recon-skill/) | Security | Security reconnaissance, bug bounty, and attack surface mapping |
+| [**pai-redteam-skill**](pai-redteam-skill/) | Security | Adversarial analysis with 32 specialized agents for stress testing ideas |
+| [**pai-research-skill**](pai-research-skill/) | Research | Multi-source research with parallel agent execution and Fabric patterns |
+| [**pai-system-skill**](pai-system-skill/) | Maintenance | System integrity checks, documentation updates, and security scanning |
+| [**pai-telos-skill**](pai-telos-skill/) | Life OS | Deep goal capture framework - mission, goals, beliefs, strategies, learnings |
 
 ---
 
@@ -186,19 +206,22 @@ PAI System
 Packs have dependencies. Install in this order:
 
 ```
+Required (install first):
 1. pai-hook-system            ← Foundation (no dependencies)
-2. pai-history-system         ← Depends on hooks
-3. pai-core-install           ← Depends on hooks, history
-4. pai-prompting-skill        ← Depends on core-install
-5. pai-voice-system           ← Depends on hooks, core-install
-6. pai-agents-skill           ← Depends on core-install, optional voice-system
-7. pai-art-skill              ← Depends on core-install
-8. pai-browser-skill          ← Optional, standalone (only needs Bun + Playwright)
-9. pai-observability-server   ← Optional, depends on hooks
-10. pai-upgrades-skill        ← Optional, depends on core-install
+2. pai-core-install           ← Depends on hooks, includes MEMORY system
+
+Infrastructure (install next):
+3. pai-statusline             ← Depends on core-install
+4. pai-voice-system           ← Depends on hooks, core-install
+5. pai-observability-server   ← Depends on hooks
+
+Skills (install any you need):
+6+. pai-*-skill               ← Most depend only on core-install
 ```
 
 **Or install the complete [PAI Bundle](../Bundles/Official/)** which handles ordering automatically.
+
+**Or use a Full Release** from [Releases/v2.3/](../Releases/v2.3/) which includes everything pre-configured.
 
 ---
 
@@ -206,14 +229,14 @@ Packs have dependencies. Install in this order:
 
 ### Option 1: AI-Assisted (Recommended)
 
-Give the pack directory to your AI agent:
+Give the pack directory to your DA agent:
 
 ```
 Install the pai-hook-system pack from PAI/Packs/pai-hook-system/.
 Use PAI_DIR="~/.config/pai" and DA="MyAI".
 ```
 
-Your AI will:
+Your DA will:
 1. Read `README.md` for context
 2. Follow `INSTALL.md` step by step
 3. Copy files from `src/` to your system

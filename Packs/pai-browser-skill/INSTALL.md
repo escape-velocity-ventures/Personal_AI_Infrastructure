@@ -1,10 +1,10 @@
-# Browser Skill v1.2.0 - Installation Guide
+# PAI Browser Skill v2.3.0 - Installation Guide
 
 **This guide is designed for AI agents installing this pack into a user's infrastructure.**
 
 ---
 
-## 🎯 AI Agent Instructions
+## AI Agent Instructions
 
 **This is a wizard-style installation.** Use Claude Code's native tools to guide the user through installation:
 
@@ -17,9 +17,7 @@
 
 Before starting, greet the user:
 ```
-"I'm installing the Browser skill v1.2.0 - debug-first browser automation with
-Playwright. This provides screenshot capture, web verification, and browser
-testing with 99% token savings over MCP approaches.
+"I'm installing PAI Browser Skill v2.3.0 - Debug-first browser automation. This skill lets me take screenshots, verify web pages, and automate browser tasks with always-on visibility.
 
 Let me analyze your system and guide you through installation."
 ```
@@ -33,21 +31,37 @@ Let me analyze your system and guide you through installation."
 ### 1.1 Run These Commands
 
 ```bash
-# Detect operating system
-uname -s  # Darwin (macOS), Linux, or Windows
+PAI_CHECK="${PAI_DIR:-$HOME/.claude}"
+echo "PAI_DIR: $PAI_CHECK"
 
-# Check for Bun runtime
-which bun && bun --version
+# Check if pai-core-install is installed (REQUIRED)
+if [ -f "$PAI_CHECK/skills/CORE/SKILL.md" ]; then
+  echo "OK pai-core-install is installed"
+else
+  echo "ERROR pai-core-install NOT installed - REQUIRED!"
+fi
 
-# Check for existing Playwright installation
-ls -la $PAI_DIR/skills/Browser/ 2>/dev/null || echo "No existing Browser skill"
-ls -la $PAI_DIR/skills/Playwright/ 2>/dev/null || echo "No existing Playwright skill"
-ls -la $PAI_DIR/skills/Browse/ 2>/dev/null || echo "No existing Browse skill"
+# Check for existing Browser skill
+if [ -d "$PAI_CHECK/skills/Browser" ]; then
+  echo "WARNING Existing Browser skill found at: $PAI_CHECK/skills/Browser"
+  ls "$PAI_CHECK/skills/Browser/"
+else
+  echo "OK No existing Browser skill (clean install)"
+fi
 
-# Check for Playwright browsers
-ls -la ~/Library/Caches/ms-playwright/ 2>/dev/null || \
-ls -la ~/.cache/ms-playwright/ 2>/dev/null || \
-echo "No Playwright browsers installed"
+# Check for Bun runtime (REQUIRED)
+if command -v bun &> /dev/null; then
+  echo "OK Bun is installed: $(bun --version)"
+else
+  echo "ERROR Bun not installed - REQUIRED!"
+fi
+
+# Check for Playwright/Chromium
+if [ -d "$HOME/.cache/ms-playwright/chromium-"* ]; then
+  echo "OK Playwright Chromium is installed"
+else
+  echo "NOTE Playwright Chromium will be installed (~200MB download)"
+fi
 ```
 
 ### 1.2 Present Findings
@@ -55,10 +69,15 @@ echo "No Playwright browsers installed"
 Tell the user what you found:
 ```
 "Here's what I found on your system:
-- OS: [Darwin/Linux/Windows]
-- Bun: [installed v1.x / NOT INSTALLED]
-- Existing Browser skill: [Yes at path / No]
-- Playwright browsers: [Chromium installed / Not installed]"
+- pai-core-install: [installed / NOT INSTALLED - REQUIRED]
+- Existing Browser skill: [Yes / No]
+- Bun runtime: [installed vX.X / NOT INSTALLED - REQUIRED]
+- Playwright Chromium: [installed / will be downloaded]"
+```
+
+**STOP if pai-core-install or Bun is not installed.** Tell the user:
+```
+"pai-core-install and Bun are required. Please install them first, then return to install this pack."
 ```
 
 ---
@@ -67,64 +86,49 @@ Tell the user what you found:
 
 **Use AskUserQuestion tool at each decision point.**
 
-### Question 1: Bun Runtime (if missing)
+### Question 1: Conflict Resolution (if existing skill found)
 
-**Only ask if Bun is NOT installed:**
-
-```json
-{
-  "header": "Runtime",
-  "question": "Bun is required but not installed. Should I install it now?",
-  "multiSelect": false,
-  "options": [
-    {"label": "Yes, install Bun (Recommended)", "description": "Runs: curl -fsSL https://bun.sh/install | bash"},
-    {"label": "Skip - I'll install manually", "description": "Installation will pause until Bun is available"}
-  ]
-}
-```
-
-### Question 2: Conflict Resolution (if existing skill found)
-
-**Only ask if existing Browser/Playwright/Browse skill detected:**
+**Only ask if existing Browser directory detected:**
 
 ```json
 {
   "header": "Conflict",
-  "question": "Existing [Browser/Playwright] skill detected at $PAI_DIR/skills/[name]. How should I proceed?",
+  "question": "Existing Browser skill detected. How should I proceed?",
   "multiSelect": false,
   "options": [
-    {"label": "Backup and Replace (Recommended)", "description": "Creates timestamped backup, then installs new version"},
-    {"label": "Replace Without Backup", "description": "Overwrites existing skill without backup"},
-    {"label": "Abort Installation", "description": "Cancel installation, keep existing skill"}
+    {"label": "Backup and replace (Recommended)", "description": "Creates timestamped backup, then installs fresh"},
+    {"label": "Replace without backup", "description": "Overwrites existing skill files"},
+    {"label": "Cancel", "description": "Abort installation"}
   ]
 }
 ```
 
-### Question 3: Browser Selection
+### Question 2: Chromium Download Confirmation
+
+**Only ask if Playwright Chromium is not installed:**
 
 ```json
 {
-  "header": "Browsers",
-  "question": "Which Playwright browsers should I install?",
+  "header": "Download",
+  "question": "The Browser skill requires Chromium (~200MB). Should I download it now?",
   "multiSelect": false,
   "options": [
-    {"label": "Chromium only (Recommended)", "description": "~200MB, covers 95% of use cases"},
-    {"label": "All browsers", "description": "~600MB, includes Firefox and WebKit"},
-    {"label": "Skip browser install", "description": "Use existing browsers if available"}
+    {"label": "Yes, download now (Recommended)", "description": "Downloads Chromium browser binaries"},
+    {"label": "Skip for now", "description": "Install skill files only - browser won't work until Chromium is installed"}
   ]
 }
 ```
 
-### Question 4: Final Confirmation
+### Question 3: Final Confirmation
 
 ```json
 {
   "header": "Install",
-  "question": "Ready to install Browser skill v1.2.0?",
+  "question": "Ready to install PAI Browser Skill v2.3.0?",
   "multiSelect": false,
   "options": [
-    {"label": "Yes, install now (Recommended)", "description": "Proceeds with installation using choices above"},
-    {"label": "Show me what will change", "description": "Lists all files that will be created/modified"},
+    {"label": "Yes, install now (Recommended)", "description": "Proceeds with installation"},
+    {"label": "Show me what will change", "description": "Lists all files that will be created"},
     {"label": "Cancel", "description": "Abort installation"}
   ]
 }
@@ -134,19 +138,17 @@ Tell the user what you found:
 
 ## Phase 3: Backup (If Needed)
 
-**Only execute if user chose "Backup and Replace" for conflicts:**
+**Only execute if user chose "Backup and replace":**
 
 ```bash
-# Create timestamped backup
+PAI_DIR="${PAI_DIR:-$HOME/.claude}"
 BACKUP_DIR="$PAI_DIR/Backups/browser-skill-$(date +%Y%m%d-%H%M%S)"
-mkdir -p "$BACKUP_DIR"
 
-# Backup any existing skills
-[ -d "$PAI_DIR/skills/Browser" ] && cp -r "$PAI_DIR/skills/Browser" "$BACKUP_DIR/"
-[ -d "$PAI_DIR/skills/Playwright" ] && cp -r "$PAI_DIR/skills/Playwright" "$BACKUP_DIR/"
-[ -d "$PAI_DIR/skills/Browse" ] && cp -r "$PAI_DIR/skills/Browse" "$BACKUP_DIR/"
-
-echo "Backup created at: $BACKUP_DIR"
+if [ -d "$PAI_DIR/skills/Browser" ]; then
+  mkdir -p "$BACKUP_DIR"
+  cp -r "$PAI_DIR/skills/Browser" "$BACKUP_DIR/"
+  echo "Backup created at: $BACKUP_DIR"
+fi
 ```
 
 ---
@@ -158,51 +160,41 @@ echo "Backup created at: $BACKUP_DIR"
 ```json
 {
   "todos": [
-    {"content": "Create skill directory structure", "status": "pending", "activeForm": "Creating directory structure"},
-    {"content": "Copy skill files", "status": "pending", "activeForm": "Copying skill files"},
+    {"content": "Create directory structure", "status": "pending", "activeForm": "Creating directory structure"},
+    {"content": "Copy skill files from pack", "status": "pending", "activeForm": "Copying skill files"},
     {"content": "Install dependencies", "status": "pending", "activeForm": "Installing dependencies"},
-    {"content": "Install Playwright browsers", "status": "pending", "activeForm": "Installing Playwright browsers"},
+    {"content": "Install Chromium", "status": "pending", "activeForm": "Installing Chromium"},
     {"content": "Run verification", "status": "pending", "activeForm": "Running verification"}
   ]
 }
 ```
 
-### 4.1 Create Skill Directory
+### 4.1 Create Directory Structure
 
-**Mark todo "Create skill directory structure" as in_progress.**
+**Mark todo "Create directory structure" as in_progress.**
 
 ```bash
-mkdir -p $PAI_DIR/skills/Browser
-mkdir -p $PAI_DIR/skills/Browser/src
-mkdir -p $PAI_DIR/skills/Browser/Tools
-mkdir -p $PAI_DIR/skills/Browser/Workflows
-mkdir -p $PAI_DIR/skills/Browser/examples
+PAI_DIR="${PAI_DIR:-$HOME/.claude}"
+mkdir -p "$PAI_DIR/skills/Browser"
 ```
 
 **Mark todo as completed.**
 
 ### 4.2 Copy Skill Files
 
-**Mark todo "Copy skill files" as in_progress.**
-
-Copy the following files from this pack to your skill directory:
+**Mark todo "Copy skill files from pack" as in_progress.**
 
 ```bash
-# From pai-browser-skill pack directory
-cp src/index.ts $PAI_DIR/skills/Browser/src/
-cp package.json $PAI_DIR/skills/Browser/
-cp tsconfig.json $PAI_DIR/skills/Browser/
-cp SKILL.md $PAI_DIR/skills/Browser/
-cp README.md $PAI_DIR/skills/Browser/
+PACK_DIR="$(pwd)"
+PAI_DIR="${PAI_DIR:-$HOME/.claude}"
 
-# Copy Tools
-cp Tools/Browse.ts $PAI_DIR/skills/Browser/Tools/
-cp Tools/BrowserSession.ts $PAI_DIR/skills/Browser/Tools/
-
-# Copy Workflows and examples
-cp Workflows/*.md $PAI_DIR/skills/Browser/Workflows/
-cp examples/*.ts $PAI_DIR/skills/Browser/examples/
+cp -r "$PACK_DIR/src/skills/Browser/"* "$PAI_DIR/skills/Browser/"
 ```
+
+**Files included:**
+- `SKILL.md` - Skill definition and routing
+- `browser.ts` - Browser automation core
+- `examples/` - Example scripts
 
 **Mark todo as completed.**
 
@@ -211,32 +203,27 @@ cp examples/*.ts $PAI_DIR/skills/Browser/examples/
 **Mark todo "Install dependencies" as in_progress.**
 
 ```bash
-cd $PAI_DIR/skills/Browser
+PAI_DIR="${PAI_DIR:-$HOME/.claude}"
+cd "$PAI_DIR/skills/Browser"
 bun install
 ```
 
-This will install:
-- `playwright` - Browser automation library
-
 **Mark todo as completed.**
 
-### 4.4 Install Playwright Browsers
+### 4.4 Install Chromium
 
-**Mark todo "Install Playwright browsers" as in_progress.**
+**Mark todo "Install Chromium" as in_progress.**
 
-Based on user's choice in Question 3:
+**Only if user approved the download:**
 
-**If "Chromium only":**
 ```bash
 bunx playwright install chromium
 ```
 
-**If "All browsers":**
-```bash
-bunx playwright install
+Tell the user:
 ```
-
-**If "Skip":** No action needed.
+"Downloading Chromium browser... this may take a minute."
+```
 
 **Mark todo as completed.**
 
@@ -246,25 +233,64 @@ bunx playwright install
 
 **Mark todo "Run verification" as in_progress.**
 
-**Execute all checks from VERIFY.md.** The file contains 15 verification checks that must ALL pass.
-
-Quick verification:
+**Execute all checks from VERIFY.md:**
 
 ```bash
-# 1. Check CLI shows v1.2.0
-bun run $PAI_DIR/skills/Browser/Tools/Browse.ts --help | head -3
+PAI_DIR="${PAI_DIR:-$HOME/.claude}"
 
-# 2. Navigate with diagnostics
-bun run $PAI_DIR/skills/Browser/Tools/Browse.ts https://example.com
+echo "=== PAI Browser Skill v2.3.0 Verification ==="
 
-# 3. Check session status
-bun run $PAI_DIR/skills/Browser/Tools/Browse.ts status
+# Check skill file
+echo "Checking skill file..."
+[ -f "$PAI_DIR/skills/Browser/SKILL.md" ] && echo "OK SKILL.md" || echo "ERROR SKILL.md missing"
 
-# 4. Stop session
-bun run $PAI_DIR/skills/Browser/Tools/Browse.ts stop
+# Check browser.ts
+echo ""
+echo "Checking browser core..."
+[ -f "$PAI_DIR/skills/Browser/browser.ts" ] && echo "OK browser.ts" || echo "ERROR browser.ts missing"
+
+# Check dependencies
+echo ""
+echo "Checking dependencies..."
+[ -d "$PAI_DIR/skills/Browser/node_modules" ] && echo "OK node_modules installed" || echo "ERROR dependencies not installed"
+
+# Check Chromium
+echo ""
+echo "Checking Chromium..."
+if ls ~/.cache/ms-playwright/chromium-* 1> /dev/null 2>&1; then
+  echo "OK Chromium installed"
+else
+  echo "WARNING Chromium not installed - run: bunx playwright install chromium"
+fi
+
+echo "=== Verification Complete ==="
 ```
 
-**Mark todo as completed when all VERIFY.md checks pass.**
+**Mark todo as completed when all checks pass.**
+
+---
+
+## Phase 6: macOS Permission (if needed)
+
+**On first run, macOS may block Chromium. If you see a permission error:**
+
+```json
+{
+  "header": "Permission",
+  "question": "macOS is blocking Chromium for security. How should I proceed?",
+  "multiSelect": false,
+  "options": [
+    {"label": "Run command to allow (Recommended)", "description": "Removes quarantine flag from Chromium"},
+    {"label": "I'll do it manually", "description": "Go to System Settings > Privacy & Security and allow Chromium"}
+  ]
+}
+```
+
+**If user chooses to run command:**
+
+```bash
+xattr -d com.apple.quarantine ~/.cache/ms-playwright/chromium-*/chrome-mac/Chromium.app
+```
 
 ---
 
@@ -273,15 +299,20 @@ bun run $PAI_DIR/skills/Browser/Tools/Browse.ts stop
 ### On Success
 
 ```
-"Browser skill v1.2.0 installed successfully!
+"PAI Browser Skill v2.3.0 installed successfully!
 
 What's available:
-- Debug-first navigation with automatic diagnostics
-- Session auto-start (no manual setup needed)
-- Console/network monitoring by default
-- 99% token savings vs MCP approaches
+- Screenshot any webpage
+- Verify deployed changes
+- Fill out forms and interact with pages
+- Test responsive designs across screen sizes
+- Debug-first mode with console logs and network capture
 
-Try it: bun run $PAI_DIR/skills/Browser/Tools/Browse.ts https://example.com"
+Usage:
+- 'Take a screenshot of [URL]' - Screenshot a webpage
+- 'Verify the homepage looks correct' - Visual verification
+- 'Test this page on mobile' - Responsive testing
+- 'Fill out the form at [URL]' - Form automation"
 ```
 
 ### On Failure
@@ -289,99 +320,103 @@ Try it: bun run $PAI_DIR/skills/Browser/Tools/Browse.ts https://example.com"
 ```
 "Installation encountered issues. Here's what to check:
 
-1. Bun installed? Run: which bun
-2. Dependencies installed? Run: cd $PAI_DIR/skills/Browser && bun install
-3. Browsers installed? Run: bunx playwright install chromium
-4. Check VERIFY.md for the specific failing check
+1. Ensure pai-core-install is installed first
+2. Verify Bun is installed: `bun --version`
+3. Install Chromium: `bunx playwright install chromium`
+4. Run the verification commands in VERIFY.md
 
-Need help? See Troubleshooting section below."
+Need help? Check the Troubleshooting section below."
 ```
 
 ---
 
 ## Troubleshooting
 
-### "Playwright browsers not installed"
+### "pai-core-install not found"
+
+This pack requires pai-core-install. Install it first:
+```
+Give the AI the pai-core-install pack directory and ask it to install.
+```
+
+### "bun: command not found"
 
 ```bash
+curl -fsSL https://bun.sh/install | bash
+source ~/.zshrc  # or restart terminal
+```
+
+### "Browser not launched" error
+
+```bash
+# Install Chromium
 bunx playwright install chromium
 ```
 
-### "Cannot find module 'playwright'"
+### Permission errors on macOS
 
 ```bash
-cd $PAI_DIR/skills/Browser
-bun install
+# Remove quarantine flag
+xattr -d com.apple.quarantine ~/.cache/ms-playwright/chromium-*/chrome-mac/Chromium.app
 ```
 
-### "Permission denied" on Linux
+Or go to System Settings > Privacy & Security and allow Chromium.
 
-Playwright may need additional dependencies:
+### Port already in use
+
 ```bash
-bunx playwright install-deps chromium
+# Kill process on port 9222
+lsof -ti :9222 | xargs kill -9
 ```
 
 ---
 
 ## What's Included
 
+### Skill Files
+
 | File | Purpose |
 |------|---------|
-| `src/index.ts` | PlaywrightBrowser API wrapper class |
-| `SKILL.md` | Skill definition for Claude Code |
-| `README.md` | Developer documentation |
-| `Tools/Browse.ts` | CLI tool for browser operations |
-| `Tools/BrowserSession.ts` | Persistent browser session server |
-| `Workflows/*.md` | Workflow definitions |
-| `examples/*.ts` | Example scripts |
-| `package.json` | Dependencies |
-| `tsconfig.json` | TypeScript configuration |
+| `SKILL.md` | Skill definition and routing |
+| `browser.ts` | Browser automation core |
+| `examples/` | Example scripts |
 
 ---
 
 ## Usage
 
-### From Claude Code
-
-Just ask to use the browser:
+### Take Screenshots
 
 ```
-Navigate to example.com and take a screenshot
+"Take a screenshot of https://example.com"
+"Screenshot the homepage"
 ```
 
-### From TypeScript
+### Verify Deployments
 
-```typescript
-import { PlaywrightBrowser } from '$PAI_DIR/skills/Browser/src/index.ts'
-
-const browser = new PlaywrightBrowser()
-await browser.launch()
-await browser.navigate('https://example.com')
-await browser.screenshot({ path: 'screenshot.png' })
-await browser.close()
+```
+"Verify the changes deployed correctly"
+"Check if the new design is live"
 ```
 
-### From CLI
+### Responsive Testing
 
-```bash
-# Navigate with full diagnostics (primary command)
-bun run $PAI_DIR/skills/Browser/Tools/Browse.ts https://example.com
-
-# Take screenshot
-bun run $PAI_DIR/skills/Browser/Tools/Browse.ts screenshot /tmp/shot.png
-
-# Check for errors
-bun run $PAI_DIR/skills/Browser/Tools/Browse.ts errors
+```
+"Test this page on mobile"
+"Check how it looks at 768px width"
 ```
 
----
+### Form Automation
 
-## Token Savings
+```
+"Fill out the contact form at [URL]"
+"Submit a test login"
+```
 
-This skill is a **file-based MCP** - it replaces the Playwright MCP with code-first implementation:
+### Configuration
 
-| Approach | Tokens |
-|----------|--------|
-| Playwright MCP | ~13,700 at startup |
-| Browser Skill | ~50-200 per operation |
-| **Savings** | **99%+** |
+| Setting | Default | Description |
+|---------|---------|-------------|
+| Headless mode | Yes | Run browser invisibly |
+| Viewport size | 1920x1080 | Screenshot dimensions |
+| Browser port | 9222 | For persistent sessions |

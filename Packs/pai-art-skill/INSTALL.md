@@ -1,4 +1,4 @@
-# PAI Art Skill v1.0.0 - Installation Guide
+# PAI Art Skill v2.3.0 - Installation Guide
 
 **This guide is designed for AI agents installing this pack into a user's infrastructure.**
 
@@ -17,7 +17,7 @@
 
 Before starting, greet the user:
 ```
-"I'm installing PAI Art Skill v1.0.0 - Visual content generation with multiple AI models (Flux, Nano Banana, GPT-image-1).
+"I'm installing PAI Art Skill v2.3.0 - Visual content creation system. This skill generates images using FAL AI (Flux, Nano-Banana) for editorial illustrations, technical diagrams, and visual content.
 
 Let me analyze your system and guide you through installation."
 ```
@@ -31,39 +31,42 @@ Let me analyze your system and guide you through installation."
 ### 1.1 Run These Commands
 
 ```bash
-# Check for PAI directory
 PAI_CHECK="${PAI_DIR:-$HOME/.claude}"
 echo "PAI_DIR: $PAI_CHECK"
 
 # Check if pai-core-install is installed (REQUIRED)
 if [ -f "$PAI_CHECK/skills/CORE/SKILL.md" ]; then
-  echo "✓ pai-core-install is installed"
+  echo "OK pai-core-install is installed"
 else
-  echo "❌ pai-core-install NOT installed - REQUIRED!"
+  echo "ERROR pai-core-install NOT installed - REQUIRED!"
 fi
 
 # Check for existing Art skill
 if [ -d "$PAI_CHECK/skills/Art" ]; then
-  echo "⚠️  Existing Art skill found at: $PAI_CHECK/skills/Art"
-  ls -la "$PAI_CHECK/skills/Art/"
+  echo "WARNING Existing Art skill found at: $PAI_CHECK/skills/Art"
+  ls "$PAI_CHECK/skills/Art/"
 else
-  echo "✓ No existing Art skill (clean install)"
+  echo "OK No existing Art skill (clean install)"
 fi
 
-# Check for Bun runtime
+# Check for Bun runtime (REQUIRED)
 if command -v bun &> /dev/null; then
-  echo "✓ Bun is installed: $(bun --version)"
+  echo "OK Bun is installed: $(bun --version)"
 else
-  echo "❌ Bun not installed - REQUIRED!"
+  echo "ERROR Bun not installed - REQUIRED!"
 fi
 
-# Check for API keys
-echo ""
-echo "API Key Status:"
-[ -n "$REPLICATE_API_TOKEN" ] && echo "✓ REPLICATE_API_TOKEN: Set" || echo "⚠️  REPLICATE_API_TOKEN: NOT SET (needed for Flux, Nano Banana)"
-[ -n "$GOOGLE_API_KEY" ] && echo "✓ GOOGLE_API_KEY: Set" || echo "⚠️  GOOGLE_API_KEY: NOT SET (needed for Nano Banana Pro)"
-[ -n "$OPENAI_API_KEY" ] && echo "✓ OPENAI_API_KEY: Set" || echo "⚠️  OPENAI_API_KEY: NOT SET (needed for GPT-image-1)"
-[ -n "$REMOVEBG_API_KEY" ] && echo "✓ REMOVEBG_API_KEY: Set" || echo "⚠️  REMOVEBG_API_KEY: NOT SET (needed for background removal)"
+# Check for FAL_KEY environment variable
+if [ -n "$FAL_KEY" ]; then
+  echo "OK FAL_KEY is set"
+else
+  # Check .env files
+  if grep -q "FAL_KEY" ~/.env 2>/dev/null || grep -q "FAL_KEY" "$PAI_CHECK/.env" 2>/dev/null; then
+    echo "OK FAL_KEY found in .env file"
+  else
+    echo "NOTE FAL_KEY not set - required for image generation"
+  fi
+fi
 ```
 
 ### 1.2 Present Findings
@@ -72,15 +75,9 @@ Tell the user what you found:
 ```
 "Here's what I found on your system:
 - pai-core-install: [installed / NOT INSTALLED - REQUIRED]
-- Existing Art skill: [Yes at path / No]
+- Existing Art skill: [Yes / No]
 - Bun runtime: [installed vX.X / NOT INSTALLED - REQUIRED]
-- API Keys:
-  - REPLICATE_API_TOKEN: [set / not set]
-  - GOOGLE_API_KEY: [set / not set]
-  - OPENAI_API_KEY: [set / not set]
-  - REMOVEBG_API_KEY: [set / not set]
-
-Note: At least one image generation API key is required."
+- FAL_KEY: [set / not set - REQUIRED for image generation]"
 ```
 
 **STOP if pai-core-install or Bun is not installed.** Tell the user:
@@ -94,9 +91,9 @@ Note: At least one image generation API key is required."
 
 **Use AskUserQuestion tool at each decision point.**
 
-### Question 1: Conflict Resolution (if existing found)
+### Question 1: Conflict Resolution (if existing skill found)
 
-**Only ask if existing Art skill detected:**
+**Only ask if existing Art directory detected:**
 
 ```json
 {
@@ -104,28 +101,38 @@ Note: At least one image generation API key is required."
   "question": "Existing Art skill detected. How should I proceed?",
   "multiSelect": false,
   "options": [
-    {"label": "Backup and Replace (Recommended)", "description": "Creates timestamped backup, then installs new version"},
-    {"label": "Replace Without Backup", "description": "Overwrites existing without backup"},
-    {"label": "Abort Installation", "description": "Cancel installation, keep existing"}
+    {"label": "Backup and replace (Recommended)", "description": "Creates timestamped backup, then installs fresh"},
+    {"label": "Replace without backup", "description": "Overwrites existing skill files"},
+    {"label": "Cancel", "description": "Abort installation"}
   ]
 }
 ```
 
-### Question 2: API Key Setup
+### Question 2: FAL API Key (if not set)
 
-**Only ask if any API keys are missing:**
+**Only ask if FAL_KEY is not detected:**
 
 ```json
 {
-  "header": "API Keys",
-  "question": "Some API keys are missing. How should I proceed?",
+  "header": "API Key",
+  "question": "FAL_KEY is required for image generation. Do you have a FAL AI account?",
   "multiSelect": false,
   "options": [
-    {"label": "Create .env template (Recommended)", "description": "Creates template file for you to add keys later"},
-    {"label": "I'll set them manually", "description": "Skip .env creation, set keys in shell profile"},
-    {"label": "Continue without all keys", "description": "Some generation models won't work"}
+    {"label": "Yes, I'll provide my key", "description": "I have a FAL AI API key ready"},
+    {"label": "Help me get one", "description": "Guide me through FAL AI signup"},
+    {"label": "Skip for now", "description": "Install without key - will configure later"}
   ]
 }
+```
+
+**If user chooses "Help me get one":**
+```
+"Here's how to get a FAL API key:
+1. Go to https://fal.ai
+2. Create an account or sign in
+3. Navigate to API Keys in your dashboard
+4. Generate a new key
+5. Come back and we'll configure it"
 ```
 
 ### Question 3: Final Confirmation
@@ -133,11 +140,11 @@ Note: At least one image generation API key is required."
 ```json
 {
   "header": "Install",
-  "question": "Ready to install PAI Art Skill v1.0.0?",
+  "question": "Ready to install PAI Art Skill v2.3.0?",
   "multiSelect": false,
   "options": [
-    {"label": "Yes, install now (Recommended)", "description": "Proceeds with installation using choices above"},
-    {"label": "Show me what will change", "description": "Lists all files that will be created/modified"},
+    {"label": "Yes, install now (Recommended)", "description": "Proceeds with installation"},
+    {"label": "Show me what will change", "description": "Lists all files that will be created"},
     {"label": "Cancel", "description": "Abort installation"}
   ]
 }
@@ -147,14 +154,17 @@ Note: At least one image generation API key is required."
 
 ## Phase 3: Backup (If Needed)
 
-**Only execute if user chose "Backup and Replace":**
+**Only execute if user chose "Backup and replace":**
 
 ```bash
 PAI_DIR="${PAI_DIR:-$HOME/.claude}"
 BACKUP_DIR="$PAI_DIR/Backups/art-skill-$(date +%Y%m%d-%H%M%S)"
-mkdir -p "$BACKUP_DIR"
-[ -d "$PAI_DIR/skills/Art" ] && cp -r "$PAI_DIR/skills/Art" "$BACKUP_DIR/"
-echo "Backup created at: $BACKUP_DIR"
+
+if [ -d "$PAI_DIR/skills/Art" ]; then
+  mkdir -p "$BACKUP_DIR"
+  cp -r "$PAI_DIR/skills/Art" "$BACKUP_DIR/"
+  echo "Backup created at: $BACKUP_DIR"
+fi
 ```
 
 ---
@@ -166,23 +176,22 @@ echo "Backup created at: $BACKUP_DIR"
 ```json
 {
   "todos": [
-    {"content": "Create skill directory structure", "status": "pending", "activeForm": "Creating directory structure"},
+    {"content": "Create directory structure", "status": "pending", "activeForm": "Creating directory structure"},
     {"content": "Copy skill files from pack", "status": "pending", "activeForm": "Copying skill files"},
     {"content": "Install dependencies", "status": "pending", "activeForm": "Installing dependencies"},
-    {"content": "Set up environment template", "status": "pending", "activeForm": "Setting up environment template"},
+    {"content": "Configure FAL_KEY", "status": "pending", "activeForm": "Configuring FAL_KEY"},
     {"content": "Run verification", "status": "pending", "activeForm": "Running verification"}
   ]
 }
 ```
 
-### 4.1 Create Skill Directory Structure
+### 4.1 Create Directory Structure
 
-**Mark todo "Create skill directory structure" as in_progress.**
+**Mark todo "Create directory structure" as in_progress.**
 
 ```bash
 PAI_DIR="${PAI_DIR:-$HOME/.claude}"
-mkdir -p "$PAI_DIR/skills/Art/Workflows"
-mkdir -p "$PAI_DIR/skills/Art/Tools"
+mkdir -p "$PAI_DIR/skills/Art/"{Workflows,Tools}
 ```
 
 **Mark todo as completed.**
@@ -194,25 +203,22 @@ mkdir -p "$PAI_DIR/skills/Art/Tools"
 Copy all files from the pack's `src/skills/Art/` directory:
 
 ```bash
-# From the pack directory (where this INSTALL.md is located)
 PACK_DIR="$(pwd)"
 PAI_DIR="${PAI_DIR:-$HOME/.claude}"
 
-cp "$PACK_DIR/src/skills/Art/SKILL.md" "$PAI_DIR/skills/Art/"
-cp "$PACK_DIR/src/skills/Art/Aesthetic.md" "$PAI_DIR/skills/Art/"
-cp "$PACK_DIR/src/skills/Art/Workflows/TechnicalDiagrams.md" "$PAI_DIR/skills/Art/Workflows/"
-cp "$PACK_DIR/src/skills/Art/Workflows/Essay.md" "$PAI_DIR/skills/Art/Workflows/"
-cp "$PACK_DIR/src/skills/Art/Workflows/Comics.md" "$PAI_DIR/skills/Art/Workflows/"
-cp "$PACK_DIR/src/skills/Art/Tools/Generate.ts" "$PAI_DIR/skills/Art/Tools/"
+cp -r "$PACK_DIR/src/skills/Art/"* "$PAI_DIR/skills/Art/"
 ```
 
-**Files copied:**
-- `SKILL.md` - Main skill routing and model selection
-- `Aesthetic.md` - Visual style guidelines and principles
-- `Workflows/TechnicalDiagrams.md` - Technical diagram generation workflow
-- `Workflows/Essay.md` - Essay illustration workflow
-- `Workflows/Comics.md` - Comic strip generation workflow
+**Files included:**
+- `SKILL.md` - Main skill definition
 - `Tools/Generate.ts` - Image generation CLI tool
+- `Workflows/Essay.md` - Editorial illustration workflow
+- `Workflows/Visualize.md` - General visualization workflow
+- `Workflows/TechnicalDiagrams.md` - Technical diagram creation
+- `Workflows/Mermaid.md` - Mermaid diagram workflow
+- `Workflows/Frameworks.md` - Framework visualization
+- `Workflows/Stats.md` - Statistics visualization
+- `Workflows/CreatePAIPackIcon.md` - PAI pack icon creation
 
 **Mark todo as completed.**
 
@@ -223,55 +229,42 @@ cp "$PACK_DIR/src/skills/Art/Tools/Generate.ts" "$PAI_DIR/skills/Art/Tools/"
 ```bash
 PAI_DIR="${PAI_DIR:-$HOME/.claude}"
 cd "$PAI_DIR/skills/Art/Tools"
-bun add replicate openai @google/genai
+
+# Initialize if needed
+if [ ! -f package.json ]; then
+  bun init -y
+fi
+
+# Install FAL AI client
+bun add @fal-ai/serverless-client
 ```
 
 **Mark todo as completed.**
 
-### 4.4 Set Up Environment Template (If User Chose Yes)
+### 4.4 Configure FAL_KEY
 
-**Mark todo "Set up environment template" as in_progress.**
+**Mark todo "Configure FAL_KEY" as in_progress.**
 
-**Only execute if user chose to create .env template:**
+**If user provided a key, add it to .env:**
 
 ```bash
 PAI_DIR="${PAI_DIR:-$HOME/.claude}"
 
-# Create .env if it doesn't exist
-if [ ! -f "$PAI_DIR/.env" ]; then
-  cat > "$PAI_DIR/.env" << 'EOF'
-# Art Skill API Keys
-# Uncomment and fill in the keys you have
-
-# For Flux and Nano Banana models (Replicate)
-# REPLICATE_API_TOKEN=r8_your_token_here
-
-# For Nano Banana Pro (Gemini 3)
-# GOOGLE_API_KEY=your_google_api_key_here
-
-# For GPT-image-1 (OpenAI)
-# OPENAI_API_KEY=your_openai_api_key_here
-
-# For background removal
-# REMOVEBG_API_KEY=your_removebg_key_here
-EOF
-  echo "Created $PAI_DIR/.env - Please add your API keys"
-else
-  echo ".env already exists at $PAI_DIR/.env"
+# Check if key already exists
+if ! grep -q "FAL_KEY" ~/.env 2>/dev/null; then
+  echo 'FAL_KEY="USER_PROVIDED_KEY"' >> ~/.env
+  echo "Added FAL_KEY to ~/.env"
 fi
 ```
 
-Tell the user:
+**If user skipped, tell them:**
 ```
-"Created .env template at $PAI_DIR/.env
-Please edit this file and add your API keys:
-- REPLICATE_API_TOKEN from replicate.com
-- GOOGLE_API_KEY from Google AI Studio
-- OPENAI_API_KEY from OpenAI
-- REMOVEBG_API_KEY from remove.bg (optional)"
+"Skipping FAL_KEY configuration. To enable image generation later:
+1. Get a key from https://fal.ai
+2. Add to ~/.env: FAL_KEY=\"your-key-here\""
 ```
 
-**Mark todo as completed (or skip if user declined).**
+**Mark todo as completed.**
 
 ---
 
@@ -284,21 +277,38 @@ Please edit this file and add your API keys:
 ```bash
 PAI_DIR="${PAI_DIR:-$HOME/.claude}"
 
-echo "=== PAI Art Skill Verification ==="
+echo "=== PAI Art Skill v2.3.0 Verification ==="
 
-# Check skill files exist
+# Check skill files
 echo "Checking skill files..."
-[ -f "$PAI_DIR/skills/Art/SKILL.md" ] && echo "✓ SKILL.md" || echo "❌ SKILL.md missing"
-[ -f "$PAI_DIR/skills/Art/Aesthetic.md" ] && echo "✓ Aesthetic.md" || echo "❌ Aesthetic.md missing"
-[ -f "$PAI_DIR/skills/Art/Workflows/TechnicalDiagrams.md" ] && echo "✓ TechnicalDiagrams.md" || echo "❌ TechnicalDiagrams.md missing"
-[ -f "$PAI_DIR/skills/Art/Workflows/Essay.md" ] && echo "✓ Essay.md" || echo "❌ Essay.md missing"
-[ -f "$PAI_DIR/skills/Art/Workflows/Comics.md" ] && echo "✓ Comics.md" || echo "❌ Comics.md missing"
-[ -f "$PAI_DIR/skills/Art/Tools/Generate.ts" ] && echo "✓ Generate.ts" || echo "❌ Generate.ts missing"
+[ -f "$PAI_DIR/skills/Art/SKILL.md" ] && echo "OK SKILL.md" || echo "ERROR SKILL.md missing"
+[ -f "$PAI_DIR/skills/Art/Tools/Generate.ts" ] && echo "OK Tools/Generate.ts" || echo "ERROR Tools/Generate.ts missing"
 
-# Test CLI tool
+# Check workflows
 echo ""
-echo "Testing Generate.ts CLI..."
-bun run "$PAI_DIR/skills/Art/Tools/Generate.ts" --help | head -10
+echo "Checking workflows..."
+for workflow in Essay Visualize TechnicalDiagrams Mermaid Frameworks Stats CreatePAIPackIcon; do
+  [ -f "$PAI_DIR/skills/Art/Workflows/${workflow}.md" ] && echo "OK Workflows/${workflow}.md" || echo "ERROR Workflows/${workflow}.md missing"
+done
+
+# Check dependencies
+echo ""
+echo "Checking dependencies..."
+[ -d "$PAI_DIR/skills/Art/Tools/node_modules/@fal-ai" ] && echo "OK @fal-ai/serverless-client installed" || echo "ERROR @fal-ai/serverless-client not installed"
+
+# Test tool execution
+echo ""
+echo "Testing tool execution..."
+bun run "$PAI_DIR/skills/Art/Tools/Generate.ts" --help && echo "OK Tool executes" || echo "ERROR Tool execution failed"
+
+# Check FAL_KEY
+echo ""
+echo "Checking FAL_KEY..."
+if [ -n "$FAL_KEY" ] || grep -q "FAL_KEY" ~/.env 2>/dev/null; then
+  echo "OK FAL_KEY configured"
+else
+  echo "WARNING FAL_KEY not configured - image generation will fail"
+fi
 
 echo "=== Verification Complete ==="
 ```
@@ -312,16 +322,21 @@ echo "=== Verification Complete ==="
 ### On Success
 
 ```
-"PAI Art Skill v1.0.0 installed successfully!
+"PAI Art Skill v2.3.0 installed successfully!
 
 What's available:
-- 'create image' - Generate images with Flux, Nano Banana, or GPT-image-1
-- 'technical diagram' - Create architecture and flow diagrams
-- 'essay illustration' - Generate illustrations for blog posts
-- 'comic strip' - Create comic-style sequences
-- '--remove-bg' flag - Remove backgrounds from generated images
+- Image generation using FAL AI (Flux, Nano-Banana models)
+- Editorial illustration workflow for essays and articles
+- Technical diagram creation
+- Mermaid diagram generation
+- Statistics visualization
+- PAI pack icon creation
 
-Try it: Ask me to 'create a header image for a blog post about AI agents'"
+Usage:
+- 'Create an illustration for [topic]' - Editorial style image
+- 'Generate a technical diagram for [concept]' - Technical visualization
+- 'Visualize this data: [stats]' - Statistics chart
+- 'Create a PAI pack icon for [skill]' - Pack iconography"
 ```
 
 ### On Failure
@@ -331,8 +346,8 @@ Try it: Ask me to 'create a header image for a blog post about AI agents'"
 
 1. Ensure pai-core-install is installed first
 2. Verify Bun is installed: `bun --version`
-3. Check at least one API key is set (REPLICATE_API_TOKEN, OPENAI_API_KEY, or GOOGLE_API_KEY)
-4. Check directory permissions on $PAI_DIR/skills/
+3. Check FAL_KEY is configured: `echo $FAL_KEY`
+4. Install dependencies: `cd $PAI_DIR/skills/Art/Tools && bun add @fal-ai/serverless-client`
 5. Run the verification commands in VERIFY.md
 
 Need help? Check the Troubleshooting section below."
@@ -352,99 +367,97 @@ Give the AI the pai-core-install pack directory and ask it to install.
 ### "bun: command not found"
 
 ```bash
-# Install Bun
 curl -fsSL https://bun.sh/install | bash
-# Restart terminal or source ~/.bashrc
+source ~/.zshrc  # or restart terminal
 ```
 
-### "No API keys found"
+### "FAL_KEY not set"
 
 ```bash
-# Check your .env file
-cat $PAI_DIR/.env
+# Add to ~/.env
+echo 'FAL_KEY="your-key-here"' >> ~/.env
 
 # Or export directly
-export REPLICATE_API_TOKEN="YOUR_REPLICATE_TOKEN"
-export OPENAI_API_KEY="YOUR_OPENAI_KEY"
+export FAL_KEY="your-key-here"
 ```
 
-### "Generate.ts fails to run"
+### Image generation fails
 
 ```bash
-# Check dependencies are installed
+# Test FAL API connectivity
+bun run $PAI_DIR/skills/Art/Tools/Generate.ts \
+  --model nano-banana-pro \
+  --prompt "Simple test image" \
+  --size 1K \
+  --output ~/Downloads/test.png
+```
+
+### "Cannot find module '@fal-ai/serverless-client'"
+
+```bash
 cd $PAI_DIR/skills/Art/Tools
-bun install
-
-# Or reinstall
-bun add replicate openai @google/genai
-```
-
-### "Background removal not working"
-
-```bash
-# Check REMOVEBG_API_KEY is set
-echo $REMOVEBG_API_KEY
-
-# Get a key from remove.bg if needed
+bun add @fal-ai/serverless-client
 ```
 
 ---
 
 ## What's Included
 
+### Skill Files
+
 | File | Purpose |
 |------|---------|
-| `SKILL.md` | Main skill definition with model selection |
-| `Aesthetic.md` | Visual style guidelines and principles |
-| `Workflows/TechnicalDiagrams.md` | Technical diagram workflow |
-| `Workflows/Essay.md` | Essay illustration workflow |
-| `Workflows/Comics.md` | Comic strip workflow |
-| `Tools/Generate.ts` | Image generation CLI tool |
+| `SKILL.md` | Skill definition and routing |
+| `Tools/Generate.ts` | Image generation CLI |
+
+### Workflows
+
+| File | Purpose |
+|------|---------|
+| `Workflows/Essay.md` | Editorial illustration |
+| `Workflows/Visualize.md` | General visualization |
+| `Workflows/TechnicalDiagrams.md` | Technical diagrams |
+| `Workflows/Mermaid.md` | Mermaid diagrams |
+| `Workflows/Frameworks.md` | Framework visualization |
+| `Workflows/Stats.md` | Statistics charts |
+| `Workflows/CreatePAIPackIcon.md` | PAI pack icons |
 
 ---
 
 ## Usage
 
-### From Claude Code
+### Image Generation Models
 
-```
-"Create a header image for my blog post about AI"
-"Generate a technical diagram showing microservices architecture"
-"Create an illustration for an essay about consciousness"
-"Make a comic strip about debugging code"
-```
+| Model | Best For | Speed |
+|-------|----------|-------|
+| `flux-pro` | High quality editorial images | Slower |
+| `flux-dev` | Development/testing | Medium |
+| `nano-banana-pro` | Quick iterations | Fast |
 
-### CLI Examples
+### Example Commands
 
 ```bash
-# Generate with Flux (default)
+# Generate editorial image
 bun run $PAI_DIR/skills/Art/Tools/Generate.ts \
-  --prompt "A futuristic AI interface" \
-  --model flux
+  --model flux-pro \
+  --prompt "Abstract visualization of AI neural networks" \
+  --size 2K \
+  --aspect-ratio 16:9 \
+  --output ~/Downloads/neural-networks.png
 
-# Generate with background removal
+# Quick test image
 bun run $PAI_DIR/skills/Art/Tools/Generate.ts \
-  --prompt "A robot mascot" \
-  --model flux \
-  --remove-bg
-
-# Generate with GPT-image-1
-bun run $PAI_DIR/skills/Art/Tools/Generate.ts \
-  --prompt "A detailed technical diagram" \
-  --model gpt-image-1
-
-# List available models
-bun run $PAI_DIR/skills/Art/Tools/Generate.ts --list-models
+  --model nano-banana-pro \
+  --prompt "Simple geometric pattern" \
+  --size 1K \
+  --output ~/Downloads/test.png
 ```
 
----
+### Natural Language Usage
 
-## Environment Variables
-
-| Variable | Required For | Description |
-|----------|-------------|-------------|
-| `REPLICATE_API_TOKEN` | Flux, Nano Banana | Replicate API access |
-| `GOOGLE_API_KEY` | Nano Banana Pro | Google Gemini API access |
-| `OPENAI_API_KEY` | GPT-image-1 | OpenAI API access |
-| `REMOVEBG_API_KEY` | Background removal | remove.bg API access |
-| `PAI_DIR` | All | Custom PAI directory (optional, default: ~/.claude) |
+```
+"Create an illustration for my essay about AI safety"
+"Generate a technical diagram showing the authentication flow"
+"Visualize this data as a chart: [data]"
+"Create a header image for my blog post about [topic]"
+```

@@ -42,6 +42,7 @@ import {
   type ArticleInput
 } from './db/storage';
 import { generateMissingEmbeddings, checkOllamaAvailable } from './db/embeddings';
+import { fetchRssWithBrowser, closeBrowser, isBrowserAvailable } from './browser-fetch';
 
 const parser = new Parser({
   timeout: 15000,
@@ -49,6 +50,26 @@ const parser = new Parser({
     'User-Agent': 'PAI-Info-Hygiene/1.0 (Personal AI Infrastructure)'
   }
 });
+
+// Chrome-like parser for sites that block non-browser user agents
+const chromeParser = new Parser({
+  timeout: 15000,
+  headers: {
+    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'Accept': 'application/rss+xml, application/xml, text/xml, */*',
+    'Accept-Language': 'en-US,en;q=0.9',
+    'Referer': 'https://www.google.com/'
+  }
+});
+
+// Sources that require Chrome headers
+const CHROME_HEADER_SOURCES = ['Autoblog', 'EIA Today in Energy'];
+
+// Sources that require browser automation (Cloudflare protected)
+const BROWSER_REQUIRED_SOURCES = ['Politico'];
+
+// Track if browser is available (checked once at startup)
+let browserAvailable: boolean | null = null;
 
 interface SourceResult {
   name: string;
@@ -81,9 +102,33 @@ interface CollectionResult {
 // ============================================================================
 
 async function fetchFromNewsSource(source: NewsSource): Promise<{ articles: ArticleInput[]; error?: string }> {
+  const useBrowser = BROWSER_REQUIRED_SOURCES.includes(source.name);
+  const useChrome = CHROME_HEADER_SOURCES.includes(source.name);
+
   try {
-    const feed = await parser.parseURL(source.rssUrl);
-    const articles = (feed.items || []).slice(0, 15).map(item => ({
+    let items: Array<{
+      title?: string;
+      link?: string;
+      pubDate?: string;
+      isoDate?: string;
+      content?: string;
+      contentSnippet?: string;
+    }>;
+
+    if (useBrowser && browserAvailable) {
+      // Use browser for Cloudflare-protected sources
+      const result = await fetchRssWithBrowser(source.rssUrl);
+      if (result.error) {
+        return { articles: [], error: `Browser: ${result.error}` };
+      }
+      items = result.items;
+    } else {
+      // Use standard HTTP parser
+      const feed = await (useChrome ? chromeParser : parser).parseURL(source.rssUrl);
+      items = feed.items || [];
+    }
+
+    const articles = items.slice(0, 15).map(item => ({
       url: item.link || '',
       title: item.title || 'Untitled',
       content: null,
@@ -91,10 +136,32 @@ async function fetchFromNewsSource(source: NewsSource): Promise<{ articles: Arti
       source_name: source.name,
       source_type: 'news' as SourceType,
       bias: source.bias,
-      published_at: item.pubDate || new Date().toISOString()
+      published_at: item.pubDate || item.isoDate || new Date().toISOString()
     }));
     return { articles };
   } catch (error: any) {
+    // If HTTP fails with 403 and browser is available, try browser fallback
+    if (error.message?.includes('403') && browserAvailable && !useBrowser) {
+      try {
+        const result = await fetchRssWithBrowser(source.rssUrl);
+        if (result.error) {
+          return { articles: [], error: result.error };
+        }
+        const articles = result.items.slice(0, 15).map(item => ({
+          url: item.link || '',
+          title: item.title || 'Untitled',
+          content: null,
+          snippet: item.contentSnippet?.slice(0, 300),
+          source_name: source.name,
+          source_type: 'news' as SourceType,
+          bias: source.bias,
+          published_at: item.pubDate || item.isoDate || new Date().toISOString()
+        }));
+        return { articles };
+      } catch (browserError: any) {
+        return { articles: [], error: browserError.message || 'Browser fallback failed' };
+      }
+    }
     return { articles: [], error: error.message || 'Unknown error' };
   }
 }
@@ -357,7 +424,8 @@ async function collectTech(log: (...args: any[]) => void): Promise<SourceResult[
 
 async function fetchFromAuto(source: AutoSource): Promise<{ articles: ArticleInput[]; error?: string }> {
   try {
-    const feed = await parser.parseURL(source.rssUrl);
+    const useChrome = CHROME_HEADER_SOURCES.includes(source.name);
+    const feed = await (useChrome ? chromeParser : parser).parseURL(source.rssUrl);
 
     const articles = (feed.items || []).slice(0, 15).map(item => ({
       url: item.link || '',
@@ -412,7 +480,8 @@ async function collectAuto(log: (...args: any[]) => void): Promise<SourceResult[
 
 async function fetchFromEnergy(source: EnergySource): Promise<{ articles: ArticleInput[]; error?: string }> {
   try {
-    const feed = await parser.parseURL(source.rssUrl);
+    const useChrome = CHROME_HEADER_SOURCES.includes(source.name);
+    const feed = await (useChrome ? chromeParser : parser).parseURL(source.rssUrl);
 
     const articles = (feed.items || []).slice(0, 15).map(item => ({
       url: item.link || '',
@@ -477,6 +546,14 @@ async function collect(options: {
   energy?: boolean;
 }): Promise<CollectionResult> {
   const log = options.quiet ? () => {} : console.log;
+
+  // Check browser availability once at startup
+  if (browserAvailable === null) {
+    browserAvailable = await isBrowserAvailable();
+    if (browserAvailable) {
+      log('🌐 Browser automation available for protected feeds');
+    }
+  }
 
   // Default: collect all if no specific source type requested
   const collectAll = !options.news && !options.youtube && !options.reddit && !options.factcheck && !options.tech && !options.auto && !options.energy;
@@ -595,6 +672,11 @@ async function collect(options: {
   log(`  ⚡ Energy:    +${result.byType.energy.inserted} from ${result.byType.energy.sources} sources`);
   log(`  ─────────────────────────`);
   log(`  Total: +${result.totalInserted} new | ${stats.articles} in database`);
+
+  // Close browser if it was used
+  if (browserAvailable) {
+    await closeBrowser();
+  }
 
   return result;
 }

@@ -73,12 +73,7 @@ export const NEWS_SOURCES: NewsSource[] = [
     rssUrl: 'https://thehill.com/feed/',
     website: 'thehill.com'
   },
-  {
-    name: 'USA Today',
-    bias: 'center',
-    rssUrl: 'http://rssfeeds.usatoday.com/usatoday-NewsTopStories',
-    website: 'usatoday.com'
-  },
+  // USA Today removed - RSS feed unreliable (XML parsing errors)
   {
     name: 'ABC News',
     bias: 'center',

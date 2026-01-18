@@ -43,12 +43,12 @@ export const AUTO_SOURCES: AutoSource[] = [
     factualRating: 'high'
   },
   {
-    name: 'Motor Trend',
-    rssUrl: 'https://www.motortrend.com/feed/',
-    website: 'motortrend.com',
+    name: 'Automotive News',
+    rssUrl: 'https://feeds.feedburner.com/autonews/BreakingNews',
+    website: 'autonews.com',
     bias: 'center',
-    focus: 'general',
-    description: 'Largest automotive media company. Reviews and comparisons.',
+    focus: 'industry',
+    description: 'Auto industry trade publication. Dealerships, manufacturing, policy.',
     factualRating: 'high'
   },
 
@@ -64,7 +64,7 @@ export const AUTO_SOURCES: AutoSource[] = [
   },
   {
     name: 'Autoblog',
-    rssUrl: 'https://www.autoblog.com/rss.xml',
+    rssUrl: 'https://www.autoblog.com/.rss/feed/7a401613-317c-4892-acfb-6f19ee932643.xml',
     website: 'autoblog.com',
     bias: 'lean-left',
     focus: 'general',

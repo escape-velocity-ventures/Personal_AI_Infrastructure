@@ -111,12 +111,12 @@ export const TECH_SOURCES: TechSource[] = [
     factualRating: 'high'
   },
   {
-    name: 'AnandTech',
-    rssUrl: 'https://www.anandtech.com/rss/',
-    website: 'anandtech.com',
+    name: 'Toms Guide',
+    rssUrl: 'https://www.tomsguide.com/feeds/all',
+    website: 'tomsguide.com',
     bias: 'center',
     category: 'hardware',
-    description: 'Deep-dive hardware analysis and reviews.',
+    description: 'Tech buying guides and reviews. Sister site to Toms Hardware.',
     factualRating: 'high'
   }
 ];

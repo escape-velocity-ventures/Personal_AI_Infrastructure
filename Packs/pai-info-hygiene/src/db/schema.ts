@@ -21,7 +21,7 @@ if (!existsSync(DATA_DIR)) {
 
 // Types matching our schema
 export type BiasRating = 'left' | 'lean-left' | 'center' | 'lean-right' | 'right';
-export type SourceType = 'news' | 'youtube' | 'reddit';
+export type SourceType = 'news' | 'youtube' | 'reddit' | 'factcheck' | 'tech' | 'auto' | 'energy';
 
 export interface Article {
   id: string;

@@ -21,6 +21,7 @@ if (!existsSync(DATA_DIR)) {
 
 // Types matching our schema
 export type BiasRating = 'left' | 'lean-left' | 'center' | 'lean-right' | 'right';
+export type SourceType = 'news' | 'youtube' | 'reddit';
 
 export interface Article {
   id: string;
@@ -29,6 +30,7 @@ export interface Article {
   content: string | null;
   snippet: string | null;
   source_name: string;
+  source_type: SourceType;
   bias: BiasRating;
   published_at: string;
   fetched_at: string;
@@ -62,6 +64,7 @@ export interface ReadingHistory {
 
 export interface Source {
   name: string;
+  source_type: SourceType;
   bias: BiasRating;
   rss_url: string;
   website: string;
@@ -80,6 +83,7 @@ export function initDatabase(): Database {
   db.run(`
     CREATE TABLE IF NOT EXISTS sources (
       name TEXT PRIMARY KEY,
+      source_type TEXT NOT NULL DEFAULT 'news',
       bias TEXT NOT NULL,
       rss_url TEXT NOT NULL,
       website TEXT NOT NULL,
@@ -96,6 +100,7 @@ export function initDatabase(): Database {
       content TEXT,
       snippet TEXT,
       source_name TEXT NOT NULL,
+      source_type TEXT NOT NULL DEFAULT 'news',
       bias TEXT NOT NULL,
       published_at TEXT NOT NULL,
       fetched_at TEXT NOT NULL,
@@ -107,6 +112,15 @@ export function initDatabase(): Database {
       FOREIGN KEY (source_name) REFERENCES sources(name)
     )
   `);
+
+  // Migration: Add source_type column if it doesn't exist
+  try {
+    db.run('ALTER TABLE sources ADD COLUMN source_type TEXT NOT NULL DEFAULT \'news\'');
+  } catch { /* column already exists */ }
+
+  try {
+    db.run('ALTER TABLE articles ADD COLUMN source_type TEXT NOT NULL DEFAULT \'news\'');
+  } catch { /* column already exists */ }
 
   db.run(`
     CREATE TABLE IF NOT EXISTS claims (

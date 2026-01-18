@@ -6,7 +6,7 @@
  */
 
 import { v4 as uuidv4 } from 'uuid';
-import { getDb, type Article, type Claim, type ReadingHistory, type Source, type BiasRating } from './schema';
+import { getDb, type Article, type Claim, type ReadingHistory, type Source, type BiasRating, type SourceType } from './schema';
 
 // ============================================================================
 // SOURCE OPERATIONS
@@ -15,13 +15,14 @@ import { getDb, type Article, type Claim, type ReadingHistory, type Source, type
 export function upsertSource(source: Omit<Source, 'last_fetched' | 'article_count'>): void {
   const db = getDb();
   db.run(`
-    INSERT INTO sources (name, bias, rss_url, website, article_count)
-    VALUES (?, ?, ?, ?, 0)
+    INSERT INTO sources (name, source_type, bias, rss_url, website, article_count)
+    VALUES (?, ?, ?, ?, ?, 0)
     ON CONFLICT(name) DO UPDATE SET
+      source_type = excluded.source_type,
       bias = excluded.bias,
       rss_url = excluded.rss_url,
       website = excluded.website
-  `, [source.name, source.bias, source.rss_url, source.website]);
+  `, [source.name, source.source_type || 'news', source.bias, source.rss_url, source.website]);
 }
 
 export function updateSourceFetched(name: string): void {
@@ -49,6 +50,7 @@ export interface ArticleInput {
   content?: string;
   snippet?: string;
   source_name: string;
+  source_type?: SourceType;
   bias: BiasRating;
   published_at: string;
   entities?: string[];
@@ -65,10 +67,10 @@ export function insertArticle(article: ArticleInput): string | null {
   try {
     db.run(`
       INSERT INTO articles (
-        id, url, title, content, snippet, source_name, bias,
+        id, url, title, content, snippet, source_name, source_type, bias,
         published_at, fetched_at, entities, topics, framing_keywords,
         sentiment, embedding
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), ?, ?, ?, ?, ?)
     `, [
       id,
       article.url,
@@ -76,6 +78,7 @@ export function insertArticle(article: ArticleInput): string | null {
       article.content || null,
       article.snippet || null,
       article.source_name,
+      article.source_type || 'news',
       article.bias,
       article.published_at,
       article.entities ? JSON.stringify(article.entities) : null,

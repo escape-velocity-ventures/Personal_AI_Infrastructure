@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.pai.info-hygiene</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/benjamin/.bun/bin/bun</string>
+        <string>run</string>
+        <string>collect</string>
+        <string>--quiet</string>
+        <string>--embeddings</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/benjamin/EscapeVelocity/PersonalAI/PAI/Packs/pai-info-hygiene</string>
+
+    <!-- Run every 4 hours -->
+    <key>StartInterval</key>
+    <integer>14400</integer>
+
+    <!-- Also run on load -->
+    <key>RunAtLoad</key>
+    <true/>
+
+    <!-- Log output -->
+    <key>StandardOutPath</key>
+    <string>/tmp/pai-info-hygiene.log</string>
+    <key>StandardErrorPath</key>
+    <string>/tmp/pai-info-hygiene.err</string>
+
+    <!-- Keep alive settings -->
+    <key>KeepAlive</key>
+    <false/>
+
+    <!-- Environment -->
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/Users/benjamin/.bun/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+    </dict>
+</dict>
+</plist>

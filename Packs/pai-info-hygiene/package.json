@@ -1,0 +1,27 @@
+{
+  "name": "pai-info-hygiene",
+  "version": "0.1.0",
+  "description": "Personal information hygiene dashboard with agent-curated balanced news",
+  "type": "module",
+  "scripts": {
+    "curator": "bun run src/rss-curator.ts",
+    "briefing": "bun run src/rss-curator.ts --briefing",
+    "stats": "bun run src/rss-curator.ts --stats",
+    "embeddings": "bun run src/rss-curator.ts --embeddings",
+    "opposing": "bun run src/opposing-view.ts",
+    "spectrum": "bun run src/opposing-view.ts --spectrum",
+    "pattern": "bun run src/pattern-analyzer.ts",
+    "score": "bun run src/hygiene-score.ts",
+    "history": "bun run src/hygiene-score.ts --history",
+    "collect": "bun run src/collect.ts",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "chalk": "^5.3.0",
+    "rss-parser": "^3.13.0",
+    "uuid": "^13.0.0"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  }
+}

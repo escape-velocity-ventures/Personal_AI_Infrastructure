@@ -10,6 +10,7 @@
  * - Tech news (10 sources)
  * - Automotive news (6 sources)
  * - Energy/utility news (7 sources)
+ * - Public policy think tanks (12 sources)
  *
  * Usage:
  *   bun run src/collect.ts              # Collect from all sources
@@ -22,6 +23,7 @@
  *   bun run src/collect.ts --tech       # Tech news only
  *   bun run src/collect.ts --auto       # Automotive news only
  *   bun run src/collect.ts --energy     # Energy/utility news only
+ *   bun run src/collect.ts --policy  # Public policy think tanks only
  */
 
 import Parser from 'rss-parser';
@@ -32,6 +34,7 @@ import { FACTCHECK_SOURCES, type FactCheckSource } from './sources-factcheck';
 import { TECH_SOURCES, type TechSource } from './sources-tech';
 import { AUTO_SOURCES, type AutoSource } from './sources-auto';
 import { ENERGY_SOURCES, type EnergySource } from './sources-energy';
+import { POLICY_SOURCES, type PolicySource } from './sources-policy';
 import { getDb, type SourceType } from './db/schema';
 import {
   upsertSource,
@@ -94,6 +97,7 @@ interface CollectionResult {
     tech: { inserted: number; sources: number };
     auto: { inserted: number; sources: number };
     energy: { inserted: number; sources: number };
+    policy: { inserted: number; sources: number };
   };
 }
 
@@ -531,6 +535,61 @@ async function collectEnergy(log: (...args: any[]) => void): Promise<SourceResul
 }
 
 // ============================================================================
+// PUBLIC POLICY COLLECTION
+// ============================================================================
+
+async function fetchFromPolicy(source: PolicySource): Promise<{ articles: ArticleInput[]; error?: string }> {
+  try {
+    const feed = await parser.parseURL(source.rssUrl);
+
+    const articles = (feed.items || []).slice(0, 15).map(item => ({
+      url: item.link || '',
+      title: item.title || 'Untitled',
+      content: null,
+      snippet: item.contentSnippet?.slice(0, 400) || item.content?.slice(0, 400),
+      source_name: source.name,
+      source_type: 'policy' as SourceType,
+      bias: source.bias,
+      published_at: item.pubDate || item.isoDate || new Date().toISOString()
+    }));
+
+    return { articles };
+  } catch (error: any) {
+    return { articles: [], error: error.message || 'Unknown error' };
+  }
+}
+
+async function collectPolicy(log: (...args: any[]) => void): Promise<SourceResult[]> {
+  log('\n🏛️ Collecting from POLICY sources...');
+
+  const results: SourceResult[] = [];
+
+  for (const source of POLICY_SOURCES) {
+    upsertSource({
+      name: source.name,
+      source_type: 'policy',
+      bias: source.bias,
+      rss_url: source.rssUrl,
+      website: source.website
+    });
+
+    const { articles, error } = await fetchFromPolicy(source);
+
+    if (error) {
+      results.push({ name: source.name, type: 'policy', success: false, articlesInserted: 0, error });
+      log(`  ✗ ${source.name}: ${error.slice(0, 50)}`);
+    } else if (articles.length > 0) {
+      const { inserted } = insertArticles(articles);
+      updateSourceFetched(source.name);
+      results.push({ name: source.name, type: 'policy', success: true, articlesInserted: inserted });
+      if (inserted > 0) log(`  ✓ ${source.name}: +${inserted}`);
+    }
+  }
+
+  return results;
+}
+
+// ============================================================================
 // MAIN COLLECTION
 // ============================================================================
 
@@ -544,6 +603,7 @@ async function collect(options: {
   tech?: boolean;
   auto?: boolean;
   energy?: boolean;
+  policy?: boolean;
 }): Promise<CollectionResult> {
   const log = options.quiet ? () => {} : console.log;
 
@@ -556,7 +616,7 @@ async function collect(options: {
   }
 
   // Default: collect all if no specific source type requested
-  const collectAll = !options.news && !options.youtube && !options.reddit && !options.factcheck && !options.tech && !options.auto && !options.energy;
+  const collectAll = !options.news && !options.youtube && !options.reddit && !options.factcheck && !options.tech && !options.auto && !options.energy && !options.policy;
   const shouldCollectNews = collectAll || options.news;
   const shouldCollectYouTube = collectAll || options.youtube;
   const shouldCollectReddit = collectAll || options.reddit;
@@ -564,6 +624,7 @@ async function collect(options: {
   const shouldCollectTech = collectAll || options.tech;
   const shouldCollectAuto = collectAll || options.auto;
   const shouldCollectEnergy = collectAll || options.energy;
+  const shouldCollectPolicy = collectAll || options.policy;
 
   log(`[${new Date().toISOString()}] Starting multi-source collection...`);
 
@@ -584,7 +645,8 @@ async function collect(options: {
       factcheck: { inserted: 0, sources: 0 },
       tech: { inserted: 0, sources: 0 },
       auto: { inserted: 0, sources: 0 },
-      energy: { inserted: 0, sources: 0 }
+      energy: { inserted: 0, sources: 0 },
+      policy: { inserted: 0, sources: 0 }
     }
   };
 
@@ -638,6 +700,13 @@ async function collect(options: {
     result.byType.energy.inserted = energyResults.reduce((sum, r) => sum + r.articlesInserted, 0);
   }
 
+  if (shouldCollectPolicy) {
+    const policyResults = await collectPolicy(log);
+    result.sources.push(...policyResults);
+    result.byType.policy.sources = policyResults.length;
+    result.byType.policy.inserted = policyResults.reduce((sum, r) => sum + r.articlesInserted, 0);
+  }
+
   // Calculate totals
   result.totalInserted = result.sources.reduce((sum, r) => sum + r.articlesInserted, 0);
 
@@ -670,6 +739,7 @@ async function collect(options: {
   log(`  💻 Tech:      +${result.byType.tech.inserted} from ${result.byType.tech.sources} sources`);
   log(`  🚗 Auto:      +${result.byType.auto.inserted} from ${result.byType.auto.sources} sources`);
   log(`  ⚡ Energy:    +${result.byType.energy.inserted} from ${result.byType.energy.sources} sources`);
+  log(`  🏛️ Policy:   +${result.byType.policy.inserted} from ${result.byType.policy.sources} sources`);
   log(`  ─────────────────────────`);
   log(`  Total: +${result.totalInserted} new | ${stats.articles} in database`);
 
@@ -694,7 +764,8 @@ async function main() {
     factcheck: args.includes('--factcheck'),
     tech: args.includes('--tech'),
     auto: args.includes('--auto'),
-    energy: args.includes('--energy')
+    energy: args.includes('--energy'),
+    policy: args.includes('--policy')
   };
 
   if (args.includes('--help') || args.includes('-h')) {
@@ -709,6 +780,7 @@ Collects content from balanced sources across the political spectrum:
   • 10 Tech news sources
   • 6 Automotive news sources
   • 7 Energy/utility sources
+  • 12 Public policy think tanks
 
 Usage:
   bun run collect              # Collect from all sources
@@ -721,6 +793,7 @@ Usage:
   bun run collect --tech       # Tech news only
   bun run collect --auto       # Automotive news only
   bun run collect --energy     # Energy/utility news only
+  bun run collect --policy  # Public policy think tanks only
 
 Combinations:
   bun run collect --tech --energy  # Tech + energy

@@ -21,7 +21,8 @@ if (!existsSync(DATA_DIR)) {
 
 // Types matching our schema
 export type BiasRating = 'left' | 'lean-left' | 'center' | 'lean-right' | 'right';
-export type SourceType = 'news' | 'youtube' | 'reddit' | 'factcheck' | 'tech' | 'auto' | 'energy';
+export type SourceType = 'news' | 'youtube' | 'reddit' | 'factcheck' | 'tech' | 'auto' | 'energy' | 'policy';
+export type ContentType = 'wire' | 'reporting' | 'analysis' | 'opinion' | 'editorial' | 'unknown';
 
 export interface Article {
   id: string;
@@ -39,6 +40,47 @@ export interface Article {
   framing_keywords: string | null; // JSON array
   sentiment: number | null;
   embedding: string | null; // JSON array of floats
+  // Content analysis fields
+  content_type: ContentType;
+  content_type_confidence: number | null;
+  is_primary_source: boolean | null;
+  named_source_count: number | null;
+  anonymous_source_count: number | null;
+  emotional_language_score: number | null;
+  loaded_terms: string | null; // JSON array of detected loaded terms
+}
+
+export interface ArticleAnalysis {
+  id: string;
+  article_id: string;
+  analyzed_at: string;
+  // Verifiable claims extracted
+  claims: string; // JSON array of VerifiableClaim
+  statistics: string; // JSON array of Statistic
+  entities: string; // JSON array of NamedEntity
+  // Narrative analysis
+  framing: string | null;
+  headline_neutralized: string | null;
+  implied_conclusion: string | null;
+}
+
+export interface TriangulationEvent {
+  id: string;
+  event_description: string;
+  created_at: string;
+  // Aggregated results
+  agreed_facts: string; // JSON array
+  contested_claims: string; // JSON array
+  framing_differences: string; // JSON array
+  omissions: string; // JSON array
+}
+
+export interface TriangulatedArticle {
+  event_id: string;
+  article_id: string;
+  source_name: string;
+  bias: BiasRating;
+  content_type: ContentType;
 }
 
 export interface Claim {
@@ -121,6 +163,65 @@ export function initDatabase(): Database {
   try {
     db.run('ALTER TABLE articles ADD COLUMN source_type TEXT NOT NULL DEFAULT \'news\'');
   } catch { /* column already exists */ }
+
+  // Migration: Add content analysis columns
+  const contentAnalysisMigrations = [
+    'ALTER TABLE articles ADD COLUMN content_type TEXT DEFAULT \'unknown\'',
+    'ALTER TABLE articles ADD COLUMN content_type_confidence REAL',
+    'ALTER TABLE articles ADD COLUMN is_primary_source INTEGER',
+    'ALTER TABLE articles ADD COLUMN named_source_count INTEGER',
+    'ALTER TABLE articles ADD COLUMN anonymous_source_count INTEGER',
+    'ALTER TABLE articles ADD COLUMN emotional_language_score REAL',
+    'ALTER TABLE articles ADD COLUMN loaded_terms TEXT',
+  ];
+  for (const migration of contentAnalysisMigrations) {
+    try { db.run(migration); } catch { /* column already exists */ }
+  }
+
+  // Create article_analysis table for detailed analysis results
+  db.run(`
+    CREATE TABLE IF NOT EXISTS article_analysis (
+      id TEXT PRIMARY KEY,
+      article_id TEXT NOT NULL UNIQUE,
+      analyzed_at TEXT NOT NULL,
+      claims TEXT,
+      statistics TEXT,
+      entities TEXT,
+      framing TEXT,
+      headline_neutralized TEXT,
+      implied_conclusion TEXT,
+      FOREIGN KEY (article_id) REFERENCES articles(id)
+    )
+  `);
+
+  // Create triangulation tables for cross-source comparison
+  db.run(`
+    CREATE TABLE IF NOT EXISTS triangulation_events (
+      id TEXT PRIMARY KEY,
+      event_description TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      agreed_facts TEXT,
+      contested_claims TEXT,
+      framing_differences TEXT,
+      omissions TEXT
+    )
+  `);
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS triangulated_articles (
+      event_id TEXT NOT NULL,
+      article_id TEXT NOT NULL,
+      source_name TEXT NOT NULL,
+      bias TEXT NOT NULL,
+      content_type TEXT DEFAULT 'unknown',
+      PRIMARY KEY (event_id, article_id),
+      FOREIGN KEY (event_id) REFERENCES triangulation_events(id),
+      FOREIGN KEY (article_id) REFERENCES articles(id)
+    )
+  `);
+
+  // Index for content type queries
+  db.run('CREATE INDEX IF NOT EXISTS idx_articles_content_type ON articles(content_type)');
 
   db.run(`
     CREATE TABLE IF NOT EXISTS claims (

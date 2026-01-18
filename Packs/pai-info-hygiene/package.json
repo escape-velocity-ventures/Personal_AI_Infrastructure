@@ -14,6 +14,14 @@
     "score": "bun run src/hygiene-score.ts",
     "history": "bun run src/hygiene-score.ts --history",
     "collect": "bun run src/collect.ts",
+    "analyze": "bun run src/analysis/cli.ts",
+    "classify": "bun run src/analysis/cli.ts classify",
+    "content-stats": "bun run src/analysis/cli.ts stats",
+    "narrative": "bun run src/analysis/cli.ts narrative",
+    "wire": "bun run src/analysis/cli.ts wire",
+    "triangulate": "bun run src/analysis/cli.ts triangulate",
+    "neutralize": "bun run src/analysis/cli.ts neutralize",
+    "sources": "bun run src/analysis/cli.ts sources",
     "test": "bun test"
   },
   "dependencies": {

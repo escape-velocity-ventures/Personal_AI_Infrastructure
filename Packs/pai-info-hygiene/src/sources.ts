@@ -14,6 +14,32 @@ export interface NewsSource {
 }
 
 export const NEWS_SOURCES: NewsSource[] = [
+  // WIRE SERVICES / FACT-BASELINE (minimal narrative)
+  {
+    name: 'AP News',
+    bias: 'center',
+    rssUrl: 'https://news.google.com/rss/search?q=site:apnews.com&hl=en-US&gl=US&ceid=US:en',
+    website: 'apnews.com'
+  },
+  {
+    name: 'Reuters',
+    bias: 'center',
+    rssUrl: 'https://news.google.com/rss/search?q=site:reuters.com&hl=en-US&gl=US&ceid=US:en',
+    website: 'reuters.com'
+  },
+  {
+    name: 'PBS NewsHour',
+    bias: 'center',
+    rssUrl: 'https://www.pbs.org/newshour/feeds/rss/headlines',
+    website: 'pbs.org/newshour'
+  },
+  {
+    name: 'AllSides',
+    bias: 'center',
+    rssUrl: 'https://www.allsides.com/news/rss',
+    website: 'allsides.com'
+  },
+
   // LEFT
   {
     name: 'The Guardian',
@@ -99,6 +125,24 @@ export const NEWS_SOURCES: NewsSource[] = [
     bias: 'lean-right',
     rssUrl: 'https://www.washingtonexaminer.com/feed',
     website: 'washingtonexaminer.com'
+  },
+  {
+    name: 'RealClearPolitics',
+    bias: 'lean-right',
+    rssUrl: 'https://www.realclearpolitics.com/index.xml',
+    website: 'realclearpolitics.com'
+  },
+  {
+    name: 'The Federalist',
+    bias: 'lean-right',
+    rssUrl: 'https://thefederalist.com/feed/',
+    website: 'thefederalist.com'
+  },
+  {
+    name: 'Washington Times',
+    bias: 'lean-right',
+    rssUrl: 'https://www.washingtontimes.com/rss/headlines/news/',
+    website: 'washingtontimes.com'
   },
 
   // RIGHT

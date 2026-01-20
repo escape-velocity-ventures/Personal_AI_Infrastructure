@@ -1,4 +1,5 @@
 import { getValidAccessToken } from "../auth/token-manager";
+import { getMimeType } from "./mime-types";
 
 const RATE_LIMIT_WINDOW = 100 * 1000; // 100 seconds
 const MAX_REQUESTS = 100;
@@ -132,6 +133,57 @@ function createGmailHelpers(account?: string) {
         body,
       ].join("\r\n");
 
+      const encoded = Buffer.from(email).toString("base64url");
+
+      interface SendResponse {
+        id: string;
+        threadId: string;
+        labelIds: string[];
+      }
+      return googleApi<SendResponse>("/gmail/v1/users/me/messages/send", {
+        method: "POST",
+        body: { raw: encoded },
+        account,
+      });
+    },
+
+    async sendWithAttachment(
+      to: string,
+      subject: string,
+      body: string,
+      attachments: { filename: string; content: Buffer }[]
+    ) {
+      const boundary = `boundary_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+
+      const parts: string[] = [
+        `To: ${to}`,
+        `Subject: ${subject}`,
+        `MIME-Version: 1.0`,
+        `Content-Type: multipart/mixed; boundary="${boundary}"`,
+        "",
+        `--${boundary}`,
+        "Content-Type: text/plain; charset=utf-8",
+        "",
+        body,
+      ];
+
+      for (const attachment of attachments) {
+        const mimeType = getMimeType(attachment.filename);
+        const base64Content = attachment.content.toString("base64");
+
+        parts.push(
+          `--${boundary}`,
+          `Content-Type: ${mimeType}`,
+          `Content-Disposition: attachment; filename="${attachment.filename}"`,
+          "Content-Transfer-Encoding: base64",
+          "",
+          base64Content
+        );
+      }
+
+      parts.push(`--${boundary}--`);
+
+      const email = parts.join("\r\n");
       const encoded = Buffer.from(email).toString("base64url");
 
       interface SendResponse {

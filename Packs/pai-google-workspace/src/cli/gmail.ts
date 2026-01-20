@@ -1,20 +1,37 @@
 #!/usr/bin/env bun
 import { gmail, forAccount } from "../lib/google-client";
+import { readFileSync, existsSync } from "fs";
+import { basename } from "path";
 
 const command = process.argv[2];
 const args = process.argv.slice(3);
 
-function parseArgs(args: string[]): Record<string, string> {
-  const result: Record<string, string> = {};
+interface ParsedArgs {
+  single: Record<string, string>;
+  multiple: Record<string, string[]>;
+}
+
+function parseArgs(args: string[]): ParsedArgs {
+  const single: Record<string, string> = {};
+  const multiple: Record<string, string[]> = {};
+
   for (let i = 0; i < args.length; i++) {
     if (args[i].startsWith("--")) {
       const key = args[i].slice(2);
       const value = args[i + 1] || "";
-      result[key] = value;
+
+      // Keys that support multiple values
+      if (key === "attachment") {
+        if (!multiple[key]) multiple[key] = [];
+        multiple[key].push(value);
+      } else {
+        single[key] = value;
+      }
       i++;
     }
   }
-  return result;
+
+  return { single, multiple };
 }
 
 function decodeBase64(data: string): string {
@@ -26,7 +43,7 @@ function getGmailClient(account?: string) {
 }
 
 async function main() {
-  const parsed = parseArgs(args);
+  const { single: parsed, multiple } = parseArgs(args);
   const account = parsed.account;
   const gm = getGmailClient(account);
 
@@ -101,14 +118,34 @@ async function main() {
       const to = parsed.to;
       const subject = parsed.subject;
       const body = parsed.body;
+      const attachmentPaths = multiple.attachment || [];
 
       if (!to || !subject || !body) {
-        console.error("Usage: bun run gmail send --to <email> --subject <subject> --body <body> [--account EMAIL]");
+        console.error("Usage: bun run gmail send --to <email> --subject <subject> --body <body> [--attachment <file>]... [--account EMAIL]");
         process.exit(1);
       }
 
-      const result = await gm.send(to, subject, body);
-      console.log(`Email sent! Message ID: ${result.id}`);
+      // Check if we have attachments
+      if (attachmentPaths.length > 0) {
+        const attachments: { filename: string; content: Buffer }[] = [];
+
+        for (const filePath of attachmentPaths) {
+          if (!existsSync(filePath)) {
+            console.error(`Attachment not found: ${filePath}`);
+            process.exit(1);
+          }
+          const content = readFileSync(filePath);
+          const filename = basename(filePath);
+          attachments.push({ filename, content });
+          console.log(`Attaching: ${filename} (${content.length} bytes)`);
+        }
+
+        const result = await gm.sendWithAttachment(to, subject, body, attachments);
+        console.log(`Email sent with ${attachments.length} attachment(s)! Message ID: ${result.id}`);
+      } else {
+        const result = await gm.send(to, subject, body);
+        console.log(`Email sent! Message ID: ${result.id}`);
+      }
       break;
     }
 
@@ -132,7 +169,13 @@ async function main() {
       console.log("  search <query> [--max N]     Search messages");
       console.log("  read <messageId>             Read a message");
       console.log("  send --to --subject --body   Send an email");
+      console.log("       [--attachment <file>]   Attach file (can repeat)");
       console.log("  labels                       List labels");
+      console.log("");
+      console.log("Examples:");
+      console.log("  gmail send --to user@example.com --subject 'Hello' --body 'Message'");
+      console.log("  gmail send --to user@example.com --subject 'Report' --body 'See attached' --attachment report.pdf");
+      console.log("  gmail send --to user@example.com --subject 'Files' --body 'Multiple' --attachment a.pdf --attachment b.png");
       break;
   }
 }

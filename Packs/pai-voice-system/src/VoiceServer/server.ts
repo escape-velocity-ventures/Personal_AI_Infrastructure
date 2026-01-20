@@ -38,38 +38,40 @@ if (!ELEVENLABS_API_KEY) {
   console.error('Add: ELEVENLABS_API_KEY=your_key_here to ~/.env');
 }
 
-// Load settings.json for DA identity and default voice
+// Load DA identity from DAIDENTITY.md (single source of truth)
 let daVoiceId: string | null = null;
 let daVoiceProsody: ProsodySettings | null = null;
 let daName = "Assistant";
+
+const DAIDENTITY_PATH = join(homedir(), '.claude', 'skills', 'CORE', 'USER', 'DAIDENTITY.md');
+
 try {
-  const settingsPath = join(homedir(), '.claude', 'settings.json');
-  if (existsSync(settingsPath)) {
-    const settingsContent = readFileSync(settingsPath, 'utf-8');
-    const settings = JSON.parse(settingsContent);
-    if (settings.daidentity?.voiceId) {
-      daVoiceId = settings.daidentity.voiceId;
-      console.log(`Loaded DA voice ID from settings.json`);
+  if (existsSync(DAIDENTITY_PATH)) {
+    const content = readFileSync(DAIDENTITY_PATH, 'utf-8');
+
+    // Extract fields from markdown format: **Field:** Value
+    const nameMatch = content.match(/\*\*Name:\*\*\s*(\w+)/);
+    const voiceMatch = content.match(/\*\*Voice\s*ID:\*\*\s*(\S+)/i);
+
+    if (nameMatch?.[1]) {
+      daName = nameMatch[1];
     }
-    if (settings.daidentity?.name) {
-      daName = settings.daidentity.name;
-    }
-    if (settings.daidentity?.voice) {
-      daVoiceProsody = settings.daidentity.voice as ProsodySettings;
-      console.log(`Loaded DA voice prosody from settings.json`);
+    if (voiceMatch?.[1]) {
+      daVoiceId = voiceMatch[1];
+      console.log(`Loaded DA voice ID from DAIDENTITY.md: ${daVoiceId}`);
     }
   }
 } catch (error) {
-  console.warn('Failed to load DA voice settings from settings.json');
+  console.warn('Failed to load DA identity from DAIDENTITY.md:', error);
 }
 
 if (!daVoiceId) {
-  console.warn('No voiceId configured in settings.json daidentity section');
-  console.warn('Add: "daidentity": { "voiceId": "your_elevenlabs_voice_id" }');
+  console.warn('No Voice ID found in DAIDENTITY.md');
+  console.warn('Add: **Voice ID:** your_elevenlabs_voice_id to DAIDENTITY.md');
 }
 
-// Default voice ID from settings.json or environment variable
-const DEFAULT_VOICE_ID = process.env.ELEVENLABS_VOICE_ID || daVoiceId || "";
+// Default voice ID: DAIDENTITY.md is source of truth, env var is fallback
+const DEFAULT_VOICE_ID = daVoiceId || process.env.ELEVENLABS_VOICE_ID || "";
 
 // Voice configuration types
 interface ProsodySettings {

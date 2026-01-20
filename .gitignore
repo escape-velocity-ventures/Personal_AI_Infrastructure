@@ -78,3 +78,4 @@ credentials/
 .claude/pai_backups/
 .claude/.pai-sync-history
 package-lock.json
+Packs/pai-info-hygiene/info-hygiene.db

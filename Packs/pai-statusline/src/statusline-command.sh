@@ -45,14 +45,27 @@ WEATHER_CACHE_TTL=900    # 15 minutes
 # TERMINAL WIDTH DETECTION
 # ─────────────────────────────────────────────────────────────────────────────
 # Hooks don't inherit terminal context. Try multiple methods.
+# User can override via settings.json: statusLine.width or statusLine.mode
 
 detect_terminal_width() {
     local width=""
 
-    # Tier 1: Kitty IPC (most accurate for Kitty panes)
+    # Tier 0: User-configured width in settings.json
+    local configured_width=$(jq -r '.statusLine.width // empty' "$SETTINGS_FILE" 2>/dev/null)
+    [ -n "$configured_width" ] && [ "$configured_width" != "null" ] && {
+        echo "$configured_width"
+        return
+    }
+
+    # Tier 1: Kitty IPC with window ID
     if [ -n "$KITTY_WINDOW_ID" ] && command -v kitten >/dev/null 2>&1; then
         width=$(kitten @ ls 2>/dev/null | jq -r --argjson wid "$KITTY_WINDOW_ID" \
             '.[].tabs[].windows[] | select(.id == $wid) | .columns' 2>/dev/null)
+    fi
+
+    # Tier 1b: Kitty IPC without window ID - get focused window
+    if { [ -z "$width" ] || [ "$width" = "0" ] || [ "$width" = "null" ]; } && command -v kitten >/dev/null 2>&1; then
+        width=$(kitten @ ls 2>/dev/null | jq -r '.[].tabs[].windows[] | select(.is_focused == true) | .columns' 2>/dev/null | head -1)
     fi
 
     # Tier 2: Direct TTY query
@@ -68,16 +81,23 @@ detect_terminal_width() {
     echo "$width"
 }
 
-term_width=$(detect_terminal_width)
+# Check for user-configured mode override first
+configured_mode=$(jq -r '.statusLine.mode // empty' "$SETTINGS_FILE" 2>/dev/null)
 
-if [ "$term_width" -lt 35 ]; then
-    MODE="nano"
-elif [ "$term_width" -lt 55 ]; then
-    MODE="micro"
-elif [ "$term_width" -lt 80 ]; then
-    MODE="mini"
+if [ -n "$configured_mode" ] && [ "$configured_mode" != "null" ]; then
+    MODE="$configured_mode"
 else
-    MODE="normal"
+    term_width=$(detect_terminal_width)
+
+    if [ "$term_width" -lt 35 ]; then
+        MODE="nano"
+    elif [ "$term_width" -lt 55 ]; then
+        MODE="micro"
+    elif [ "$term_width" -lt 80 ]; then
+        MODE="mini"
+    else
+        MODE="normal"
+    fi
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -585,7 +605,176 @@ case "$MODE" in
 esac
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# LINE 6: LEARNING (with sparklines in normal mode)
+# LINE 6: INFRASTRUCTURE (from InfraScanner cache)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+INFRA_CACHE="$PAI_DIR/MEMORY/STATE/infra-cache.json"
+
+# Infra colors (teal/cyan theme to match infrastructure)
+INFRA_PRIMARY='\033[38;2;20;184;166m'    # Teal
+INFRA_LABEL='\033[38;2;45;212;191m'      # Lighter teal
+INFRA_HOST='\033[38;2;94;234;212m'       # Very light teal
+INFRA_VM='\033[38;2;6;182;212m'          # Cyan
+INFRA_CONTAINER='\033[38;2;34;211;238m'  # Light cyan
+
+if [ -f "$INFRA_CACHE" ]; then
+    # Read cache data with running/stopped breakdown
+    infra_hosts=$(jq -r '.summary.totalHosts // 0' "$INFRA_CACHE" 2>/dev/null)
+    infra_hosts_up=$(jq -r '.summary.hostsUp // 0' "$INFRA_CACHE" 2>/dev/null)
+    infra_vms=$(jq -r '.summary.totalVMs // 0' "$INFRA_CACHE" 2>/dev/null)
+    infra_vms_up=$(jq -r '.summary.vmsRunning // 0' "$INFRA_CACHE" 2>/dev/null)
+    infra_vms_down=$(jq -r '.summary.vmsStopped // 0' "$INFRA_CACHE" 2>/dev/null)
+    infra_containers=$(jq -r '.summary.totalContainers // 0' "$INFRA_CACHE" 2>/dev/null)
+    infra_containers_up=$(jq -r '.summary.containersRunning // 0' "$INFRA_CACHE" 2>/dev/null)
+    infra_containers_down=$(jq -r '.summary.containersStopped // 0' "$INFRA_CACHE" 2>/dev/null)
+
+    # Cloud instance counts per provider
+    aws_up=$(jq -r '.summary.awsRunning // 0' "$INFRA_CACHE" 2>/dev/null)
+    aws_down=$(jq -r '.summary.awsStopped // 0' "$INFRA_CACHE" 2>/dev/null)
+    gcp_up=$(jq -r '.summary.gcpRunning // 0' "$INFRA_CACHE" 2>/dev/null)
+    gcp_down=$(jq -r '.summary.gcpStopped // 0' "$INFRA_CACHE" 2>/dev/null)
+    azure_up=$(jq -r '.summary.azureRunning // 0' "$INFRA_CACHE" 2>/dev/null)
+    azure_down=$(jq -r '.summary.azureStopped // 0' "$INFRA_CACHE" 2>/dev/null)
+
+    # Calculate cache age from file modification time
+    infra_mtime=$(stat -f %m "$INFRA_CACHE" 2>/dev/null || echo 0)
+    infra_age=$(( $(date +%s) - infra_mtime ))
+    if [ "$infra_age" -lt 0 ]; then infra_age=0; fi
+    if [ "$infra_age" -ge 3600 ]; then
+        infra_age_str="$((infra_age / 3600))h"
+    elif [ "$infra_age" -ge 60 ]; then
+        infra_age_str="$((infra_age / 60))m"
+    else
+        infra_age_str="${infra_age}s"
+    fi
+
+    # Calculate hosts down
+    infra_hosts_down=$((infra_hosts - infra_hosts_up))
+
+    # Calculate total running and stopped (local + cloud)
+    total_running=$((infra_containers_up + aws_up + gcp_up + azure_up))
+    total_stopped=$((infra_containers_down + aws_down + gcp_down + azure_down))
+
+    # Check if any cloud instances exist
+    has_cloud=$((aws_up + aws_down + gcp_up + gcp_down + azure_up + azure_down))
+
+    case "$MODE" in
+        nano)
+            # Compact: ⚡ A:0↑1↓ G:1↑ L:3↑ V:5↑1↓
+            printf "${INFRA_PRIMARY}⚡${RESET}"
+            # Cloud providers (only show if any instances)
+            [ $((aws_up + aws_down)) -gt 0 ] && {
+                printf " ${WIELD_SECONDARY}A:${RESET}"
+                [ "$aws_up" -gt 0 ] && printf "${EMERALD}${aws_up}↑${RESET}"
+                [ "$aws_down" -gt 0 ] && printf "${ROSE}${aws_down}↓${RESET}"
+            }
+            [ $((gcp_up + gcp_down)) -gt 0 ] && {
+                printf " ${WIELD_SECONDARY}G:${RESET}"
+                [ "$gcp_up" -gt 0 ] && printf "${EMERALD}${gcp_up}↑${RESET}"
+                [ "$gcp_down" -gt 0 ] && printf "${ROSE}${gcp_down}↓${RESET}"
+            }
+            [ $((azure_up + azure_down)) -gt 0 ] && {
+                printf " ${WIELD_SECONDARY}Z:${RESET}"
+                [ "$azure_up" -gt 0 ] && printf "${EMERALD}${azure_up}↑${RESET}"
+                [ "$azure_down" -gt 0 ] && printf "${ROSE}${azure_down}↓${RESET}"
+            }
+            # Local
+            printf " ${INFRA_HOST}L:${EMERALD}${infra_hosts_up}↑${RESET}"
+            [ "$infra_hosts_down" -gt 0 ] && printf "${ROSE}${infra_hosts_down}↓${RESET}"
+            printf " ${INFRA_VM}V:${EMERALD}${infra_vms_up}↑${RESET}"
+            [ "$infra_vms_down" -gt 0 ] && printf "${ROSE}${infra_vms_down}↓${RESET}"
+            printf "\n"
+            ;;
+        micro)
+            # ⚡ AWS:0↑1↓ GCP:0 LOCAL:3↑ VM:5↑1↓ (5m)
+            printf "${INFRA_PRIMARY}⚡${RESET}"
+            # Cloud providers
+            [ $((aws_up + aws_down)) -gt 0 ] && {
+                printf " ${WIELD_SECONDARY}AWS:${RESET}"
+                [ "$aws_up" -gt 0 ] && printf "${EMERALD}${aws_up}↑${RESET}"
+                [ "$aws_down" -gt 0 ] && printf "${ROSE}${aws_down}↓${RESET}"
+            }
+            [ $((gcp_up + gcp_down)) -gt 0 ] && {
+                printf " ${WIELD_SECONDARY}GCP:${RESET}"
+                [ "$gcp_up" -gt 0 ] && printf "${EMERALD}${gcp_up}↑${RESET}"
+                [ "$gcp_down" -gt 0 ] && printf "${ROSE}${gcp_down}↓${RESET}"
+            }
+            [ $((azure_up + azure_down)) -gt 0 ] && {
+                printf " ${WIELD_SECONDARY}AZR:${RESET}"
+                [ "$azure_up" -gt 0 ] && printf "${EMERALD}${azure_up}↑${RESET}"
+                [ "$azure_down" -gt 0 ] && printf "${ROSE}${azure_down}↓${RESET}"
+            }
+            # Local
+            printf " ${INFRA_HOST}LOCAL:${EMERALD}${infra_hosts_up}↑${RESET}"
+            [ "$infra_hosts_down" -gt 0 ] && printf "${ROSE}${infra_hosts_down}↓${RESET}"
+            printf " ${INFRA_VM}VM:${EMERALD}${infra_vms_up}↑${RESET}"
+            [ "$infra_vms_down" -gt 0 ] && printf "${ROSE}${infra_vms_down}↓${RESET}"
+            printf " ${SLATE_500}(${infra_age_str})${RESET}\n"
+            ;;
+        mini)
+            # ⚡ INFRA: AWS:0↑1↓ GCP:0 AZR:0 LOCAL:3↑ │ VMs:5↑1↓ (5m)
+            printf "${INFRA_PRIMARY}⚡${RESET} ${INFRA_LABEL}INFRA:${RESET}"
+            # Cloud providers (show all, even if 0)
+            printf " ${WIELD_SECONDARY}AWS:${RESET}"
+            [ "$aws_up" -gt 0 ] && printf "${EMERALD}${aws_up}↑${RESET}"
+            [ "$aws_down" -gt 0 ] && printf "${ROSE}${aws_down}↓${RESET}"
+            [ $((aws_up + aws_down)) -eq 0 ] && printf "${SLATE_500}0${RESET}"
+            printf " ${WIELD_SECONDARY}GCP:${RESET}"
+            [ "$gcp_up" -gt 0 ] && printf "${EMERALD}${gcp_up}↑${RESET}"
+            [ "$gcp_down" -gt 0 ] && printf "${ROSE}${gcp_down}↓${RESET}"
+            [ $((gcp_up + gcp_down)) -eq 0 ] && printf "${SLATE_500}0${RESET}"
+            printf " ${WIELD_SECONDARY}AZR:${RESET}"
+            [ "$azure_up" -gt 0 ] && printf "${EMERALD}${azure_up}↑${RESET}"
+            [ "$azure_down" -gt 0 ] && printf "${ROSE}${azure_down}↓${RESET}"
+            [ $((azure_up + azure_down)) -eq 0 ] && printf "${SLATE_500}0${RESET}"
+            # Local
+            printf " ${INFRA_HOST}LOCAL:${EMERALD}${infra_hosts_up}↑${RESET}"
+            [ "$infra_hosts_down" -gt 0 ] && printf "${ROSE}${infra_hosts_down}↓${RESET}"
+            printf " ${SLATE_600}│${RESET} ${INFRA_VM}VMs:${EMERALD}${infra_vms_up}↑${RESET}"
+            [ "$infra_vms_down" -gt 0 ] && printf "${ROSE}${infra_vms_down}↓${RESET}"
+            printf " ${SLATE_500}(${infra_age_str})${RESET}\n"
+            ;;
+        normal)
+            # ⚡ INFRA: AWS:0↑1↓ GCP:0 AZR:0 LOCAL:3↑ │ VMs:5↑1↓ │ Containers:2↑5↓ │ Total: 4 running, 3 stopped
+            printf "${INFRA_PRIMARY}⚡${RESET} ${INFRA_LABEL}INFRA:${RESET}"
+            # Cloud providers (show all)
+            printf " ${WIELD_SECONDARY}AWS:${RESET}"
+            [ "$aws_up" -gt 0 ] && printf "${EMERALD}${aws_up}↑${RESET}"
+            [ "$aws_down" -gt 0 ] && printf "${ROSE}${aws_down}↓${RESET}"
+            [ $((aws_up + aws_down)) -eq 0 ] && printf "${SLATE_500}0${RESET}"
+            printf " ${WIELD_SECONDARY}GCP:${RESET}"
+            [ "$gcp_up" -gt 0 ] && printf "${EMERALD}${gcp_up}↑${RESET}"
+            [ "$gcp_down" -gt 0 ] && printf "${ROSE}${gcp_down}↓${RESET}"
+            [ $((gcp_up + gcp_down)) -eq 0 ] && printf "${SLATE_500}0${RESET}"
+            printf " ${WIELD_SECONDARY}AZR:${RESET}"
+            [ "$azure_up" -gt 0 ] && printf "${EMERALD}${azure_up}↑${RESET}"
+            [ "$azure_down" -gt 0 ] && printf "${ROSE}${azure_down}↓${RESET}"
+            [ $((azure_up + azure_down)) -eq 0 ] && printf "${SLATE_500}0${RESET}"
+            # Local
+            printf " ${INFRA_HOST}LOCAL:${EMERALD}${infra_hosts_up}↑${RESET}"
+            [ "$infra_hosts_down" -gt 0 ] && printf "${ROSE}${infra_hosts_down}↓${RESET}"
+            printf " ${SLATE_600}│${RESET} ${INFRA_VM}VMs:${EMERALD}${infra_vms_up}↑${RESET}"
+            [ "$infra_vms_down" -gt 0 ] && printf "${ROSE}${infra_vms_down}↓${RESET}"
+            printf " ${SLATE_600}│${RESET} ${INFRA_CONTAINER}Containers:${EMERALD}${infra_containers_up}↑${RESET}"
+            [ "$infra_containers_down" -gt 0 ] && printf "${SLATE_500}${infra_containers_down}↓${RESET}"
+            printf " ${SLATE_600}│${RESET} ${SLATE_400}Total:${RESET} ${EMERALD}${total_running} running${RESET}${SLATE_500}, ${total_stopped} stopped${RESET}"
+            printf " ${SLATE_500}(${infra_age_str})${RESET}\n"
+            ;;
+    esac
+else
+    # No cache yet
+    case "$MODE" in
+        nano|micro)
+            printf "${INFRA_PRIMARY}◆${RESET} ${SLATE_500}—${RESET}\n"
+            ;;
+        mini|normal)
+            printf "${INFRA_PRIMARY}◆${RESET} ${INFRA_LABEL}INFRA:${RESET} ${SLATE_500}No data - run 'InfraScanner refresh'${RESET}\n"
+            ;;
+    esac
+fi
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# LINE 7: LEARNING (with sparklines in normal mode)
 # ═══════════════════════════════════════════════════════════════════════════════
 
 if [ -f "$RATINGS_FILE" ] && [ -s "$RATINGS_FILE" ]; then

@@ -1,3 +1,44 @@
 {
-  "channels": []
+  "channels": [
+    {
+      "name": "Nate B. Jones",
+      "handle": "@natebjones",
+      "url": "https://www.youtube.com/@natebjones",
+      "topics": ["AI trends", "AI predictions", "business strategy", "technology analysis", "second brain"],
+      "addedDate": "2026-01-12",
+      "notes": "Excellent analysis of AI industry trends, business implications, and predictions. Covers OpenAI vs Anthropic philosophies, job market impacts, and productivity frameworks."
+    },
+    {
+      "name": "IndyDevDan",
+      "handle": "@indydevdan",
+      "url": "https://www.youtube.com/@indydevdan",
+      "topics": ["agentic coding", "Claude Code", "AI engineering", "developer productivity", "agent threads"],
+      "addedDate": "2026-01-12",
+      "notes": "Deep dives on agentic coding patterns, Claude Code hooks, damage control, and the codebase singularity concept. Essential for AI-assisted development practices."
+    },
+    {
+      "name": "Daniel Miessler (Unsupervised Learning)",
+      "handle": "@unsupervised-learning",
+      "url": "https://www.youtube.com/@unsupervised-learning",
+      "topics": ["PAI", "AI infrastructure", "security", "personal AI", "Fabric"],
+      "addedDate": "2026-01-12",
+      "notes": "Creator of PAI/Kai. Covers personal AI infrastructure, security topics, and AI augmentation philosophy. Key insight: scaffolding is more important than the model."
+    },
+    {
+      "name": "Anthropic",
+      "handle": "@anthropic-ai",
+      "url": "https://www.youtube.com/@anthropic-ai",
+      "topics": ["Claude", "Claude Code", "MCP", "AI safety", "developer education"],
+      "addedDate": "2026-01-12",
+      "notes": "Official Anthropic channel. Developer education on Claude, Claude Code, Model Context Protocol, and AI safety research."
+    },
+    {
+      "name": "Ryan McBeth",
+      "handle": "@ryanmcbethprogramming",
+      "url": "https://www.youtube.com/@ryanmcbethprogramming",
+      "topics": ["disinformation", "information warfare", "intelligence analysis", "cyber warfare", "information hygiene"],
+      "addedDate": "2026-01-18",
+      "notes": "Intelligence analyst focusing on disinformation detection, bot farm analysis, and information warfare. Excellent for understanding social media manipulation tactics."
+    }
+  ]
 }

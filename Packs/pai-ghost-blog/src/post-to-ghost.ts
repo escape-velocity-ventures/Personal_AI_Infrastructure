@@ -17,7 +17,8 @@ import { createHmac } from 'crypto';
 import { marked } from 'marked';
 
 // Load .env from PAI root
-const PAI_ROOT = dirname(dirname(dirname(import.meta.path)));
+// Path: src/post-to-ghost.ts → pai-ghost-blog → Packs → PAI
+const PAI_ROOT = dirname(dirname(dirname(dirname(import.meta.path))));
 const envPath = join(PAI_ROOT, '.env');
 if (existsSync(envPath)) {
   const envContent = readFileSync(envPath, 'utf-8');

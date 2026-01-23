@@ -16,11 +16,22 @@ import { join, basename, dirname } from 'path';
 import { createHmac } from 'crypto';
 import { marked } from 'marked';
 
-// Load .env from PAI root
-// Path: src/post-to-ghost.ts → pai-ghost-blog → Packs → PAI
-const PAI_ROOT = dirname(dirname(dirname(dirname(import.meta.path))));
-const envPath = join(PAI_ROOT, '.env');
-if (existsSync(envPath)) {
+// Load .env from PAI repository
+// Uses PAI_REPO env var (set in shell profile) for reliable discovery
+import { homedir } from 'os';
+
+function loadPaiEnv(): void {
+  const paiRepo = process.env.PAI_REPO || join(homedir(), 'EscapeVelocity/PersonalAI/PAI');
+  const envPath = join(paiRepo, '.env');
+
+  if (!existsSync(envPath)) {
+    // Only warn if PAI_REPO was explicitly set but .env doesn't exist
+    if (process.env.PAI_REPO) {
+      console.warn(`Warning: .env not found at ${envPath}`);
+    }
+    return;
+  }
+
   const envContent = readFileSync(envPath, 'utf-8');
   for (const line of envContent.split('\n')) {
     if (line.trim() && !line.startsWith('#')) {
@@ -32,6 +43,8 @@ if (existsSync(envPath)) {
     }
   }
 }
+
+loadPaiEnv();
 
 // Configuration
 const GHOST_URL = process.env.GHOST_URL || 'http://localhost:2368';

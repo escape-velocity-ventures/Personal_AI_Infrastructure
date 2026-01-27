@@ -10,6 +10,9 @@
  *   ghost-cli delete <id|slug> [--force]
  *   ghost-cli publish <id|slug>
  *   ghost-cli unpublish <id|slug>
+ *   ghost-cli upload <image-path> [--name <filename>]
+ *   ghost-cli set-image <id|slug> --url <image-url>
+ *   ghost-cli set-image <id|slug> --file <image-path>
  *
  * Environment:
  *   GHOST_URL - Ghost instance URL
@@ -20,6 +23,7 @@
  */
 
 import { readFileSync, existsSync } from "fs";
+import { basename } from "path";
 import { createHmac } from "crypto";
 import { marked } from "marked";
 import { execSync } from "child_process";
@@ -32,11 +36,25 @@ const GHOST_URL =
   process.env.GHOST_URL || "https://blog.escape-velocity-ventures.org";
 
 function getAdminKey(): string {
+  // 1. Check environment variable
   if (process.env.GHOST_ADMIN_KEY) {
     return process.env.GHOST_ADMIN_KEY;
   }
 
-  // Try 1Password
+  // 2. Try Kubernetes secret (preferred for cluster operations)
+  try {
+    const key = execSync(
+      'kubectl get secret ghost-admin-api -n infrastructure -o jsonpath=\'{.data.key}\' 2>/dev/null | base64 -d',
+      { encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] }
+    ).trim();
+    if (key && key.includes(":")) {
+      return key;
+    }
+  } catch {
+    // Fall through to 1Password
+  }
+
+  // 3. Fall back to 1Password
   try {
     const key = execSync(
       'op read "op://Escape Velocity Ventures Inc./Ghost Admin Key/password"',
@@ -44,9 +62,9 @@ function getAdminKey(): string {
     ).trim();
     return key;
   } catch {
-    console.error("Error: GHOST_ADMIN_KEY not set and 1Password lookup failed");
+    console.error("Error: GHOST_ADMIN_KEY not set and lookup failed");
     console.error(
-      "Set GHOST_ADMIN_KEY or ensure 1Password CLI is authenticated"
+      "Tried: env var, k8s secret (infrastructure/ghost-admin-api), 1Password"
     );
     process.exit(1);
   }
@@ -161,6 +179,7 @@ interface Post {
   updated_at: string;
   url: string;
   html?: string;
+  feature_image?: string;
 }
 
 async function listPosts(
@@ -271,6 +290,66 @@ async function unpublishPost(idOrSlug: string): Promise<Post> {
   });
 
   return result.posts[0];
+}
+
+async function setFeatureImage(idOrSlug: string, imageUrl: string): Promise<Post> {
+  const token = generateToken(getAdminKey());
+  const post = await getPost(idOrSlug);
+
+  const result = await apiPut(`posts/${post.id}/`, token, {
+    posts: [
+      {
+        feature_image: imageUrl,
+        updated_at: post.updated_at,
+      },
+    ],
+  });
+
+  return result.posts[0];
+}
+
+// =============================================================================
+// Image Operations
+// =============================================================================
+
+function getMimeType(filename: string): string {
+  const ext = filename.toLowerCase().split(".").pop();
+  const mimeTypes: Record<string, string> = {
+    png: "image/png",
+    jpg: "image/jpeg",
+    jpeg: "image/jpeg",
+    gif: "image/gif",
+    webp: "image/webp",
+    svg: "image/svg+xml",
+  };
+  return mimeTypes[ext || ""] || "application/octet-stream";
+}
+
+async function uploadImage(imagePath: string, targetName?: string): Promise<string> {
+  const token = generateToken(getAdminKey());
+  const url = `${GHOST_URL}/ghost/api/admin/images/upload/`;
+  const imageData = readFileSync(imagePath);
+  const filename = targetName || basename(imagePath);
+  const mimeType = getMimeType(filename);
+
+  const formData = new FormData();
+  formData.append("file", new Blob([imageData], { type: mimeType }), filename);
+  formData.append("purpose", "image");
+  formData.append("ref", filename);
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { Authorization: `Ghost ${token}` },
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(`Upload error: ${response.status} - ${error}`);
+  }
+
+  const result = await response.json();
+  return result.images[0].url;
 }
 
 // =============================================================================
@@ -487,6 +566,65 @@ async function cmdUnpublish(args: string[]): Promise<void> {
   console.log(`   Title: ${post.title}\n`);
 }
 
+async function cmdUpload(args: string[]): Promise<void> {
+  const imagePath = args[0];
+  const nameIdx = args.indexOf("--name");
+  const targetName = nameIdx !== -1 ? args[nameIdx + 1] : undefined;
+
+  if (!imagePath) {
+    console.error("Usage: ghost-cli upload <image-path> [--name <filename>]");
+    process.exit(1);
+  }
+
+  if (!existsSync(imagePath)) {
+    console.error(`Error: File not found: ${imagePath}`);
+    process.exit(1);
+  }
+
+  console.log(`Uploading: ${imagePath}`);
+  if (targetName) console.log(`As: ${targetName}`);
+
+  const url = await uploadImage(imagePath, targetName);
+
+  console.log(`\n✅ Uploaded successfully!`);
+  console.log(`   URL: ${url}\n`);
+}
+
+async function cmdSetImage(args: string[]): Promise<void> {
+  const idOrSlug = args[0];
+  const urlIdx = args.indexOf("--url");
+  const fileIdx = args.indexOf("--file");
+
+  if (!idOrSlug || (urlIdx === -1 && fileIdx === -1)) {
+    console.error("Usage: ghost-cli set-image <id|slug> --url <image-url>");
+    console.error("       ghost-cli set-image <id|slug> --file <image-path>");
+    process.exit(1);
+  }
+
+  let imageUrl: string;
+
+  if (fileIdx !== -1) {
+    const imagePath = args[fileIdx + 1];
+    if (!existsSync(imagePath)) {
+      console.error(`Error: File not found: ${imagePath}`);
+      process.exit(1);
+    }
+    console.log(`Uploading: ${imagePath}`);
+    imageUrl = await uploadImage(imagePath);
+    console.log(`Uploaded: ${imageUrl}`);
+  } else {
+    imageUrl = args[urlIdx + 1];
+  }
+
+  console.log(`Setting feature image for: ${idOrSlug}`);
+
+  const post = await setFeatureImage(idOrSlug, imageUrl);
+
+  console.log(`\n✅ Feature image set!`);
+  console.log(`   Title: ${post.title}`);
+  console.log(`   Image: ${imageUrl}\n`);
+}
+
 function showHelp(): void {
   console.log(`
 Ghost Blog CLI - Unified management tool
@@ -502,6 +640,9 @@ Commands:
   delete <id|slug> [--force]      Delete a post
   publish <id|slug>               Publish a draft
   unpublish <id|slug>             Revert to draft
+  upload <image> [--name <name>]  Upload image to Ghost
+  set-image <id|slug> --url <url> Set feature image from URL
+  set-image <id|slug> --file <path> Upload and set feature image
 
 Examples:
   ghost-cli list --drafts
@@ -509,6 +650,8 @@ Examples:
   ghost-cli create --file ~/post.md --title "My Post"
   ghost-cli delete abc123 --force
   ghost-cli publish the-fabrication-test
+  ghost-cli upload ~/header.png --name custom-name.png
+  ghost-cli set-image my-post --file ~/header.png
 
 Environment:
   GHOST_URL        Ghost instance URL (default: blog.escape-velocity-ventures.org)
@@ -552,6 +695,12 @@ async function main(): Promise<void> {
         break;
       case "unpublish":
         await cmdUnpublish(commandArgs);
+        break;
+      case "upload":
+        await cmdUpload(commandArgs);
+        break;
+      case "set-image":
+        await cmdSetImage(commandArgs);
         break;
       default:
         console.error(`Unknown command: ${command}`);

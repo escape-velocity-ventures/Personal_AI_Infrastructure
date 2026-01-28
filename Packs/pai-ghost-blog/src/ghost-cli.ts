@@ -198,21 +198,6 @@ async function listPosts(
   return result.posts;
 }
 
-async function resolvePartialId(partialId: string): Promise<string | null> {
-  // Check if it looks like a partial hex ID (Ghost IDs are 24-char hex)
-  if (!/^[0-9a-f]+$/i.test(partialId) || partialId.length >= 24) {
-    return null;
-  }
-
-  const token = generateToken(getAdminKey());
-  const result = await apiGet("posts/?limit=all&fields=id,slug", token);
-  const match = result.posts.find((p: Post) =>
-    p.id.toLowerCase().startsWith(partialId.toLowerCase())
-  );
-
-  return match?.id || null;
-}
-
 async function getPost(idOrSlug: string): Promise<Post> {
   const token = generateToken(getAdminKey());
 
@@ -225,18 +210,8 @@ async function getPost(idOrSlug: string): Promise<Post> {
     return result.posts[0];
   } catch {
     // Try by full ID
-    try {
-      const result = await apiGet(`posts/${idOrSlug}/?formats=html`, token);
-      return result.posts[0];
-    } catch {
-      // Try resolving partial ID
-      const fullId = await resolvePartialId(idOrSlug);
-      if (fullId) {
-        const result = await apiGet(`posts/${fullId}/?formats=html`, token);
-        return result.posts[0];
-      }
-      throw new Error(`Post not found: ${idOrSlug}`);
-    }
+    const result = await apiGet(`posts/${idOrSlug}/?formats=html`, token);
+    return result.posts[0];
   }
 }
 
@@ -412,16 +387,16 @@ function formatDate(dateStr: string | null): string {
 function formatPostRow(post: Post): string {
   const status =
     post.status === "published"
-      ? "✓ published"
+      ? "✓"
       : post.status === "draft"
-        ? "○ draft"
-        : "◐ scheduled";
+        ? "○"
+        : "◐";
   const date = formatDate(post.published_at || post.updated_at);
-  // Show slug (truncated if needed) - slugs work for all commands
+  // Show full ID and slug - both work for all commands
   const slug =
-    post.slug.length > 45 ? post.slug.slice(0, 42) + "..." : post.slug;
+    post.slug.length > 40 ? post.slug.slice(0, 37) + "..." : post.slug;
 
-  return `${status.padEnd(12)}  ${date.padEnd(12)}  ${slug}`;
+  return `${status}  ${post.id}  ${date.padEnd(12)}  ${slug}`;
 }
 
 // =============================================================================
@@ -441,8 +416,8 @@ async function cmdList(args: string[]): Promise<void> {
     return;
   }
 
-  console.log(`\n  Status        Date          Slug`);
-  console.log(`  ${"─".repeat(70)}`);
+  console.log(`\n     ID                        Date          Slug`);
+  console.log(`  ${"─".repeat(90)}`);
 
   for (const post of posts) {
     console.log(`  ${formatPostRow(post)}`);

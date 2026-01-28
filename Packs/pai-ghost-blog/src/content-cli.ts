@@ -34,6 +34,122 @@ const GHOST_CLI = join(
   "EscapeVelocity/PersonalAI/PAI/Packs/pai-ghost-blog/src/ghost-cli.ts"
 );
 
+const STATE_SERVICE_URL = process.env.PAI_STATE_SERVICE_URL || "https://pai-state.escape-velocity-ventures.org";
+
+// =============================================================================
+// Cloud Sync - Prevents PM numbering collisions
+// =============================================================================
+
+async function getApiKey(): Promise<string | null> {
+  if (process.env.PAI_STATE_API_KEY) return process.env.PAI_STATE_API_KEY;
+
+  // Try kubectl
+  try {
+    const result = execSync(
+      'kubectl get secret pai-state-api-key -n pai -o jsonpath="{.data.api-key}" 2>/dev/null',
+      { encoding: "utf-8" }
+    );
+    if (result) {
+      return Buffer.from(result, "base64").toString("utf-8");
+    }
+  } catch {
+    // kubectl not available or secret not found
+  }
+  return null;
+}
+
+/**
+ * Sync PM index from cloud BEFORE operating on it.
+ * This prevents numbering collisions when cloud has newer data.
+ */
+async function syncPmIndexFromCloud(): Promise<boolean> {
+  const apiKey = await getApiKey();
+  if (!apiKey) {
+    console.error("⚠️  Warning: Cannot sync from cloud (no API key). Using local index only.");
+    return false;
+  }
+
+  try {
+    const response = await fetch(`${STATE_SERVICE_URL}/memory/WORK/postmortems/POSTMORTEM-INDEX.md`, {
+      headers: { Authorization: `Bearer ${apiKey}` },
+      signal: AbortSignal.timeout(5000),
+    });
+
+    if (!response.ok) {
+      if (response.status === 404) {
+        // Cloud index doesn't exist yet - that's OK
+        return true;
+      }
+      console.error(`⚠️  Warning: Cloud sync failed (${response.status}). Using local index.`);
+      return false;
+    }
+
+    const data = await response.json();
+    if (!data.content) {
+      return true; // Empty content is fine
+    }
+
+    // Ensure directory exists
+    const pmDir = join(WORK_DIR, "postmortems");
+    mkdirSync(pmDir, { recursive: true });
+
+    // Write cloud content to local
+    writeFileSync(PM_INDEX, data.content, "utf-8");
+    return true;
+  } catch (err) {
+    console.error(`⚠️  Warning: Cloud sync error: ${err}. Using local index.`);
+    return false;
+  }
+}
+
+/**
+ * Sync PM index TO cloud after creating/updating.
+ */
+async function syncPmIndexToCloud(): Promise<boolean> {
+  const apiKey = await getApiKey();
+  if (!apiKey || !existsSync(PM_INDEX)) return false;
+
+  try {
+    const content = readFileSync(PM_INDEX, "utf-8");
+    const response = await fetch(`${STATE_SERVICE_URL}/memory/WORK/postmortems/POSTMORTEM-INDEX.md`, {
+      method: "PUT",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ content, mtime: Date.now() }),
+      signal: AbortSignal.timeout(5000),
+    });
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Sync a specific PM file to cloud.
+ */
+async function syncPmFileToCloud(filepath: string, relativePath: string): Promise<boolean> {
+  const apiKey = await getApiKey();
+  if (!apiKey || !existsSync(filepath)) return false;
+
+  try {
+    const content = readFileSync(filepath, "utf-8");
+    const response = await fetch(`${STATE_SERVICE_URL}/memory/${relativePath}`, {
+      method: "PUT",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ content, mtime: Date.now() }),
+      signal: AbortSignal.timeout(5000),
+    });
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
 // =============================================================================
 // Index Parsing
 // =============================================================================
@@ -493,6 +609,10 @@ Chronological numbering for blog publication.
 // =============================================================================
 
 async function pmCreate(title: string, severity: string): Promise<void> {
+  // CRITICAL: Sync from cloud FIRST to prevent numbering collisions
+  console.log("🔄 Syncing PM index from cloud...");
+  await syncPmIndexFromCloud();
+
   const pmNumber = getNextPmNumber();
   const date = new Date().toISOString().split("T")[0];
   const slug = title
@@ -503,6 +623,13 @@ async function pmCreate(title: string, severity: string): Promise<void> {
   const pmDir = join(WORK_DIR, "postmortems");
   mkdirSync(pmDir, { recursive: true });
   const filepath = join(pmDir, filename);
+
+  // Check for collision - file should not exist
+  if (existsSync(filepath)) {
+    console.error(`\n❌ Error: File already exists: ${filepath}`);
+    console.error(`   This suggests a numbering collision. Check cloud state.`);
+    process.exit(1);
+  }
 
   // Create file from template
   const content = generatePostmortemTemplate(title, pmNumber, severity);
@@ -518,16 +645,27 @@ async function pmCreate(title: string, severity: string): Promise<void> {
     file: filename,
   });
 
+  // Sync back to cloud immediately
+  console.log("☁️  Syncing to cloud...");
+  const relativePath = `WORK/postmortems/${filename}`;
+  const [indexSynced, fileSynced] = await Promise.all([
+    syncPmIndexToCloud(),
+    syncPmFileToCloud(filepath, relativePath),
+  ]);
+
   console.log(`\n✅ Postmortem created: ${pmNumber}`);
   console.log(`   File: ${filepath}`);
   console.log(`   Severity: ${severity}`);
+  console.log(`   Cloud sync: ${indexSynced && fileSynced ? "✓ Synced" : "⚠️ Partial (will sync at session end)"}`);
   console.log(`\n   Next steps:`);
   console.log(`   1. Edit the postmortem: ${filename}`);
   console.log(`   2. When ready for blog: content-cli pm promote ${pmNumber}`);
   console.log();
 }
 
-function pmList(): void {
+async function pmList(): Promise<void> {
+  // Sync from cloud first to show latest state
+  await syncPmIndexFromCloud();
   const entries = parsePostmortemIndex();
 
   if (entries.length === 0) {
@@ -885,7 +1023,7 @@ async function main(): Promise<void> {
         const severity = severityIdx !== -1 ? args[severityIdx + 1] : "MEDIUM";
         await pmCreate(title, severity);
       } else if (subcommand === "list") {
-        pmList();
+        await pmList();
       } else if (subcommand === "promote") {
         const pmNumber = args[2];
         if (!pmNumber) {

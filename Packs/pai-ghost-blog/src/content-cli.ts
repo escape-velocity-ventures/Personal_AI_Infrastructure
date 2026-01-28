@@ -907,9 +907,11 @@ async function blogSync(): Promise<void> {
   // Future: Actually update BLOG-INDEX.md status from Ghost
 }
 
+type RateMode = "single" | "drafts" | "published";
+
 async function blogRate(
   target: string,
-  allDrafts: boolean,
+  mode: RateMode,
   pattern: RatingPattern = "rate_blog_post"
 ): Promise<void> {
   const BLOG_DIR = join(MEMORY_DIR, "WORK", "blog");
@@ -917,40 +919,41 @@ async function blogRate(
 
   console.log(`\nUsing pattern: ${pattern}\n`);
 
-  if (allDrafts) {
-    // Rate all draft articles
-    const { drafts } = parseBlogIndex();
+  if (mode === "drafts" || mode === "published") {
+    const { published, drafts } = parseBlogIndex();
+    const posts = mode === "drafts" ? drafts : published;
+    const label = mode === "drafts" ? "drafts" : "published posts";
 
-    if (drafts.length === 0) {
-      console.log("No drafts to rate.\n");
+    if (posts.length === 0) {
+      console.log(`No ${label} to rate.\n`);
       return;
     }
 
-    console.log(`Rating ${drafts.length} drafts...\n`);
+    console.log(`Rating ${posts.length} ${label}...\n`);
     const ratings: RatingResult[] = [];
 
-    for (const draft of drafts) {
+    for (const post of posts) {
       // Find the source file
       let filepath = "";
-      if (draft.source.includes("Ghost draft")) {
-        console.log(`  ⚠ Skipping ${draft.title} (Ghost-only, no local file)`);
+      if (post.source.includes("Ghost draft")) {
+        console.log(`  ⚠ Skipping ${post.title} (Ghost-only, no local file)`);
         continue;
       }
 
       // Check blog dir first, then postmortems
-      const blogPath = join(BLOG_DIR, draft.source);
-      const pmPath = join(PM_DIR, draft.source);
+      const blogPath = join(BLOG_DIR, post.source);
+      const pmPath = join(PM_DIR, post.source);
 
       if (existsSync(blogPath)) {
         filepath = blogPath;
       } else if (existsSync(pmPath)) {
         filepath = pmPath;
       } else {
-        console.log(`  ⚠ Skipping ${draft.title} (file not found: ${draft.source})`);
+        console.log(`  ⚠ Skipping ${post.title} (file not found: ${post.source})`);
         continue;
       }
 
-      process.stdout.write(`  Rating: ${draft.title.slice(0, 40)}...`);
+      process.stdout.write(`  Rating: ${post.title.slice(0, 40)}...`);
       try {
         const rating = await rateArticle(filepath, pattern);
         ratings.push(rating);
@@ -1056,6 +1059,7 @@ Blog Commands:
   blog sync                                        Sync status from Ghost
   blog rate <file> [--pattern X]                   Rate a single article (1-100)
   blog rate --all-drafts [--pattern X]             Rate all draft articles
+  blog rate --published [--pattern X]              Rate all published articles
   blog status                                      Dashboard of drafts with file status
 
 Rating Patterns (--pattern):
@@ -1069,6 +1073,7 @@ Natural Language Mapping:
   "Add this to the blog"           → blog add <file>
   "What drafts do we have"         → blog list --drafts
   "Rate my drafts"                 → blog rate --all-drafts
+  "Rate published posts"           → blog rate --published
   "How good is this article?"      → blog rate <file>
   "Would I consume this?"          → blog rate <file> --pattern rate_content
   "Show blog status"               → blog status
@@ -1080,7 +1085,7 @@ Examples:
   content-cli blog list --drafts
   content-cli blog rate blog-post-8-bulletproof-observability.md
   content-cli blog rate --all-drafts
-  content-cli blog rate --all-drafts --pattern rate_content
+  content-cli blog rate --published --pattern rate_content
   content-cli blog status
 `);
 }
@@ -1141,10 +1146,13 @@ async function main(): Promise<void> {
       } else if (subcommand === "rate") {
         const target = args[2];
         const allDrafts = target === "--all-drafts" || args.includes("--all-drafts");
-        if (!target && !allDrafts) {
-          console.error("Usage: content-cli blog rate <file> OR content-cli blog rate --all-drafts [--pattern rate_blog_post|rate_content]");
+        const allPublished = target === "--published" || args.includes("--published");
+
+        if (!target && !allDrafts && !allPublished) {
+          console.error("Usage: content-cli blog rate <file> | --all-drafts | --published [--pattern rate_blog_post|rate_content]");
           process.exit(1);
         }
+
         // Parse --pattern flag
         const patternIdx = args.indexOf("--pattern");
         let pattern: RatingPattern = "rate_blog_post";
@@ -1157,7 +1165,13 @@ async function main(): Promise<void> {
             process.exit(1);
           }
         }
-        await blogRate(allDrafts ? "" : target, allDrafts, pattern);
+
+        // Determine mode
+        let mode: RateMode = "single";
+        if (allDrafts) mode = "drafts";
+        else if (allPublished) mode = "published";
+
+        await blogRate(mode === "single" ? target : "", mode, pattern);
       } else if (subcommand === "status") {
         await blogStatus();
       } else {

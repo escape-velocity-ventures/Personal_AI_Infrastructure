@@ -232,13 +232,23 @@ app.get('/memory/:path{.+}', async (c) => {
 
   // Convert path to Redis key
   const key = `${PREFIX}memory:${path.replace(/\//g, ':')}`;
-  const content = await client.get(key);
+  const stored = await client.get(key);
 
-  if (content === null) {
+  if (stored === null) {
     return c.json({ error: `Memory entry not found: ${path}` }, 404);
   }
 
-  return c.json({ path, content, key });
+  // Try to parse as JSON (new format with mtime), fall back to raw content (old format)
+  try {
+    const parsed = JSON.parse(stored);
+    if (parsed.content !== undefined) {
+      return c.json({ path, content: parsed.content, mtime: parsed.mtime, key });
+    }
+  } catch {
+    // Not JSON, treat as raw content (backwards compatibility)
+  }
+
+  return c.json({ path, content: stored, key });
 });
 
 app.put('/memory/:path{.+}', async (c) => {
@@ -247,13 +257,17 @@ app.put('/memory/:path{.+}', async (c) => {
 
   const body = await c.req.json();
   const content = body.content;
+  const mtime = body.mtime;
 
   if (!content) {
     return c.json({ error: 'content field required' }, 400);
   }
 
   const key = `${PREFIX}memory:${path.replace(/\//g, ':')}`;
-  await client.set(key, content);
+
+  // Store as JSON with content and optional mtime
+  const stored = mtime ? JSON.stringify({ content, mtime }) : JSON.stringify({ content });
+  await client.set(key, stored);
 
   return c.json({ path, key, status: 'saved' });
 });

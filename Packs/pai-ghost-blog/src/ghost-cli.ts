@@ -245,6 +245,7 @@ async function updatePostContent(
   const result = await apiPut(`posts/${post.id}/?source=html`, token, {
     posts: [
       {
+        id: post.id,
         html,
         updated_at: post.updated_at,
       },
@@ -391,10 +392,11 @@ function formatPostRow(post: Post): string {
         ? "○ draft"
         : "◐ scheduled";
   const date = formatDate(post.published_at || post.updated_at);
-  const title =
-    post.title.length > 50 ? post.title.slice(0, 47) + "..." : post.title;
+  // Show slug (truncated if needed) - slugs work for all commands
+  const slug =
+    post.slug.length > 45 ? post.slug.slice(0, 42) + "..." : post.slug;
 
-  return `${post.id.slice(0, 8)}  ${status.padEnd(12)}  ${date.padEnd(12)}  ${title}`;
+  return `${status.padEnd(12)}  ${date.padEnd(12)}  ${slug}`;
 }
 
 // =============================================================================
@@ -414,7 +416,7 @@ async function cmdList(args: string[]): Promise<void> {
     return;
   }
 
-  console.log(`\n  ID        Status        Date          Title`);
+  console.log(`\n  Status        Date          Slug`);
   console.log(`  ${"─".repeat(70)}`);
 
   for (const post of posts) {

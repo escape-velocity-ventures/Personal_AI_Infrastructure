@@ -177,7 +177,7 @@ interface RatingResult {
   title: string;
   file: string;
   score: number; // 1-100
-  breakdown: {
+  breakdown?: {
     clarity: number; // /20
     depth: number; // /20
     storytelling: number; // /20
@@ -185,9 +185,15 @@ interface RatingResult {
     uniqueness: number; // /20
   };
   summary: string;
-  recommendation: string;
+  recommendation?: string;
   publishReady: boolean;
+  // rate_content specific fields
+  labels?: string;
+  tier?: string;
+  pattern?: "rate_blog_post" | "rate_content";
 }
+
+type RatingPattern = "rate_blog_post" | "rate_content";
 
 function parsePostmortemIndex(): PostmortemEntry[] {
   if (!existsSync(PM_INDEX)) return [];
@@ -277,7 +283,10 @@ function getNextBlogNumber(): number {
 // Article Rating
 // =============================================================================
 
-async function rateArticle(filepath: string): Promise<RatingResult> {
+async function rateArticle(
+  filepath: string,
+  pattern: RatingPattern = "rate_blog_post"
+): Promise<RatingResult> {
   if (!existsSync(filepath)) {
     throw new Error(`File not found: ${filepath}`);
   }
@@ -286,30 +295,54 @@ async function rateArticle(filepath: string): Promise<RatingResult> {
   const titleMatch = content.match(/^#\s+(.+)$/m);
   const title = titleMatch ? titleMatch[1] : basename(filepath, ".md");
 
-  // Use fabric-ai with the rate_blog_post pattern
   try {
     const result = execSync(
-      `cat "${filepath}" | fabric-ai --model claude-3-5-haiku-latest -p rate_blog_post`,
+      `cat "${filepath}" | fabric-ai --model claude-3-5-haiku-latest -p ${pattern}`,
       { encoding: "utf-8", maxBuffer: 10 * 1024 * 1024, shell: "/bin/bash" }
     );
 
-    // Parse JSON from response (handle markdown code blocks)
-    let jsonStr = result;
-    const codeBlockMatch = result.match(/```(?:json)?\s*([\s\S]*?)```/);
-    if (codeBlockMatch) {
-      jsonStr = codeBlockMatch[1];
-    }
-    const jsonMatch = jsonStr.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      throw new Error("No JSON found in response");
-    }
+    if (pattern === "rate_blog_post") {
+      // Parse JSON from response (handle markdown code blocks)
+      let jsonStr = result;
+      const codeBlockMatch = result.match(/```(?:json)?\s*([\s\S]*?)```/);
+      if (codeBlockMatch) {
+        jsonStr = codeBlockMatch[1];
+      }
+      const jsonMatch = jsonStr.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) {
+        throw new Error("No JSON found in response");
+      }
 
-    const rating = JSON.parse(jsonMatch[0]);
-    return {
-      title,
-      file: basename(filepath),
-      ...rating,
-    };
+      const rating = JSON.parse(jsonMatch[0]);
+      return {
+        title,
+        file: basename(filepath),
+        pattern,
+        ...rating,
+      };
+    } else {
+      // Parse rate_content markdown output
+      const labelsMatch = result.match(/LABELS:\s*\n\s*([^\n]+)/);
+      const tierMatch = result.match(/(S|A|B|C|D) Tier[:\s]*\([^)]+\)/);
+      const scoreMatch = result.match(/(?:CONTENT SCORE|QUALITY SCORE):\s*\n\s*(\d+)/);
+      const explanationMatch = result.match(/Explanation:\s*([\s\S]*?)(?=\n\n|CONTENT SCORE|QUALITY SCORE|$)/);
+
+      const score = scoreMatch ? parseInt(scoreMatch[1]) : 0;
+      const tier = tierMatch ? tierMatch[0] : "Unknown";
+      const labels = labelsMatch ? labelsMatch[1].trim() : "";
+      const summary = explanationMatch ? explanationMatch[1].trim().replace(/^-\s*/gm, "").split("\n").slice(0, 2).join(" ") : "";
+
+      return {
+        title,
+        file: basename(filepath),
+        score,
+        tier,
+        labels,
+        summary,
+        publishReady: score >= 75,
+        pattern,
+      };
+    }
   } catch (error) {
     throw new Error(
       `Rating failed: ${(error as Error).message}`
@@ -318,10 +351,36 @@ async function rateArticle(filepath: string): Promise<RatingResult> {
 }
 
 function formatRating(rating: RatingResult): string {
-  const { breakdown } = rating;
   const bar = (val: number) => "█".repeat(Math.floor(val / 2)) + "░".repeat(10 - Math.floor(val / 2));
   const statusIcon = rating.publishReady ? "✓" : "○";
   const statusText = rating.publishReady ? "Ready to publish" : "Needs work";
+
+  if (rating.pattern === "rate_content") {
+    // Format for rate_content (tier-based)
+    return `
+${rating.title}
+${"─".repeat(60)}
+File: ${rating.file}
+Score: ${rating.score}/100 | ${rating.tier}
+
+Labels: ${rating.labels}
+
+Summary: ${rating.summary}
+`;
+  }
+
+  // Format for rate_blog_post (breakdown-based)
+  const { breakdown } = rating;
+  if (!breakdown) {
+    return `
+${rating.title}
+${"─".repeat(60)}
+File: ${rating.file}
+Score: ${rating.score}/100 ${statusIcon} ${statusText}
+
+Summary: ${rating.summary}
+`;
+  }
 
   return `
 ${rating.title}
@@ -347,9 +406,10 @@ function formatRatingSummary(ratings: RatingResult[]): string {
   const sorted = [...ratings].sort((a, b) => b.score - a.score);
   const avg = Math.round(ratings.reduce((sum, r) => sum + r.score, 0) / ratings.length);
   const ready = ratings.filter((r) => r.publishReady).length;
+  const pattern = ratings[0]?.pattern || "rate_blog_post";
 
   let output = `
-Draft Quality Summary
+Draft Quality Summary (${pattern})
 ${"═".repeat(60)}
 Total: ${ratings.length} drafts | Average: ${avg}/100 | Ready: ${ready}
 
@@ -359,19 +419,38 @@ ${"─".repeat(60)}
 
   for (const r of sorted) {
     const icon = r.publishReady ? "✓" : "○";
-    const title = r.title.length > 40 ? r.title.slice(0, 37) + "..." : r.title;
-    output += `  ${icon} ${String(r.score).padStart(3)}/100  ${title}\n`;
+    const title = r.title.length > 35 ? r.title.slice(0, 32) + "..." : r.title;
+    if (r.pattern === "rate_content" && r.tier) {
+      const tierShort = r.tier.charAt(0); // S, A, B, C, D
+      output += `  ${tierShort} ${String(r.score).padStart(3)}/100  ${title}\n`;
+    } else {
+      output += `  ${icon} ${String(r.score).padStart(3)}/100  ${title}\n`;
+    }
   }
 
   output += `\n${"─".repeat(60)}\n`;
 
-  // Top recommendations
-  const needsWork = sorted.filter((r) => !r.publishReady).slice(0, 3);
-  if (needsWork.length > 0) {
-    output += "\nTop Improvement Opportunities:\n";
-    for (const r of needsWork) {
-      output += `  • ${r.title.slice(0, 30)}...: ${r.recommendation}\n`;
+  // Top recommendations (only for rate_blog_post)
+  if (pattern === "rate_blog_post") {
+    const needsWork = sorted.filter((r) => !r.publishReady).slice(0, 3);
+    if (needsWork.length > 0) {
+      output += "\nTop Improvement Opportunities:\n";
+      for (const r of needsWork) {
+        output += `  • ${r.title.slice(0, 30)}...: ${r.recommendation}\n`;
+      }
     }
+  } else {
+    // Show labels summary for rate_content
+    const allLabels = ratings.flatMap((r) => r.labels?.split(", ") || []);
+    const labelCounts = allLabels.reduce((acc, l) => {
+      acc[l] = (acc[l] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+    const topLabels = Object.entries(labelCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([l]) => l);
+    output += `\nTop Labels: ${topLabels.join(", ")}\n`;
   }
 
   return output;
@@ -828,20 +907,26 @@ async function blogSync(): Promise<void> {
   // Future: Actually update BLOG-INDEX.md status from Ghost
 }
 
-async function blogRate(target: string, allDrafts: boolean): Promise<void> {
+async function blogRate(
+  target: string,
+  allDrafts: boolean,
+  pattern: RatingPattern = "rate_blog_post"
+): Promise<void> {
   const BLOG_DIR = join(MEMORY_DIR, "WORK", "blog");
   const PM_DIR = join(MEMORY_DIR, "WORK", "postmortems");
+
+  console.log(`\nUsing pattern: ${pattern}\n`);
 
   if (allDrafts) {
     // Rate all draft articles
     const { drafts } = parseBlogIndex();
 
     if (drafts.length === 0) {
-      console.log("\nNo drafts to rate.\n");
+      console.log("No drafts to rate.\n");
       return;
     }
 
-    console.log(`\nRating ${drafts.length} drafts...\n`);
+    console.log(`Rating ${drafts.length} drafts...\n`);
     const ratings: RatingResult[] = [];
 
     for (const draft of drafts) {
@@ -867,9 +952,13 @@ async function blogRate(target: string, allDrafts: boolean): Promise<void> {
 
       process.stdout.write(`  Rating: ${draft.title.slice(0, 40)}...`);
       try {
-        const rating = await rateArticle(filepath);
+        const rating = await rateArticle(filepath, pattern);
         ratings.push(rating);
-        console.log(` ${rating.score}/100`);
+        if (pattern === "rate_content" && rating.tier) {
+          console.log(` ${rating.score}/100 (${rating.tier.charAt(0)}-Tier)`);
+        } else {
+          console.log(` ${rating.score}/100`);
+        }
       } catch (error) {
         console.log(` ❌ Error: ${(error as Error).message}`);
       }
@@ -899,8 +988,8 @@ async function blogRate(target: string, allDrafts: boolean): Promise<void> {
       }
     }
 
-    console.log(`\nRating article...`);
-    const rating = await rateArticle(filepath);
+    console.log(`Rating article...`);
+    const rating = await rateArticle(filepath, pattern);
     console.log(formatRating(rating));
   }
 }
@@ -965,9 +1054,13 @@ Blog Commands:
   blog add <file> [--date YYYY-MM-DD]              Add file to blog queue
   blog list [--drafts|--published|--all]           List blog entries
   blog sync                                        Sync status from Ghost
-  blog rate <file>                                 Rate a single article (1-100)
-  blog rate --all-drafts                           Rate all draft articles
+  blog rate <file> [--pattern X]                   Rate a single article (1-100)
+  blog rate --all-drafts [--pattern X]             Rate all draft articles
   blog status                                      Dashboard of drafts with file status
+
+Rating Patterns (--pattern):
+  rate_blog_post (default)  Editorial quality: clarity, depth, storytelling, actionable, uniqueness
+  rate_content              Consumption priority: S/A/B/C/D tiers, labels, idea density
 
 Natural Language Mapping:
   "Create a postmortem about X"    → pm create "X"
@@ -977,14 +1070,8 @@ Natural Language Mapping:
   "What drafts do we have"         → blog list --drafts
   "Rate my drafts"                 → blog rate --all-drafts
   "How good is this article?"      → blog rate <file>
+  "Would I consume this?"          → blog rate <file> --pattern rate_content
   "Show blog status"               → blog status
-
-Rating Criteria (each /20, total /100):
-  • Clarity      - Is the narrative easy to follow?
-  • Depth        - Does it teach something valuable?
-  • Storytelling - Is there a compelling hook and arc?
-  • Actionable   - Can readers apply what they learned?
-  • Uniqueness   - Is this a fresh perspective?
 
 Examples:
   content-cli pm create "Database Connection Leak" --severity HIGH
@@ -993,6 +1080,7 @@ Examples:
   content-cli blog list --drafts
   content-cli blog rate blog-post-8-bulletproof-observability.md
   content-cli blog rate --all-drafts
+  content-cli blog rate --all-drafts --pattern rate_content
   content-cli blog status
 `);
 }
@@ -1054,10 +1142,22 @@ async function main(): Promise<void> {
         const target = args[2];
         const allDrafts = target === "--all-drafts" || args.includes("--all-drafts");
         if (!target && !allDrafts) {
-          console.error("Usage: content-cli blog rate <file> OR content-cli blog rate --all-drafts");
+          console.error("Usage: content-cli blog rate <file> OR content-cli blog rate --all-drafts [--pattern rate_blog_post|rate_content]");
           process.exit(1);
         }
-        await blogRate(allDrafts ? "" : target, allDrafts);
+        // Parse --pattern flag
+        const patternIdx = args.indexOf("--pattern");
+        let pattern: RatingPattern = "rate_blog_post";
+        if (patternIdx !== -1 && args[patternIdx + 1]) {
+          const p = args[patternIdx + 1];
+          if (p === "rate_blog_post" || p === "rate_content") {
+            pattern = p;
+          } else {
+            console.error(`Unknown pattern: ${p}. Use rate_blog_post or rate_content`);
+            process.exit(1);
+          }
+        }
+        await blogRate(allDrafts ? "" : target, allDrafts, pattern);
       } else if (subcommand === "status") {
         await blogStatus();
       } else {

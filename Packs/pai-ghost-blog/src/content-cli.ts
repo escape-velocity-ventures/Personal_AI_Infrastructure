@@ -161,31 +161,6 @@ function getNextBlogNumber(): number {
 // Article Rating
 // =============================================================================
 
-const RATING_PROMPT = `You are a technical blog editor evaluating articles for publication quality.
-
-Rate this article on 5 criteria (each /20 points, total /100):
-
-1. **Clarity** (20pts): Is the narrative easy to follow? Is the writing clear and well-structured?
-2. **Technical Depth** (20pts): Does it teach something valuable? Are there concrete details?
-3. **Storytelling** (20pts): Is there a compelling hook and narrative arc? Does it engage the reader?
-4. **Actionable Takeaways** (20pts): Can readers apply what they learned? Are there clear lessons?
-5. **Uniqueness** (20pts): Is this a fresh perspective? Does it offer insights not found elsewhere?
-
-IMPORTANT: Respond ONLY with valid JSON in this exact format, no other text:
-{
-  "score": <total 1-100>,
-  "breakdown": {
-    "clarity": <1-20>,
-    "depth": <1-20>,
-    "storytelling": <1-20>,
-    "actionable": <1-20>,
-    "uniqueness": <1-20>
-  },
-  "summary": "<2-3 sentence assessment>",
-  "recommendation": "<specific improvement suggestion>",
-  "publishReady": <true if score >= 75, false otherwise>
-}`;
-
 async function rateArticle(filepath: string): Promise<RatingResult> {
   if (!existsSync(filepath)) {
     throw new Error(`File not found: ${filepath}`);
@@ -195,23 +170,20 @@ async function rateArticle(filepath: string): Promise<RatingResult> {
   const titleMatch = content.match(/^#\s+(.+)$/m);
   const title = titleMatch ? titleMatch[1] : basename(filepath, ".md");
 
-  // Write prompt to temp file to avoid shell escaping issues
-  const tmpDir = join(homedir(), ".cache", "content-cli");
-  if (!existsSync(tmpDir)) {
-    mkdirSync(tmpDir, { recursive: true });
-  }
-  const promptFile = join(tmpDir, "rating-prompt.txt");
-  writeFileSync(promptFile, RATING_PROMPT);
-
-  // Use fabric-ai with file input to avoid shell escaping issues
+  // Use fabric-ai with the rate_blog_post pattern
   try {
     const result = execSync(
-      `fabric-ai --model claude-3-5-haiku-latest -sp "$(cat '${promptFile}')" < "${filepath}"`,
+      `cat "${filepath}" | fabric-ai --model claude-3-5-haiku-latest -p rate_blog_post`,
       { encoding: "utf-8", maxBuffer: 10 * 1024 * 1024, shell: "/bin/bash" }
     );
 
-    // Parse JSON from response
-    const jsonMatch = result.match(/\{[\s\S]*\}/);
+    // Parse JSON from response (handle markdown code blocks)
+    let jsonStr = result;
+    const codeBlockMatch = result.match(/```(?:json)?\s*([\s\S]*?)```/);
+    if (codeBlockMatch) {
+      jsonStr = codeBlockMatch[1];
+    }
+    const jsonMatch = jsonStr.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
       throw new Error("No JSON found in response");
     }

@@ -226,6 +226,35 @@ app.get('/memory', async (c) => {
   return c.json({ entries, count: entries.length });
 });
 
+// Bulk metadata endpoint - returns mtimes for all entries (efficient sync)
+app.get('/memory/meta', async (c) => {
+  const client = await getRedis();
+  const keys = await client.keys(`${PREFIX}memory:*`);
+
+  const meta: Record<string, number | null> = {};
+
+  // Batch fetch all values
+  if (keys.length > 0) {
+    const values = await client.mGet(keys);
+
+    for (let i = 0; i < keys.length; i++) {
+      const path = keys[i].replace(`${PREFIX}memory:`, '').replace(/:/g, '/');
+      const stored = values[i];
+
+      if (stored) {
+        try {
+          const parsed = JSON.parse(stored);
+          meta[path] = parsed.mtime || null;
+        } catch {
+          meta[path] = null; // Old format without mtime
+        }
+      }
+    }
+  }
+
+  return c.json({ meta, count: Object.keys(meta).length });
+});
+
 app.get('/memory/:path{.+}', async (c) => {
   const path = c.req.param('path');
   const client = await getRedis();
@@ -258,12 +287,41 @@ app.put('/memory/:path{.+}', async (c) => {
   const body = await c.req.json();
   const content = body.content;
   const mtime = body.mtime;
+  const ifMtimeEquals = body.ifMtimeEquals; // CAS: Compare-and-Swap support
 
   if (!content) {
     return c.json({ error: 'content field required' }, 400);
   }
 
   const key = `${PREFIX}memory:${path.replace(/\//g, ':')}`;
+
+  // CAS: If ifMtimeEquals is provided, check current mtime before writing
+  if (ifMtimeEquals !== undefined) {
+    const existing = await client.get(key);
+    let currentMtime: number | null = null;
+
+    if (existing) {
+      try {
+        const parsed = JSON.parse(existing);
+        currentMtime = parsed.mtime || null;
+      } catch {
+        // Old format without mtime - treat as null
+      }
+    }
+
+    // Conflict: cloud has different mtime than expected
+    if (currentMtime !== null && currentMtime !== ifMtimeEquals) {
+      return c.json({
+        path,
+        key,
+        status: 'conflict',
+        conflict: true,
+        expectedMtime: ifMtimeEquals,
+        actualMtime: currentMtime,
+        message: 'Cloud file was modified by another session',
+      }, 409);
+    }
+  }
 
   // Store as JSON with content and optional mtime
   const stored = mtime ? JSON.stringify({ content, mtime }) : JSON.stringify({ content });

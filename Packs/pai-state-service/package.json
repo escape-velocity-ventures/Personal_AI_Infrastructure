@@ -1,16 +1,20 @@
 {
   "name": "pai-state-service",
-  "version": "0.1.0",
-  "description": "Distributed state management for PAI with Redis and PostgreSQL",
+  "version": "0.2.0",
+  "description": "PAI State Service - REST API for skills, memory, and sessions",
   "type": "module",
   "main": "src/index.ts",
   "scripts": {
+    "start": "bun run src/server.ts",
+    "dev": "bun run --watch src/server.ts",
     "test": "bun test",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "redis": "^4.7.0",
+    "hono": "^4.11.7",
     "pg": "^8.13.0",
+    "prom-client": "^15.1.3",
+    "redis": "^4.7.0",
     "uuid": "^11.0.0"
   },
   "devDependencies": {

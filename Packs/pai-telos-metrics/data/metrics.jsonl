@@ -65,3 +65,13 @@
 {"timestamp":"2026-01-12T12:00:00.000Z","kpi_id":"sleep_hours","value":4.783333333333322,"goal_ref":null,"source":"health_auto_export"}
 {"timestamp":"2026-01-14T08:45:29.530Z","kpi_id":"tinkerbelle_commits","value":1,"goal_ref":"G2","machine":"MacBook-Air-L4V6F20KQ6","note":"OAuth2 modules for multi-cloud"}
 {"timestamp":"2026-01-14T08:45:33.926Z","kpi_id":"tinkerbelle_modules","value":3,"goal_ref":"G2","machine":"MacBook-Air-L4V6F20KQ6","note":"google-oauth2 (stub), azure-oauth2, aws-oauth2"}
+{"timestamp":"2026-01-20T21:37:35.002Z","kpi_id":"pai_commits","value":5,"goal_ref":"G2","machine":"MacBook-Air-L4V6F20KQ6"}
+{"timestamp":"2026-01-14T12:00:00.000Z","kpi_id":"steps_count","value":608,"goal_ref":"G3","source":"health_auto_export"}
+{"timestamp":"2026-01-15T12:00:00.000Z","kpi_id":"steps_count","value":1175,"goal_ref":"G3","source":"health_auto_export"}
+{"timestamp":"2026-01-23T22:55:48.743Z","kpi_id":"tinkerbelle_commits","value":1,"goal_ref":"G2","machine":"MacBook-Air-L4V6F20KQ6"}
+{"timestamp":"2026-01-23T22:56:21.784Z","kpi_id":"pai_commits","value":1,"goal_ref":"G2","machine":"MacBook-Air-L4V6F20KQ6"}
+{"timestamp":"2026-01-23T22:57:41.060Z","kpi_id":"deep_work_hours","value":1,"goal_ref":"G2","machine":"MacBook-Air-L4V6F20KQ6"}
+{"timestamp":"2026-01-23T22:57:41.195Z","kpi_id":"features_shipped","value":1,"goal_ref":"G2","machine":"MacBook-Air-L4V6F20KQ6"}
+{"timestamp":"2026-01-23T22:57:41.354Z","kpi_id":"infra_deployments","value":2,"goal_ref":"G2","machine":"MacBook-Air-L4V6F20KQ6"}
+{"timestamp":"2026-01-24T00:47:01.542Z","kpi_id":"tinkerbelle_commits","value":1,"goal_ref":"G2","machine":"MacBook-Air-L4V6F20KQ6"}
+{"timestamp":"2026-01-24T00:48:56.638Z","kpi_id":"features_shipped","value":1,"goal_ref":"G2","machine":"MacBook-Air-L4V6F20KQ6"}

@@ -354,6 +354,65 @@ async function uploadImage(imagePath: string, targetName?: string): Promise<stri
 }
 
 // =============================================================================
+// Content Linting
+// =============================================================================
+
+interface LintIssue {
+  severity: "error" | "warning";
+  message: string;
+  match?: string;
+}
+
+const LINT_PATTERNS = [
+  { pattern: /\*\*Status:\*\*.*Draft/i, message: "Contains draft status metadata", severity: "error" as const },
+  { pattern: /\*\*Author:\*\*.*\*\*Published:\*\*.*\*\*Series:\*\*/i, message: "Contains Author/Published/Series metadata", severity: "error" as const },
+  { pattern: /## Assets\s*\n\s*\|/m, message: "Contains Assets table (draft metadata)", severity: "error" as const },
+  { pattern: /Copy assets to final blog/i, message: "Contains 'Copy assets' note", severity: "error" as const },
+  { pattern: /Publication Checklist/i, message: "Contains Publication Checklist", severity: "error" as const },
+  { pattern: /\[subscribe\s*\/\s*follow/i, message: "Contains placeholder [subscribe / follow]", severity: "error" as const },
+  { pattern: /\[repo link\]/i, message: "Contains placeholder [repo link]", severity: "error" as const },
+  { pattern: /\[TODO[:\]]?/i, message: "Contains TODO marker", severity: "warning" as const },
+  { pattern: /\[TBD[:\]]?/i, message: "Contains TBD marker", severity: "warning" as const },
+  { pattern: /\[FIXME[:\]]?/i, message: "Contains FIXME marker", severity: "warning" as const },
+  { pattern: /~\/Downloads\//i, message: "Contains ~/Downloads path reference", severity: "warning" as const },
+  { pattern: /~\/Desktop\//i, message: "Contains ~/Desktop path reference", severity: "warning" as const },
+];
+
+function lintContent(content: string): LintIssue[] {
+  const issues: LintIssue[] = [];
+  for (const { pattern, message, severity } of LINT_PATTERNS) {
+    const match = content.match(pattern);
+    if (match) {
+      issues.push({ severity, message, match: match[0].substring(0, 50) });
+    }
+  }
+  return issues;
+}
+
+function printLintResults(issues: LintIssue[], filePath?: string): boolean {
+  if (issues.length === 0) {
+    console.log(`✅ No issues found${filePath ? ` in ${filePath}` : ""}`);
+    return true;
+  }
+
+  const errors = issues.filter((i) => i.severity === "error");
+  const warnings = issues.filter((i) => i.severity === "warning");
+
+  if (filePath) console.log(`\nLinting: ${filePath}`);
+
+  for (const issue of errors) {
+    console.log(`  ❌ ERROR: ${issue.message}`);
+    if (issue.match) console.log(`     Found: "${issue.match}..."`);
+  }
+  for (const issue of warnings) {
+    console.log(`  ⚠️  WARN: ${issue.message}`);
+    if (issue.match) console.log(`     Found: "${issue.match}..."`);
+  }
+
+  return errors.length === 0;
+}
+
+// =============================================================================
 // Markdown Processing
 // =============================================================================
 
@@ -450,9 +509,10 @@ async function cmdCreate(args: string[]): Promise<void> {
   const fileIdx = args.indexOf("--file");
   const titleIdx = args.indexOf("--title");
   const publish = args.includes("--publish");
+  const skipLint = args.includes("--no-lint");
 
   if (fileIdx === -1 || !args[fileIdx + 1]) {
-    console.error("Usage: ghost-cli create --file <markdown> [--title] [--publish]");
+    console.error("Usage: ghost-cli create --file <markdown> [--title] [--publish] [--no-lint]");
     process.exit(1);
   }
 
@@ -463,6 +523,24 @@ async function cmdCreate(args: string[]): Promise<void> {
   }
 
   const markdown = readFileSync(filePath, "utf-8");
+
+  // Lint content before creating
+  if (!skipLint) {
+    const issues = lintContent(markdown);
+    const hasErrors = issues.some((i) => i.severity === "error");
+    if (issues.length > 0) {
+      console.log("\n⚠️  Content issues detected:");
+      printLintResults(issues, filePath);
+      if (hasErrors && publish) {
+        console.error("\n❌ Cannot publish with errors. Fix issues or use --no-lint to bypass.");
+        process.exit(1);
+      }
+      if (hasErrors) {
+        console.log("\n⚠️  Creating as draft due to errors. Fix issues before publishing.");
+      }
+    }
+  }
+
   const html = markdownToHtml(markdown);
 
   let title = titleIdx !== -1 ? args[titleIdx + 1] : extractTitle(markdown);
@@ -627,6 +705,124 @@ async function cmdSetImage(args: string[]): Promise<void> {
   console.log(`   Image: ${imageUrl}\n`);
 }
 
+async function cmdLint(args: string[]): Promise<void> {
+  const filePath = args[0];
+
+  if (!filePath) {
+    console.error("Usage: ghost-cli lint <markdown-file>");
+    console.error("       ghost-cli lint --live [--slug <slug>]");
+    process.exit(1);
+  }
+
+  if (filePath === "--live") {
+    // Lint live posts
+    const slugIdx = args.indexOf("--slug");
+    const specificSlug = slugIdx !== -1 ? args[slugIdx + 1] : null;
+
+    const token = generateToken(getAdminKey());
+    const query = specificSlug
+      ? `posts/slug/${specificSlug}/?formats=html`
+      : "posts/?limit=all&formats=html&filter=status:published";
+    const result = await apiGet(query, token);
+    const posts = specificSlug ? result.posts : result.posts;
+
+    let allClean = true;
+    for (const post of posts) {
+      const issues = lintContent(post.html || "");
+      if (issues.length > 0) {
+        allClean = false;
+        console.log(`\n❌ ${post.title} (${post.slug})`);
+        printLintResults(issues);
+      }
+    }
+
+    if (allClean) {
+      console.log(`✅ All ${posts.length} published posts are clean!`);
+    }
+    return;
+  }
+
+  // Lint local file
+  if (!existsSync(filePath)) {
+    console.error(`Error: File not found: ${filePath}`);
+    process.exit(1);
+  }
+
+  const markdown = readFileSync(filePath, "utf-8");
+  const issues = lintContent(markdown);
+  const passed = printLintResults(issues, filePath);
+  process.exit(passed ? 0 : 1);
+}
+
+async function cmdDiff(args: string[]): Promise<void> {
+  const slug = args[0];
+  const fileIdx = args.indexOf("--file");
+  const filePath = fileIdx !== -1 ? args[fileIdx + 1] : null;
+
+  if (!slug) {
+    console.error("Usage: ghost-cli diff <slug> --file <local-markdown>");
+    process.exit(1);
+  }
+
+  if (!filePath) {
+    console.error("Error: --file <path> is required");
+    process.exit(1);
+  }
+
+  if (!existsSync(filePath)) {
+    console.error(`Error: File not found: ${filePath}`);
+    process.exit(1);
+  }
+
+  const token = generateToken(getAdminKey());
+  const post = await getPost(slug);
+
+  // Convert local markdown to HTML for comparison
+  const localMarkdown = readFileSync(filePath, "utf-8");
+  const localHtml = markdownToHtml(localMarkdown);
+
+  // Strip HTML tags for text comparison
+  const stripHtml = (html: string) =>
+    html
+      .replace(/<[^>]+>/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+
+  const liveText = stripHtml(post.html || "");
+  const localText = stripHtml(localHtml);
+
+  if (liveText === localText) {
+    console.log(`✅ ${post.title}`);
+    console.log("   Live content matches local file (no differences)");
+    return;
+  }
+
+  console.log(`\n📝 ${post.title}`);
+  console.log(`   Slug: ${slug}`);
+  console.log(`   Local: ${filePath}`);
+  console.log(`\n   ⚠️  Content differs between live and local`);
+
+  // Show character count difference
+  const diff = localText.length - liveText.length;
+  console.log(`   Live: ${liveText.length} chars | Local: ${localText.length} chars (${diff > 0 ? "+" : ""}${diff})`);
+
+  // Show first difference location
+  let firstDiffIdx = 0;
+  for (let i = 0; i < Math.min(liveText.length, localText.length); i++) {
+    if (liveText[i] !== localText[i]) {
+      firstDiffIdx = i;
+      break;
+    }
+  }
+
+  if (firstDiffIdx > 0) {
+    const context = 50;
+    console.log(`\n   First difference at position ${firstDiffIdx}:`);
+    console.log(`   Live:  "...${liveText.substring(Math.max(0, firstDiffIdx - 20), firstDiffIdx + context)}..."`);
+    console.log(`   Local: "...${localText.substring(Math.max(0, firstDiffIdx - 20), firstDiffIdx + context)}..."`);
+  }
+}
+
 function showHelp(): void {
   console.log(`
 Ghost Blog CLI - Unified management tool
@@ -645,6 +841,9 @@ Commands:
   upload <image> [--name <name>]  Upload image to Ghost
   set-image <id|slug> --url <url> Set feature image from URL
   set-image <id|slug> --file <path> Upload and set feature image
+  lint <file>                     Check markdown for draft metadata
+  lint --live [--slug <slug>]     Check published posts for issues
+  diff <slug> --file <md>         Compare live post with local file
 
 Examples:
   ghost-cli list --drafts
@@ -654,6 +853,9 @@ Examples:
   ghost-cli publish the-fabrication-test
   ghost-cli upload ~/header.png --name custom-name.png
   ghost-cli set-image my-post --file ~/header.png
+  ghost-cli lint ~/draft-post.md
+  ghost-cli lint --live
+  ghost-cli diff my-post --file ~/my-post.md
 
 Environment:
   GHOST_URL        Ghost instance URL (default: blog.escape-velocity-ventures.org)
@@ -703,6 +905,12 @@ async function main(): Promise<void> {
         break;
       case "set-image":
         await cmdSetImage(commandArgs);
+        break;
+      case "lint":
+        await cmdLint(commandArgs);
+        break;
+      case "diff":
+        await cmdDiff(commandArgs);
         break;
       default:
         console.error(`Unknown command: ${command}`);

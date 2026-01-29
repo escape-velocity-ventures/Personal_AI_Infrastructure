@@ -37,6 +37,99 @@ const GHOST_CLI = join(
 const STATE_SERVICE_URL = process.env.PAI_STATE_SERVICE_URL || "https://pai-state.escape-velocity-ventures.org";
 
 // =============================================================================
+// Sanitization Patterns - Strip metadata injected by fabric patterns
+// =============================================================================
+
+/**
+ * Patterns that fabric's improve_writing and similar patterns may inject.
+ * These should be stripped before saving to source files.
+ */
+const SANITIZE_PATTERNS: Array<{ pattern: RegExp; replacement: string; description: string }> = [
+  // Author/Published/Series metadata block (with optional surrounding whitespace)
+  {
+    pattern: /\n*\*\*Author:\*\*[^\n]*\n\*\*Published:\*\*[^\n]*\n\*\*Series:\*\*[^\n]*\n*/gi,
+    replacement: "\n",
+    description: "Author/Published/Series metadata block",
+  },
+  // Individual metadata lines
+  {
+    pattern: /^\*\*Author:\*\*.*$\n?/gim,
+    replacement: "",
+    description: "Author metadata line",
+  },
+  {
+    pattern: /^\*\*Published:\*\*.*$\n?/gim,
+    replacement: "",
+    description: "Published metadata line",
+  },
+  {
+    pattern: /^\*\*Series:\*\*.*$\n?/gim,
+    replacement: "",
+    description: "Series metadata line",
+  },
+  // Status metadata
+  {
+    pattern: /^\*\*Status:\*\*.*$\n?/gim,
+    replacement: "",
+    description: "Status metadata",
+  },
+  // Created metadata
+  {
+    pattern: /^\*\*Created:\*\*.*$\n?/gim,
+    replacement: "",
+    description: "Created metadata",
+  },
+  // Assets table section
+  {
+    pattern: /## Assets\s*\n\s*\|[^]*?\n\n/gm,
+    replacement: "",
+    description: "Assets table section",
+  },
+  // Publication Checklist section
+  {
+    pattern: /## Publication Checklist\s*\n[^]*?(?=\n## |\n---|\*This is Post)/gm,
+    replacement: "",
+    description: "Publication Checklist section",
+  },
+  // "Copy assets to final blog" notes
+  {
+    pattern: /^.*Copy assets to final blog.*$\n?/gim,
+    replacement: "",
+    description: "Copy assets note",
+  },
+  // Draft ready notes
+  {
+    pattern: /^.*Draft ready for review.*$\n?/gim,
+    replacement: "",
+    description: "Draft ready note",
+  },
+  // Clean up excessive blank lines (more than 2 in a row)
+  {
+    pattern: /\n{4,}/g,
+    replacement: "\n\n\n",
+    description: "Excessive blank lines",
+  },
+];
+
+function sanitizeContent(content: string): { sanitized: string; changes: string[] } {
+  let sanitized = content;
+  const changes: string[] = [];
+
+  for (const { pattern, replacement, description } of SANITIZE_PATTERNS) {
+    const before = sanitized;
+    sanitized = sanitized.replace(pattern, replacement);
+    if (before !== sanitized) {
+      changes.push(description);
+    }
+  }
+
+  // Trim leading/trailing whitespace but preserve single trailing newline
+  sanitized = sanitized.trim() + "\n";
+
+  return { sanitized, changes };
+}
+
+// =============================================================================
 // Cloud Sync - Prevents PM numbering collisions
 // =============================================================================
 
@@ -1038,6 +1131,165 @@ To rate one:    content-cli blog rate <filename>
 }
 
 // =============================================================================
+// Blog Improve - Safe fabric wrapper with sanitization
+// =============================================================================
+
+interface ImproveOptions {
+  dryRun?: boolean;
+  noConfirm?: boolean;
+  pattern?: string;
+}
+
+async function blogImprove(filepath: string, options: ImproveOptions = {}): Promise<void> {
+  const BLOG_DIR = join(MEMORY_DIR, "WORK", "blog");
+  const PM_DIR = join(MEMORY_DIR, "WORK", "postmortems");
+
+  // Resolve file path
+  let resolvedPath = filepath;
+  if (!existsSync(resolvedPath)) {
+    const blogPath = join(BLOG_DIR, filepath);
+    const pmPath = join(PM_DIR, filepath);
+
+    if (existsSync(blogPath)) {
+      resolvedPath = blogPath;
+    } else if (existsSync(pmPath)) {
+      resolvedPath = pmPath;
+    } else if (existsSync(filepath + ".md")) {
+      resolvedPath = filepath + ".md";
+    } else {
+      console.error(`\n❌ File not found: ${filepath}`);
+      console.error(`   Tried: ${filepath}, ${blogPath}, ${pmPath}\n`);
+      process.exit(1);
+    }
+  }
+
+  const originalContent = readFileSync(resolvedPath, "utf-8");
+  const fabricPattern = options.pattern || "improve_writing";
+
+  console.log(`\n🔧 Improving: ${basename(resolvedPath)}`);
+  console.log(`   Using fabric pattern: ${fabricPattern}\n`);
+
+  // Step 1: Run fabric
+  // Use fabric's default model (configured in fabric settings) for best compatibility
+  console.log("📝 Running fabric improve_writing...");
+  let improvedContent: string;
+  try {
+    improvedContent = execSync(
+      `cat "${resolvedPath}" | fabric-ai -p ${fabricPattern}`,
+      { encoding: "utf-8", maxBuffer: 10 * 1024 * 1024, shell: "/bin/bash" }
+    );
+  } catch (error) {
+    console.error(`\n❌ Fabric failed: ${(error as Error).message}\n`);
+    process.exit(1);
+  }
+
+  // Step 2: Sanitize output
+  console.log("🧹 Sanitizing output (removing injected metadata)...");
+  const { sanitized, changes } = sanitizeContent(improvedContent);
+
+  if (changes.length > 0) {
+    console.log(`   Stripped: ${changes.join(", ")}`);
+  } else {
+    console.log("   No metadata to strip");
+  }
+
+  // Step 3: Run lint check
+  console.log("🔍 Running lint check...");
+  const lintResult = execSync(
+    `bun run "${GHOST_CLI}" lint "${resolvedPath}" 2>&1 || true`,
+    { encoding: "utf-8", shell: "/bin/bash" }
+  );
+
+  // Quick lint on the sanitized content (check for remaining issues)
+  const remainingIssues: string[] = [];
+  const lintPatterns = [
+    { pattern: /\*\*Status:\*\*.*Draft/i, name: "Status metadata" },
+    { pattern: /\*\*Author:\*\*/i, name: "Author metadata" },
+    { pattern: /## Assets\s*\n\s*\|/m, name: "Assets table" },
+    { pattern: /Publication Checklist/i, name: "Publication Checklist" },
+    { pattern: /\[TODO[:\]]?/i, name: "TODO marker" },
+  ];
+
+  for (const { pattern, name } of lintPatterns) {
+    if (pattern.test(sanitized)) {
+      remainingIssues.push(name);
+    }
+  }
+
+  if (remainingIssues.length > 0) {
+    console.log(`   ⚠️  Warnings: ${remainingIssues.join(", ")}`);
+  } else {
+    console.log("   ✅ Lint passed");
+  }
+
+  // Step 4: Show diff
+  console.log(`\n${"─".repeat(60)}`);
+  console.log("DIFF PREVIEW");
+  console.log(`${"─".repeat(60)}`);
+
+  // Simple line-based diff
+  const origLines = originalContent.split("\n");
+  const newLines = sanitized.split("\n");
+
+  const maxLines = Math.max(origLines.length, newLines.length);
+  let changedLines = 0;
+
+  for (let i = 0; i < Math.min(maxLines, 50); i++) {
+    const orig = origLines[i] || "";
+    const newLine = newLines[i] || "";
+    if (orig !== newLine) {
+      changedLines++;
+      if (changedLines <= 20) {
+        if (orig && !newLine) {
+          console.log(`- L${i + 1}: ${orig.substring(0, 70)}${orig.length > 70 ? "..." : ""}`);
+        } else if (!orig && newLine) {
+          console.log(`+ L${i + 1}: ${newLine.substring(0, 70)}${newLine.length > 70 ? "..." : ""}`);
+        } else {
+          console.log(`~ L${i + 1}:`);
+          console.log(`  - ${orig.substring(0, 60)}${orig.length > 60 ? "..." : ""}`);
+          console.log(`  + ${newLine.substring(0, 60)}${newLine.length > 60 ? "..." : ""}`);
+        }
+      }
+    }
+  }
+
+  if (changedLines > 20) {
+    console.log(`   ... and ${changedLines - 20} more changed lines`);
+  }
+
+  console.log(`\n${"─".repeat(60)}`);
+  console.log(`Total: ${changedLines} lines changed | Original: ${origLines.length} lines | New: ${newLines.length} lines`);
+  console.log(`${"─".repeat(60)}\n`);
+
+  // Step 5: Dry run check
+  if (options.dryRun) {
+    console.log("🔵 DRY RUN - No changes written\n");
+    console.log("To apply changes, run without --dry-run\n");
+    return;
+  }
+
+  // Step 6: Confirm and save
+  if (!options.noConfirm) {
+    console.log("⚠️  This will overwrite the original file.");
+    console.log("   To skip confirmation, use --yes flag.\n");
+    console.log("   Press Ctrl+C to cancel, or wait 5 seconds to proceed...\n");
+
+    // Auto-proceed after timeout (for non-interactive use, user can Ctrl+C)
+    await new Promise((resolve) => setTimeout(resolve, 5000));
+  }
+
+  // Write the sanitized content
+  writeFileSync(resolvedPath, sanitized);
+  console.log(`✅ Saved improved content to: ${resolvedPath}\n`);
+
+  // Suggest next steps
+  console.log("Next steps:");
+  console.log(`  1. Review changes: git diff "${resolvedPath}"`);
+  console.log(`  2. Lint check: ghost-cli lint "${resolvedPath}"`);
+  console.log(`  3. If updating Ghost: ghost-cli update <slug> --file "${resolvedPath}"\n`);
+}
+
+// =============================================================================
 // Help
 // =============================================================================
 
@@ -1061,6 +1313,12 @@ Blog Commands:
   blog rate --all-drafts [--pattern X]             Rate all draft articles
   blog rate --published [--pattern X]              Rate all published articles
   blog status                                      Dashboard of drafts with file status
+  blog improve <file> [options]                    Improve article via fabric (with safeguards)
+
+Improve Options:
+  --dry-run                 Preview changes without saving
+  --yes                     Skip confirmation prompt
+  --pattern <name>          Fabric pattern (default: improve_writing)
 
 Rating Patterns (--pattern):
   rate_blog_post (default)  Editorial quality: clarity, depth, storytelling, actionable, uniqueness
@@ -1076,7 +1334,14 @@ Natural Language Mapping:
   "Rate published posts"           → blog rate --published
   "How good is this article?"      → blog rate <file>
   "Would I consume this?"          → blog rate <file> --pattern rate_content
+  "Improve this article"           → blog improve <file>
+  "Make this post better"          → blog improve <file>
   "Show blog status"               → blog status
+
+⚠️  FABRIC SAFETY NOTE:
+  Always use 'blog improve' instead of running fabric directly on blog files.
+  Direct fabric usage can inject metadata (Author/Published/Series) that
+  shouldn't be in source files. The improve command sanitizes output automatically.
 
 Examples:
   content-cli pm create "Database Connection Leak" --severity HIGH
@@ -1086,6 +1351,8 @@ Examples:
   content-cli blog rate blog-post-8-bulletproof-observability.md
   content-cli blog rate --all-drafts
   content-cli blog rate --published --pattern rate_content
+  content-cli blog improve blog-post-8.md --dry-run
+  content-cli blog improve blog-post-8.md --yes
   content-cli blog status
 `);
 }
@@ -1174,6 +1441,25 @@ async function main(): Promise<void> {
         await blogRate(mode === "single" ? target : "", mode, pattern);
       } else if (subcommand === "status") {
         await blogStatus();
+      } else if (subcommand === "improve") {
+        const target = args[2];
+        if (!target) {
+          console.error("Usage: content-cli blog improve <file> [--dry-run] [--yes] [--pattern <name>]");
+          process.exit(1);
+        }
+
+        const options: ImproveOptions = {
+          dryRun: args.includes("--dry-run"),
+          noConfirm: args.includes("--yes"),
+        };
+
+        // Parse --pattern flag
+        const patternIdx = args.indexOf("--pattern");
+        if (patternIdx !== -1 && args[patternIdx + 1]) {
+          options.pattern = args[patternIdx + 1];
+        }
+
+        await blogImprove(target, options);
       } else {
         console.error(`Unknown blog subcommand: ${subcommand}`);
         process.exit(1);

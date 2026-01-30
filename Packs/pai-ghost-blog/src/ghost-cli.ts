@@ -429,6 +429,83 @@ function markdownToHtml(markdown: string): string {
   return marked(content) as string;
 }
 
+/**
+ * Extract image references from markdown
+ * Returns array of { fullMatch, alt, path, isLocal }
+ */
+function extractImageReferences(markdown: string): Array<{
+  fullMatch: string;
+  alt: string;
+  path: string;
+  isLocal: boolean;
+}> {
+  const imageRegex = /!\[([^\]]*)\]\(([^)]+)\)/g;
+  const images: Array<{ fullMatch: string; alt: string; path: string; isLocal: boolean }> = [];
+
+  let match;
+  while ((match = imageRegex.exec(markdown)) !== null) {
+    const [fullMatch, alt, path] = match;
+    // Check if it's a URL or local path
+    const isLocal = !path.startsWith("http://") &&
+                    !path.startsWith("https://") &&
+                    !path.startsWith("data:");
+    images.push({ fullMatch, alt, path, isLocal });
+  }
+
+  return images;
+}
+
+/**
+ * Process markdown images: upload local images and replace with URLs
+ * @param markdown - The markdown content
+ * @param basePath - Base directory for resolving relative image paths
+ * @returns Modified markdown with uploaded image URLs
+ */
+async function processMarkdownImages(
+  markdown: string,
+  basePath: string
+): Promise<string> {
+  const { dirname, join, isAbsolute } = await import("path");
+
+  const images = extractImageReferences(markdown);
+  const localImages = images.filter((img) => img.isLocal);
+
+  if (localImages.length === 0) {
+    return markdown;
+  }
+
+  console.log(`\n📷 Found ${localImages.length} local image(s) to upload:`);
+
+  let processedMarkdown = markdown;
+
+  for (const img of localImages) {
+    // Resolve the image path relative to the markdown file
+    const imagePath = isAbsolute(img.path)
+      ? img.path
+      : join(dirname(basePath), img.path);
+
+    if (!existsSync(imagePath)) {
+      console.log(`   ⚠️  Skipping (not found): ${img.path}`);
+      continue;
+    }
+
+    try {
+      console.log(`   ⬆️  Uploading: ${img.path}`);
+      const uploadedUrl = await uploadImage(imagePath);
+      console.log(`   ✅ Uploaded: ${uploadedUrl}`);
+
+      // Replace the original path with the uploaded URL in markdown
+      const newImageRef = `![${img.alt}](${uploadedUrl})`;
+      processedMarkdown = processedMarkdown.replace(img.fullMatch, newImageRef);
+    } catch (error) {
+      console.log(`   ❌ Failed to upload ${img.path}: ${(error as Error).message}`);
+    }
+  }
+
+  console.log();
+  return processedMarkdown;
+}
+
 // =============================================================================
 // CLI Formatting
 // =============================================================================
@@ -541,7 +618,10 @@ async function cmdCreate(args: string[]): Promise<void> {
     }
   }
 
-  const html = markdownToHtml(markdown);
+  // Process inline images - upload local images and replace paths with URLs
+  const processedMarkdown = await processMarkdownImages(markdown, filePath);
+
+  const html = markdownToHtml(processedMarkdown);
 
   let title = titleIdx !== -1 ? args[titleIdx + 1] : extractTitle(markdown);
   if (!title) {
@@ -576,7 +656,11 @@ async function cmdUpdate(args: string[]): Promise<void> {
   }
 
   const markdown = readFileSync(filePath, "utf-8");
-  const html = markdownToHtml(markdown);
+
+  // Process inline images - upload local images and replace paths with URLs
+  const processedMarkdown = await processMarkdownImages(markdown, filePath);
+
+  const html = markdownToHtml(processedMarkdown);
 
   console.log(`Updating post: ${idOrSlug}`);
 
@@ -823,6 +907,291 @@ async function cmdDiff(args: string[]): Promise<void> {
   }
 }
 
+// =============================================================================
+// Audit Command - Check posts for image issues
+// =============================================================================
+
+interface AuditIssue {
+  type: "relative_path" | "double_path" | "feature_relative";
+  src: string;
+}
+
+async function auditPostImages(post: { title: string; slug: string; html?: string; feature_image?: string }): Promise<AuditIssue[]> {
+  const issues: AuditIssue[] = [];
+  const html = post.html || "";
+
+  // Find all img tags
+  const imgRegex = /<img[^>]+src=["']([^"']+)["'][^>]*>/g;
+  let match;
+
+  while ((match = imgRegex.exec(html)) !== null) {
+    const src = match[1];
+    if (!src.startsWith("http://") && !src.startsWith("https://") && !src.startsWith("data:")) {
+      issues.push({ type: "relative_path", src });
+    } else if (src.includes("content/images/content/images")) {
+      issues.push({ type: "double_path", src });
+    }
+  }
+
+  // Check feature image
+  if (post.feature_image && !post.feature_image.startsWith("http")) {
+    issues.push({ type: "feature_relative", src: post.feature_image });
+  }
+
+  return issues;
+}
+
+async function cmdAudit(args: string[]): Promise<void> {
+  const token = generateToken(getAdminKey());
+
+  let filter = "all";
+  if (args.includes("--drafts")) filter = "drafts";
+  if (args.includes("--published")) filter = "published";
+
+  let query = "posts/?limit=all&formats=html";
+  if (filter === "drafts") query += "&filter=status:draft";
+  if (filter === "published") query += "&filter=status:published";
+
+  const result = await apiGet(query, token);
+  const posts = result.posts;
+
+  console.log(`\n  Auditing ${posts.length} ${filter === "all" ? "" : filter + " "}posts for image issues...\n`);
+
+  let postsWithIssues = 0;
+  let totalIssues = 0;
+
+  for (const post of posts) {
+    const issues = await auditPostImages(post);
+    if (issues.length > 0) {
+      postsWithIssues++;
+      totalIssues += issues.length;
+      const status = post.status === "published" ? "✓" : "○";
+      console.log(`  ${status} ❌ ${post.title}`);
+      console.log(`     Slug: ${post.slug}`);
+      for (const issue of issues) {
+        const label = issue.type === "relative_path" ? "Relative path" :
+                      issue.type === "double_path" ? "Double path" : "Feature image relative";
+        console.log(`     - ${label}: ${issue.src}`);
+      }
+      console.log();
+    }
+  }
+
+  if (postsWithIssues === 0) {
+    console.log(`  ✅ All ${posts.length} posts have valid image URLs!\n`);
+  } else {
+    console.log(`  ─────────────────────────────────────`);
+    console.log(`  Posts with issues: ${postsWithIssues}`);
+    console.log(`  Total issues: ${totalIssues}\n`);
+  }
+}
+
+// =============================================================================
+// Sync Command - Compare local files against Ghost
+// =============================================================================
+
+interface LocalPost {
+  file: string;
+  title: string;
+  path: string;
+}
+
+interface SyncResult {
+  local: LocalPost;
+  ghost?: { title: string; slug: string; status: string };
+}
+
+async function cmdSync(args: string[]): Promise<void> {
+  const { readdirSync } = await import("fs");
+  const { join, basename } = await import("path");
+
+  // Get directory from args or use default
+  const dirIdx = args.indexOf("--dir");
+  const blogDir = dirIdx !== -1 && args[dirIdx + 1]
+    ? args[dirIdx + 1]
+    : join(process.env.HOME || "", ".claude/MEMORY/WORK/blog");
+
+  if (!existsSync(blogDir)) {
+    console.error(`Error: Directory not found: ${blogDir}`);
+    process.exit(1);
+  }
+
+  // Get local markdown files
+  const files = readdirSync(blogDir)
+    .filter((f: string) => f.startsWith("blog-post-") && f.endsWith(".md") && !f.includes("-metadata"));
+
+  const localPosts: LocalPost[] = [];
+  for (const file of files) {
+    const filePath = join(blogDir, file);
+    const content = readFileSync(filePath, "utf-8");
+    const titleMatch = content.match(/^#\s+(.+)$/m);
+    if (titleMatch) {
+      localPosts.push({
+        file,
+        title: titleMatch[1].trim(),
+        path: filePath,
+      });
+    }
+  }
+
+  // Get Ghost posts
+  const token = generateToken(getAdminKey());
+  const result = await apiGet("posts/?limit=all", token);
+  const ghostPosts = result.posts;
+
+  // Normalize title for matching
+  const normalize = (t: string) => t.toLowerCase()
+    .replace(/^blog post:?\s*/i, "")
+    .replace(/^blog post idea:?\s*/i, "")
+    .trim();
+
+  // Match local posts to Ghost
+  const results: SyncResult[] = [];
+
+  for (const local of localPosts) {
+    const localNorm = normalize(local.title);
+    let found = null;
+
+    for (const ghost of ghostPosts) {
+      const ghostNorm = normalize(ghost.title);
+      if (ghostNorm.includes(localNorm.substring(0, 25)) ||
+          localNorm.includes(ghostNorm.substring(0, 25))) {
+        found = { title: ghost.title, slug: ghost.slug, status: ghost.status };
+        break;
+      }
+    }
+
+    results.push({ local, ghost: found || undefined });
+  }
+
+  // Display results
+  const synced = results.filter(r => r.ghost);
+  const notSynced = results.filter(r => !r.ghost);
+
+  console.log(`\n  Sync Status: ${blogDir}\n`);
+  console.log(`  ${"─".repeat(60)}`);
+
+  if (synced.length > 0) {
+    console.log(`\n  ✅ SYNCED (${synced.length}):\n`);
+    for (const r of synced) {
+      const icon = r.ghost!.status === "published" ? "✓" : "○";
+      console.log(`     ${icon}  ${r.local.file}`);
+    }
+  }
+
+  if (notSynced.length > 0) {
+    console.log(`\n  ❌ NOT IN GHOST (${notSynced.length}):\n`);
+    for (const r of notSynced) {
+      console.log(`     -  ${r.local.file}`);
+      console.log(`        Title: "${r.local.title}"`);
+    }
+  }
+
+  console.log(`\n  ${"─".repeat(60)}`);
+  console.log(`  Local files:     ${localPosts.length}`);
+  console.log(`  Synced to Ghost: ${synced.length}`);
+  console.log(`  Not synced:      ${notSynced.length}`);
+  console.log(`  Ghost total:     ${ghostPosts.length} (${ghostPosts.filter((p: any) => p.status === "published").length} published, ${ghostPosts.filter((p: any) => p.status === "draft").length} drafts)\n`);
+}
+
+// =============================================================================
+// Bulk Update Command - Update all matching local files
+// =============================================================================
+
+async function cmdBulkUpdate(args: string[]): Promise<void> {
+  const { readdirSync } = await import("fs");
+  const { join } = await import("path");
+
+  // Get directory from args or use default
+  const dirIdx = args.indexOf("--dir");
+  const blogDir = dirIdx !== -1 && args[dirIdx + 1]
+    ? args[dirIdx + 1]
+    : join(process.env.HOME || "", ".claude/MEMORY/WORK/blog");
+
+  const dryRun = args.includes("--dry-run");
+
+  if (!existsSync(blogDir)) {
+    console.error(`Error: Directory not found: ${blogDir}`);
+    process.exit(1);
+  }
+
+  // Get local markdown files
+  const files = readdirSync(blogDir)
+    .filter((f: string) => f.startsWith("blog-post-") && f.endsWith(".md") && !f.includes("-metadata"));
+
+  // Get Ghost posts
+  const token = generateToken(getAdminKey());
+  const result = await apiGet("posts/?limit=all", token);
+  const ghostPosts = result.posts;
+
+  const normalize = (t: string) => t.toLowerCase()
+    .replace(/^blog post:?\s*/i, "")
+    .replace(/^blog post idea:?\s*/i, "")
+    .trim();
+
+  console.log(`\n  Bulk Update: ${blogDir}`);
+  if (dryRun) console.log(`  (DRY RUN - no changes will be made)`);
+  console.log(`  ${"─".repeat(60)}\n`);
+
+  let updated = 0;
+  let skipped = 0;
+  let notFound = 0;
+
+  for (const file of files) {
+    const filePath = join(blogDir, file);
+    const content = readFileSync(filePath, "utf-8");
+    const titleMatch = content.match(/^#\s+(.+)$/m);
+    if (!titleMatch) {
+      skipped++;
+      continue;
+    }
+
+    const localTitle = titleMatch[1].trim();
+    const localNorm = normalize(localTitle);
+
+    // Find matching Ghost post
+    let ghostPost = null;
+    for (const ghost of ghostPosts) {
+      const ghostNorm = normalize(ghost.title);
+      if (ghostNorm.includes(localNorm.substring(0, 25)) ||
+          localNorm.includes(ghostNorm.substring(0, 25))) {
+        ghostPost = ghost;
+        break;
+      }
+    }
+
+    if (!ghostPost) {
+      console.log(`  ⏭️  ${file} (no matching Ghost post)`);
+      notFound++;
+      continue;
+    }
+
+    const status = ghostPost.status === "published" ? "✓" : "○";
+
+    if (dryRun) {
+      console.log(`  ${status} Would update: ${file} → ${ghostPost.slug}`);
+      updated++;
+    } else {
+      try {
+        // Process images and convert to HTML
+        const processedMarkdown = await processMarkdownImages(content, filePath);
+        const html = markdownToHtml(processedMarkdown);
+
+        await updatePostContent(ghostPost.slug, html);
+        console.log(`  ${status} ✅ Updated: ${file}`);
+        updated++;
+      } catch (error) {
+        console.log(`  ${status} ❌ Failed: ${file} - ${(error as Error).message}`);
+      }
+    }
+  }
+
+  console.log(`\n  ${"─".repeat(60)}`);
+  console.log(`  Updated:   ${updated}`);
+  console.log(`  Skipped:   ${skipped}`);
+  console.log(`  Not found: ${notFound}\n`);
+}
+
 function showHelp(): void {
   console.log(`
 Ghost Blog CLI - Unified management tool
@@ -844,6 +1213,9 @@ Commands:
   lint <file>                     Check markdown for draft metadata
   lint --live [--slug <slug>]     Check published posts for issues
   diff <slug> --file <md>         Compare live post with local file
+  audit [--drafts|--published]    Check posts for image issues
+  sync [--dir <path>]             Compare local files against Ghost
+  bulk-update [--dir <path>] [--dry-run]  Update all matching posts
 
 Examples:
   ghost-cli list --drafts
@@ -911,6 +1283,15 @@ async function main(): Promise<void> {
         break;
       case "diff":
         await cmdDiff(commandArgs);
+        break;
+      case "audit":
+        await cmdAudit(commandArgs);
+        break;
+      case "sync":
+        await cmdSync(commandArgs);
+        break;
+      case "bulk-update":
+        await cmdBulkUpdate(commandArgs);
         break;
       default:
         console.error(`Unknown command: ${command}`);

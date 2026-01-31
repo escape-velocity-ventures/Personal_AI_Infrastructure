@@ -255,6 +255,49 @@ app.get('/memory/meta', async (c) => {
   return c.json({ meta, count: Object.keys(meta).length });
 });
 
+// Batch content endpoint - fetch multiple entries in one call (for fast sync)
+app.post('/memory/batch', async (c) => {
+  const client = await getRedis();
+  const body = await c.req.json();
+  const paths: string[] = body.paths;
+
+  if (!paths || !Array.isArray(paths) || paths.length === 0) {
+    return c.json({ error: 'paths array required' }, 400);
+  }
+
+  // Convert paths to Redis keys
+  const keys = paths.map(p => `${PREFIX}memory:${p.replace(/\//g, ':')}`);
+
+  // Single MGET for all content
+  const values = await client.mGet(keys);
+
+  const entries: Record<string, { content: string; mtime?: number } | null> = {};
+
+  for (let i = 0; i < paths.length; i++) {
+    const path = paths[i];
+    const stored = values[i];
+
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored);
+        if (parsed.content !== undefined) {
+          entries[path] = { content: parsed.content, mtime: parsed.mtime };
+        } else {
+          // Old format - raw content
+          entries[path] = { content: stored };
+        }
+      } catch {
+        // Not JSON, treat as raw content
+        entries[path] = { content: stored };
+      }
+    } else {
+      entries[path] = null;
+    }
+  }
+
+  return c.json({ entries, count: Object.keys(entries).filter(k => entries[k] !== null).length });
+});
+
 app.get('/memory/:path{.+}', async (c) => {
   const path = c.req.param('path');
   const client = await getRedis();
@@ -440,6 +483,7 @@ app.put('/kv/:key{.+}', async (c) => {
 
 // ============ Search ============
 
+// Legacy pattern search (for backwards compatibility)
 app.get('/search', async (c) => {
   const pattern = c.req.query('pattern') || '*';
   const client = await getRedis();
@@ -447,6 +491,136 @@ app.get('/search', async (c) => {
   const keys = await client.keys(`${PREFIX}${pattern}`);
 
   return c.json({ pattern, keys, count: keys.length });
+});
+
+// Unified memory search - search across sessions, learnings, work, etc.
+app.get('/search/memory', async (c) => {
+  const client = await getRedis();
+
+  // Query parameters
+  const q = c.req.query('q')?.toLowerCase();           // Text search (case-insensitive)
+  const types = c.req.query('type')?.split(',') || []; // Filter by type: sessions, learnings, WORK, etc.
+  const days = parseInt(c.req.query('days') || '30');  // Date filter (default 30 days)
+  const limit = parseInt(c.req.query('limit') || '50'); // Max results
+  const includeContent = c.req.query('content') === 'true'; // Include full content in response
+
+  // Get all memory keys
+  const allKeys = await client.keys(`${PREFIX}memory:*`);
+
+  // Filter by type if specified
+  let filteredKeys = allKeys;
+  if (types.length > 0) {
+    filteredKeys = allKeys.filter(key => {
+      const path = key.replace(`${PREFIX}memory:`, '');
+      return types.some(t => path.startsWith(t.replace(/\//g, ':')));
+    });
+  }
+
+  // Batch fetch all values for filtering
+  const values = filteredKeys.length > 0 ? await client.mGet(filteredKeys) : [];
+
+  // Date cutoff
+  const cutoffDate = new Date();
+  cutoffDate.setDate(cutoffDate.getDate() - days);
+  const cutoffMs = cutoffDate.getTime();
+
+  interface SearchResult {
+    path: string;
+    type: string;
+    mtime: number | null;
+    date: string | null;
+    preview: string;
+    matches: string[];
+    content?: string;
+  }
+
+  const results: SearchResult[] = [];
+
+  for (let i = 0; i < filteredKeys.length && results.length < limit; i++) {
+    const key = filteredKeys[i];
+    const stored = values[i];
+
+    if (!stored) continue;
+
+    const path = key.replace(`${PREFIX}memory:`, '').replace(/:/g, '/');
+    const pathParts = path.split('/');
+    const type = pathParts[0]; // sessions, SESSIONS, learnings, WORK, etc.
+
+    let content: string;
+    let mtime: number | null = null;
+
+    // Parse stored value
+    try {
+      const parsed = JSON.parse(stored);
+      if (parsed.content !== undefined) {
+        content = parsed.content;
+        mtime = parsed.mtime || null;
+      } else {
+        content = stored;
+      }
+    } catch {
+      content = stored;
+    }
+
+    // Date filter - use mtime or try to extract from path/content
+    if (mtime && mtime < cutoffMs) continue;
+
+    // If no mtime, try to extract date from path (e.g., sessions/2026-01-30/...)
+    if (!mtime) {
+      const dateMatch = path.match(/(\d{4}-\d{2}-\d{2})/);
+      if (dateMatch) {
+        const pathDate = new Date(dateMatch[1]).getTime();
+        if (pathDate < cutoffMs) continue;
+      }
+    }
+
+    // Text search
+    const matches: string[] = [];
+    if (q) {
+      const contentLower = content.toLowerCase();
+      if (!contentLower.includes(q)) continue;
+
+      // Extract matching lines for context
+      const lines = content.split('\n');
+      for (const line of lines) {
+        if (line.toLowerCase().includes(q)) {
+          matches.push(line.trim().substring(0, 200));
+          if (matches.length >= 3) break; // Max 3 match previews
+        }
+      }
+    }
+
+    // Build result
+    const result: SearchResult = {
+      path,
+      type,
+      mtime,
+      date: mtime ? new Date(mtime).toISOString().split('T')[0] : null,
+      preview: content.substring(0, 300).replace(/\n/g, ' ').trim(),
+      matches,
+    };
+
+    if (includeContent) {
+      result.content = content;
+    }
+
+    results.push(result);
+  }
+
+  // Sort by mtime (newest first), nulls last
+  results.sort((a, b) => {
+    if (a.mtime === null && b.mtime === null) return 0;
+    if (a.mtime === null) return 1;
+    if (b.mtime === null) return -1;
+    return b.mtime - a.mtime;
+  });
+
+  return c.json({
+    results,
+    count: results.length,
+    query: { q, types, days, limit },
+    total_scanned: filteredKeys.length,
+  });
 });
 
 // ============ Stats ============

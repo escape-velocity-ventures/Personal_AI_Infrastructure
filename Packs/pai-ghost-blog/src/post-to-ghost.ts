@@ -217,15 +217,92 @@ async function uploadImage(imagePath: string): Promise<string> {
 }
 
 /**
+ * Extract image references from markdown
+ * Returns array of { fullMatch, alt, path, isLocal }
+ */
+function extractImageReferences(markdown: string): Array<{
+  fullMatch: string;
+  alt: string;
+  path: string;
+  isLocal: boolean;
+}> {
+  const imageRegex = /!\[([^\]]*)\]\(([^)]+)\)/g;
+  const images: Array<{ fullMatch: string; alt: string; path: string; isLocal: boolean }> = [];
+
+  let match;
+  while ((match = imageRegex.exec(markdown)) !== null) {
+    const [fullMatch, alt, path] = match;
+    // Check if it's a URL or local path
+    const isLocal = !path.startsWith("http://") &&
+                    !path.startsWith("https://") &&
+                    !path.startsWith("data:");
+    images.push({ fullMatch, alt, path, isLocal });
+  }
+
+  return images;
+}
+
+/**
+ * Process markdown images: upload local images and replace with URLs
+ * @param markdown - The markdown content
+ * @param basePath - Base directory for resolving relative image paths
+ * @returns Modified markdown with uploaded image URLs
+ */
+async function processMarkdownImages(
+  markdown: string,
+  basePath: string
+): Promise<string> {
+  const { isAbsolute } = await import("path");
+
+  const images = extractImageReferences(markdown);
+  const localImages = images.filter((img) => img.isLocal);
+
+  if (localImages.length === 0) {
+    return markdown;
+  }
+
+  console.log(`\n📷 Found ${localImages.length} local image(s) to upload:`);
+
+  let processedMarkdown = markdown;
+
+  for (const img of localImages) {
+    // Resolve the image path relative to the markdown file
+    const imagePath = isAbsolute(img.path)
+      ? img.path
+      : join(dirname(basePath), img.path);
+
+    if (!existsSync(imagePath)) {
+      console.log(`   ⚠️  Skipping (not found): ${img.path}`);
+      continue;
+    }
+
+    try {
+      console.log(`   ⬆️  Uploading: ${img.path}`);
+      const uploadedUrl = await uploadImage(imagePath);
+      console.log(`   ✅ Uploaded: ${uploadedUrl}`);
+
+      // Replace the original path with the uploaded URL in markdown
+      const newImageRef = `![${img.alt}](${uploadedUrl})`;
+      processedMarkdown = processedMarkdown.replace(img.fullMatch, newImageRef);
+    } catch (error) {
+      console.log(`   ❌ Failed to upload ${img.path}: ${(error as Error).message}`);
+    }
+  }
+
+  console.log();
+  return processedMarkdown;
+}
+
+/**
  * Parse a blog post markdown file with metadata
  */
-function parseMarkdownFile(filepath: string): {
+async function parseMarkdownFile(filepath: string): Promise<{
   title: string;
   html: string;
   excerpt: string;
   featureImage?: string;
   tags?: string[];
-} {
+}> {
   const content = readFileSync(filepath, 'utf-8');
 
   // Sections to SKIP (metadata, not blog content)
@@ -288,8 +365,11 @@ function parseMarkdownFile(filepath: string): {
     blogContent = content;
   }
 
+  // Process inline images - upload local images and replace paths with URLs
+  const processedContent = await processMarkdownImages(blogContent, filepath);
+
   const title = extractTitle(content, filepath);
-  const html = markdownToHtml(blogContent);
+  const html = markdownToHtml(processedContent);
   const excerpt = extractExcerpt(blogContent);
 
   return { title, html, excerpt };
@@ -347,7 +427,7 @@ Example:
       console.error(`File not found: ${filepath}`);
       process.exit(1);
     }
-    const parsed = parseMarkdownFile(filepath);
+    const parsed = await parseMarkdownFile(filepath);
     title = parsed.title;
     html = parsed.html;
     excerpt = parsed.excerpt;

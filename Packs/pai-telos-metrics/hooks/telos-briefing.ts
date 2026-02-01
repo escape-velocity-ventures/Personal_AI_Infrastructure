@@ -10,6 +10,7 @@ import { join, dirname } from "path";
 import { homedir } from "os";
 import { existsSync, readFileSync } from "fs";
 import { parse as parseYaml } from "yaml";
+import { shouldRun } from '/Users/benjamin/EscapeVelocity/PersonalAI/PAI/Packs/pai-gastown-bridge/src';
 
 interface SessionStartPayload {
   session_id: string;
@@ -25,10 +26,7 @@ const CONFIG_PATH = join(PACK_DIR, "data", "kpi-config.yaml");
 const METRICS_PATH = join(PACK_DIR, "data", "metrics.jsonl");
 const TELOS_PATH = join(PAI_DIR, "skills", "CORE", "USER", "TELOS.md");
 
-function isSubagentSession(): boolean {
-  return process.env.CLAUDE_CODE_AGENT !== undefined ||
-         process.env.SUBAGENT === "true";
-}
+// Removed isSubagentSession() - now using shouldRun() from pai-gastown-bridge
 
 function formatDate(date: Date): string {
   return date.toISOString().split("T")[0];
@@ -172,8 +170,9 @@ function generateCompactBriefing(): string {
 
 async function main() {
   try {
-    // Skip for subagents
-    if (isSubagentSession()) {
+    // Check if telos feature should run (handles GT roles, subagents, headless mode)
+    const runResult = shouldRun({ feature: 'telos' });
+    if (!runResult.shouldRun) {
       process.exit(0);
     }
 

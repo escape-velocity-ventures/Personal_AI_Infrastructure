@@ -1,0 +1,109 @@
+# pai-gastown-bridge - Default Feature Matrix
+#
+# This file documents the default configuration. The actual defaults
+# are compiled into the TypeScript code for performance.
+#
+# To override, create ~/.claude/gastown-bridge.yaml
+#
+# Legend:
+#   enabled:  Feature runs normally
+#   disabled: Feature is skipped
+#   minimal:  Feature runs in reduced mode (if hook supports it)
+
+roles:
+  # Human workspace - full PAI experience
+  crew:
+    identity: enabled
+    voice: enabled
+    memory-sync: enabled
+    security: enabled
+    infra-routing: enabled
+    observability: enabled
+    telos: enabled
+    session: enabled
+    tab-titles: enabled
+
+  # Observer role - minimal overhead
+  witness:
+    identity: disabled
+    voice: disabled
+    memory-sync: disabled
+    security: enabled
+    infra-routing: disabled
+    observability: enabled
+    telos: disabled
+    session: minimal
+    tab-titles: disabled
+
+  # Ephemeral workers - lean and fast
+  polecats:
+    identity: disabled
+    voice: disabled
+    memory-sync: disabled
+    security: enabled
+    infra-routing: disabled
+    observability: enabled
+    telos: disabled
+    session: disabled
+    tab-titles: disabled
+
+  # Code review - security focused
+  refinery:
+    identity: disabled
+    voice: disabled
+    memory-sync: disabled
+    security: enabled
+    infra-routing: disabled
+    observability: enabled
+    telos: disabled
+    session: minimal
+    tab-titles: disabled
+
+  # Orchestration - needs visibility
+  mayor:
+    identity: disabled
+    voice: disabled
+    memory-sync: disabled
+    security: enabled
+    infra-routing: enabled
+    observability: enabled
+    telos: disabled
+    session: minimal
+    tab-titles: disabled
+
+  # System monitor - observability focused
+  deacon:
+    identity: disabled
+    voice: disabled
+    memory-sync: disabled
+    security: enabled
+    infra-routing: disabled
+    observability: enabled
+    telos: disabled
+    session: minimal
+    tab-titles: disabled
+
+  # Background process - minimal
+  daemon:
+    identity: disabled
+    voice: disabled
+    memory-sync: disabled
+    security: enabled
+    infra-routing: disabled
+    observability: enabled
+    telos: disabled
+    session: disabled
+    tab-titles: disabled
+
+# Default for non-GT sessions or unknown roles
+# Full PAI experience outside Gas Town
+default:
+  identity: enabled
+  voice: enabled
+  memory-sync: enabled
+  security: enabled
+  infra-routing: enabled
+  observability: enabled
+  telos: enabled
+  session: enabled
+  tab-titles: enabled

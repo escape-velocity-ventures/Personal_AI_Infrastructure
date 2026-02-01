@@ -10,7 +10,28 @@ import { join, dirname } from "path";
 import { homedir } from "os";
 import { existsSync, readFileSync } from "fs";
 import { parse as parseYaml } from "yaml";
-import { shouldRun } from '/Users/benjamin/EscapeVelocity/PersonalAI/PAI/Packs/pai-gastown-bridge/src';
+
+// Dynamic import for gastown-bridge (may not exist on all machines)
+let shouldRunSafe: (options: { feature: string }) => Promise<{ shouldRun: boolean; reason: string }>;
+let initBridge: () => Promise<boolean>;
+
+async function loadBridge() {
+  const bridgePath = join(homedir(), 'EscapeVelocity/PersonalAI/PAI/Packs/pai-gastown-bridge/src');
+  if (existsSync(bridgePath)) {
+    try {
+      const mod = await import(bridgePath);
+      shouldRunSafe = mod.shouldRunSafe;
+      initBridge = mod.initBridge;
+      return true;
+    } catch {
+      // Fall through
+    }
+  }
+  // Fallback: always allow
+  shouldRunSafe = async () => ({ shouldRun: true, reason: 'bridge-unavailable' });
+  initBridge = async () => false;
+  return false;
+}
 
 interface SessionStartPayload {
   session_id: string;
@@ -170,8 +191,10 @@ function generateCompactBriefing(): string {
 
 async function main() {
   try {
-    // Check if telos feature should run (handles GT roles, subagents, headless mode)
-    const runResult = shouldRun({ feature: 'telos' });
+    // Load bridge and check if telos feature should run
+    await loadBridge();
+    await initBridge();
+    const runResult = await shouldRunSafe({ feature: 'telos' });
     if (!runResult.shouldRun) {
       process.exit(0);
     }

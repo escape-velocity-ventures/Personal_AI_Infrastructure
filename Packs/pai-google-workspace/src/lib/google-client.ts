@@ -435,14 +435,14 @@ function createDocsHelpers(account?: string) {
         }
       }
 
-      // Append text at the end
+      // Append text at the end (endIndex - 1 because Docs reserves last index for doc end marker)
       await googleApi(`https://docs.googleapis.com/v1/documents/${documentId}:batchUpdate`, {
         method: "POST",
         body: {
           requests: [
             {
               insertText: {
-                location: { index: endIndex },
+                location: { index: endIndex - 1 },
                 text: "\n" + text,
               },
             },

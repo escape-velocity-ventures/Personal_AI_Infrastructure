@@ -8,7 +8,8 @@ const REDIRECT_URI = `http://localhost:${PORT}/callback`;
 const SCOPES = [
   "https://www.googleapis.com/auth/gmail.modify",
   "https://www.googleapis.com/auth/calendar",
-  "https://www.googleapis.com/auth/drive.readonly",
+  "https://www.googleapis.com/auth/drive", // Full Drive access for file operations
+  "https://www.googleapis.com/auth/documents", // Google Docs read/write
   "https://www.googleapis.com/auth/userinfo.email", // Added for account identification
 ];
 

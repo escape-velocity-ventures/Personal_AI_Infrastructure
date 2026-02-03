@@ -1,13 +1,13 @@
 #!/usr/bin/env bun
 import { gmailTools, handleGmailTool } from "./tools/gmail";
 import { calendarTools, handleCalendarTool } from "./tools/calendar";
-import { driveTools, handleDriveTool } from "./tools/drive";
+import { driveTools, handleDriveTool, docsTools, handleDocsTool } from "./tools/drive";
 import type { McpRequest, McpResponse, CallToolParams, ToolDefinition } from "./types";
 
 const SERVER_NAME = "pai-google-workspace";
 const SERVER_VERSION = "1.0.0";
 
-const allTools: ToolDefinition[] = [...gmailTools, ...calendarTools, ...driveTools];
+const allTools: ToolDefinition[] = [...gmailTools, ...calendarTools, ...driveTools, ...docsTools];
 
 function createResponse(id: number | string, result: unknown): McpResponse {
   return { jsonrpc: "2.0", id, result };
@@ -54,6 +54,8 @@ async function handleRequest(request: McpRequest): Promise<McpResponse> {
           result = await handleCalendarTool(name, args);
         } else if (name.startsWith("drive_")) {
           result = await handleDriveTool(name, args);
+        } else if (name.startsWith("docs_")) {
+          result = await handleDocsTool(name, args);
         } else {
           throw new Error(`Unknown tool: ${name}`);
         }

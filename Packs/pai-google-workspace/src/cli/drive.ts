@@ -1,5 +1,5 @@
 #!/usr/bin/env bun
-import { drive, forAccount } from "../lib/google-client";
+import { drive, docs, forAccount } from "../lib/google-client";
 
 const command = process.argv[2];
 const args = process.argv.slice(3);
@@ -42,6 +42,10 @@ function formatMimeType(mimeType: string): string {
 
 function getDriveClient(account?: string) {
   return account ? forAccount(account).drive : drive;
+}
+
+function getDocsClient(account?: string) {
+  return account ? forAccount(account).docs : docs;
 }
 
 async function main() {
@@ -129,6 +133,96 @@ async function main() {
       break;
     }
 
+    case "docs": {
+      const docsClient = getDocsClient(account);
+      const docsCommand = args[0];
+      const docsArgs = args.slice(1);
+
+      switch (docsCommand) {
+        case "read": {
+          const docId = docsArgs[0] || parsed.id;
+          if (!docId) {
+            console.error("Usage: bun run drive docs read <docId> [--account EMAIL]");
+            process.exit(1);
+          }
+
+          const text = await docsClient.readAsText(docId);
+          console.log(text);
+          break;
+        }
+
+        case "get": {
+          const docId = docsArgs[0] || parsed.id;
+          if (!docId) {
+            console.error("Usage: bun run drive docs get <docId> [--account EMAIL]");
+            process.exit(1);
+          }
+
+          const doc = await docsClient.getDocument(docId);
+          console.log(JSON.stringify(doc, null, 2));
+          break;
+        }
+
+        case "append": {
+          const docId = docsArgs[0] || parsed.id;
+          const content = parsed.content;
+
+          if (!docId || !content) {
+            console.error("Usage: bun run drive docs append <docId> --content \"text to append\" [--account EMAIL]");
+            process.exit(1);
+          }
+
+          await docsClient.append(docId, content);
+          console.log("Content appended successfully.");
+          break;
+        }
+
+        case "update": {
+          const docId = docsArgs[0] || parsed.id;
+          const content = parsed.content;
+
+          if (!docId || !content) {
+            console.error("Usage: bun run drive docs update <docId> --content \"new content\" [--account EMAIL]");
+            process.exit(1);
+          }
+
+          await docsClient.replaceContent(docId, content);
+          console.log("Document content replaced successfully.");
+          break;
+        }
+
+        case "replace": {
+          const docId = docsArgs[0] || parsed.id;
+          const find = parsed.find;
+          const replaceWith = parsed.replace;
+
+          if (!docId || !find || replaceWith === undefined) {
+            console.error("Usage: bun run drive docs replace <docId> --find \"text\" --replace \"replacement\" [--account EMAIL]");
+            process.exit(1);
+          }
+
+          const result = await docsClient.findAndReplace(docId, find, replaceWith);
+          console.log(`Replaced ${result.occurrencesChanged} occurrence(s).`);
+          break;
+        }
+
+        default:
+          console.log("Usage: bun run drive docs <command> [options]");
+          console.log("");
+          console.log("Commands:");
+          console.log("  read <docId>                           Read document as plain text");
+          console.log("  get <docId>                            Get document structure (JSON)");
+          console.log("  append <docId> --content \"text\"        Append text to document");
+          console.log("  update <docId> --content \"text\"        Replace all document content");
+          console.log("  replace <docId> --find \"x\" --replace \"y\"  Find and replace text");
+          console.log("");
+          console.log("Options:");
+          console.log("  --account EMAIL                        Use specific Google account");
+          break;
+      }
+      break;
+    }
+
     default:
       console.log("Usage: bun run drive <command> [options]");
       console.log("");
@@ -140,6 +234,12 @@ async function main() {
       console.log("  search <query>                Search files");
       console.log("  get <fileId>                  Get file metadata");
       console.log("  read <fileId>                 Read file content");
+      console.log("");
+      console.log("  docs read <docId>             Read Google Doc as text");
+      console.log("  docs get <docId>              Get Google Doc structure");
+      console.log("  docs append <docId> --content Append to Google Doc");
+      console.log("  docs update <docId> --content Replace Google Doc content");
+      console.log("  docs replace <docId> --find --replace  Find and replace");
       break;
   }
 }

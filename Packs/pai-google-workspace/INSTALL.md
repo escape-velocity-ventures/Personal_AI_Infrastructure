@@ -30,12 +30,13 @@ If you don't have OAuth credentials yet:
    - Gmail API
    - Google Calendar API
    - Google Drive API
+   - Google Docs API
 4. Create OAuth 2.0 credentials:
    - Application type: Desktop app
    - Download credentials JSON
 5. Configure OAuth consent screen:
    - User type: Internal (for Workspace) or External
-   - Add scopes for Gmail, Calendar, Drive
+   - Add scopes for Gmail, Calendar, Drive, Docs
 
 ## Phase 3: Installation
 
@@ -98,6 +99,18 @@ Run verification checklist:
 
 # Test Drive
 ./manage.sh drive list
+
+# Test Docs (requires a document ID)
+./manage.sh drive docs read <document-id>
+```
+
+## Re-authentication
+
+If you added Google Docs API after initial setup, you need to re-authenticate to get the new OAuth scopes:
+
+```bash
+# Re-run OAuth flow to get Docs permissions
+./manage.sh auth login
 ```
 
 See VERIFY.md for complete verification checklist.

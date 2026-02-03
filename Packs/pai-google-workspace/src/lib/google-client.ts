@@ -89,6 +89,7 @@ function withAccount(account?: string) {
     gmail: createGmailHelpers(account),
     calendar: createCalendarHelpers(account),
     drive: createDriveHelpers(account),
+    docs: createDocsHelpers(account),
   };
 }
 
@@ -359,10 +360,211 @@ function createDriveHelpers(account?: string) {
   };
 }
 
+// Google Docs API helpers
+function createDocsHelpers(account?: string) {
+  return {
+    /**
+     * Get a Google Doc's content (returns structured document JSON)
+     */
+    async getDocument(documentId: string) {
+      interface GoogleDoc {
+        documentId: string;
+        title: string;
+        body: {
+          content: DocContent[];
+        };
+        revisionId: string;
+      }
+      interface DocContent {
+        paragraph?: {
+          elements: ParagraphElement[];
+          paragraphStyle?: { namedStyleType?: string };
+        };
+        table?: unknown;
+        sectionBreak?: unknown;
+        tableOfContents?: unknown;
+      }
+      interface ParagraphElement {
+        textRun?: { content: string; textStyle?: unknown };
+        inlineObjectElement?: unknown;
+      }
+      return googleApi<GoogleDoc>(`https://docs.googleapis.com/v1/documents/${documentId}`, {
+        account,
+      });
+    },
+
+    /**
+     * Read a Google Doc as plain text
+     */
+    async readAsText(documentId: string): Promise<string> {
+      const doc = await this.getDocument(documentId);
+      const lines: string[] = [];
+
+      for (const content of doc.body.content) {
+        if (content.paragraph) {
+          let paragraphText = "";
+          for (const element of content.paragraph.elements) {
+            if (element.textRun?.content) {
+              paragraphText += element.textRun.content;
+            }
+          }
+          // Remove trailing newline from paragraph (we'll handle formatting ourselves)
+          lines.push(paragraphText.replace(/\n$/, ""));
+        }
+      }
+
+      return lines.join("\n");
+    },
+
+    /**
+     * Append text to the end of a Google Doc
+     */
+    async append(documentId: string, text: string): Promise<void> {
+      // First get the document to find the end index
+      const doc = await this.getDocument(documentId);
+
+      // Find the end index (last content element's endIndex - 1 because of final newline)
+      let endIndex = 1;
+      for (const content of doc.body.content) {
+        if (content.paragraph) {
+          for (const element of content.paragraph.elements) {
+            if (element.textRun?.content) {
+              endIndex += element.textRun.content.length;
+            }
+          }
+        }
+      }
+
+      // Append text at the end
+      await googleApi(`https://docs.googleapis.com/v1/documents/${documentId}:batchUpdate`, {
+        method: "POST",
+        body: {
+          requests: [
+            {
+              insertText: {
+                location: { index: endIndex },
+                text: "\n" + text,
+              },
+            },
+          ],
+        },
+        account,
+      });
+    },
+
+    /**
+     * Replace all content in a Google Doc with new text
+     */
+    async replaceContent(documentId: string, newContent: string): Promise<void> {
+      // Get document to find content range
+      const doc = await this.getDocument(documentId);
+
+      // Calculate the total content length
+      let endIndex = 1;
+      for (const content of doc.body.content) {
+        if (content.paragraph) {
+          for (const element of content.paragraph.elements) {
+            if (element.textRun?.content) {
+              endIndex += element.textRun.content.length;
+            }
+          }
+        }
+      }
+
+      const requests: unknown[] = [];
+
+      // Delete existing content (if any exists beyond the initial newline)
+      if (endIndex > 1) {
+        requests.push({
+          deleteContentRange: {
+            range: {
+              startIndex: 1,
+              endIndex: endIndex,
+            },
+          },
+        });
+      }
+
+      // Insert new content
+      requests.push({
+        insertText: {
+          location: { index: 1 },
+          text: newContent,
+        },
+      });
+
+      await googleApi(`https://docs.googleapis.com/v1/documents/${documentId}:batchUpdate`, {
+        method: "POST",
+        body: { requests },
+        account,
+      });
+    },
+
+    /**
+     * Find and replace text in a Google Doc
+     */
+    async findAndReplace(
+      documentId: string,
+      find: string,
+      replace: string,
+      matchCase = false
+    ): Promise<{ occurrencesChanged: number }> {
+      interface BatchUpdateResponse {
+        replies: { replaceAllText?: { occurrencesChanged: number } }[];
+      }
+      const result = await googleApi<BatchUpdateResponse>(
+        `https://docs.googleapis.com/v1/documents/${documentId}:batchUpdate`,
+        {
+          method: "POST",
+          body: {
+            requests: [
+              {
+                replaceAllText: {
+                  containsText: {
+                    text: find,
+                    matchCase,
+                  },
+                  replaceText: replace,
+                },
+              },
+            ],
+          },
+          account,
+        }
+      );
+
+      return {
+        occurrencesChanged: result.replies[0]?.replaceAllText?.occurrencesChanged || 0,
+      };
+    },
+
+    /**
+     * Insert text at a specific position in the document
+     */
+    async insertAt(documentId: string, index: number, text: string): Promise<void> {
+      await googleApi(`https://docs.googleapis.com/v1/documents/${documentId}:batchUpdate`, {
+        method: "POST",
+        body: {
+          requests: [
+            {
+              insertText: {
+                location: { index },
+                text,
+              },
+            },
+          ],
+        },
+        account,
+      });
+    },
+  };
+}
+
 // Default helpers (use default account)
 export const gmail = createGmailHelpers();
 export const calendar = createCalendarHelpers();
 export const drive = createDriveHelpers();
+export const docs = createDocsHelpers();
 
 // Factory for account-specific helpers
 export function forAccount(account: string) {

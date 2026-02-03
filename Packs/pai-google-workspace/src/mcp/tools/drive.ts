@@ -1,4 +1,4 @@
-import { drive, forAccount } from "../../lib/google-client";
+import { drive, docs, forAccount } from "../../lib/google-client";
 import type { ToolDefinition } from "../types";
 
 const accountProperty = {
@@ -78,6 +78,104 @@ export const driveTools: ToolDefinition[] = [
   },
 ];
 
+export const docsTools: ToolDefinition[] = [
+  {
+    name: "docs_read",
+    description: "Read a Google Doc as plain text",
+    inputSchema: {
+      type: "object",
+      properties: {
+        documentId: {
+          type: "string",
+          description: "The Google Doc document ID",
+        },
+        ...accountProperty,
+      },
+      required: ["documentId"],
+    },
+  },
+  {
+    name: "docs_get",
+    description: "Get the full structure of a Google Doc (JSON)",
+    inputSchema: {
+      type: "object",
+      properties: {
+        documentId: {
+          type: "string",
+          description: "The Google Doc document ID",
+        },
+        ...accountProperty,
+      },
+      required: ["documentId"],
+    },
+  },
+  {
+    name: "docs_append",
+    description: "Append text to the end of a Google Doc",
+    inputSchema: {
+      type: "object",
+      properties: {
+        documentId: {
+          type: "string",
+          description: "The Google Doc document ID",
+        },
+        content: {
+          type: "string",
+          description: "The text content to append",
+        },
+        ...accountProperty,
+      },
+      required: ["documentId", "content"],
+    },
+  },
+  {
+    name: "docs_update",
+    description: "Replace all content in a Google Doc with new text",
+    inputSchema: {
+      type: "object",
+      properties: {
+        documentId: {
+          type: "string",
+          description: "The Google Doc document ID",
+        },
+        content: {
+          type: "string",
+          description: "The new content to replace the document with",
+        },
+        ...accountProperty,
+      },
+      required: ["documentId", "content"],
+    },
+  },
+  {
+    name: "docs_find_replace",
+    description: "Find and replace text in a Google Doc",
+    inputSchema: {
+      type: "object",
+      properties: {
+        documentId: {
+          type: "string",
+          description: "The Google Doc document ID",
+        },
+        find: {
+          type: "string",
+          description: "The text to find",
+        },
+        replace: {
+          type: "string",
+          description: "The replacement text",
+        },
+        matchCase: {
+          type: "boolean",
+          description: "Whether to match case (default: false)",
+        },
+        ...accountProperty,
+      },
+      required: ["documentId", "find", "replace"],
+    },
+  },
+];
+
 function formatFileSize(bytes: string | undefined): string {
   if (!bytes) return "unknown";
   const size = parseInt(bytes, 10);
@@ -89,6 +187,10 @@ function formatFileSize(bytes: string | undefined): string {
 
 function getDriveClient(account?: string) {
   return account ? forAccount(account).drive : drive;
+}
+
+function getDocsClient(account?: string) {
+  return account ? forAccount(account).docs : docs;
 }
 
 export async function handleDriveTool(
@@ -141,5 +243,52 @@ export async function handleDriveTool(
 
     default:
       throw new Error(`Unknown Drive tool: ${name}`);
+  }
+}
+
+export async function handleDocsTool(
+  name: string,
+  args: Record<string, unknown>
+): Promise<unknown> {
+  const account = args.account as string | undefined;
+  const docsClient = getDocsClient(account);
+
+  switch (name) {
+    case "docs_read": {
+      const documentId = args.documentId as string;
+      const content = await docsClient.readAsText(documentId);
+      return { content };
+    }
+
+    case "docs_get": {
+      const documentId = args.documentId as string;
+      return docsClient.getDocument(documentId);
+    }
+
+    case "docs_append": {
+      const documentId = args.documentId as string;
+      const content = args.content as string;
+      await docsClient.append(documentId, content);
+      return { success: true, message: "Content appended successfully" };
+    }
+
+    case "docs_update": {
+      const documentId = args.documentId as string;
+      const content = args.content as string;
+      await docsClient.replaceContent(documentId, content);
+      return { success: true, message: "Document content replaced successfully" };
+    }
+
+    case "docs_find_replace": {
+      const documentId = args.documentId as string;
+      const find = args.find as string;
+      const replace = args.replace as string;
+      const matchCase = (args.matchCase as boolean) || false;
+      const result = await docsClient.findAndReplace(documentId, find, replace, matchCase);
+      return { success: true, occurrencesChanged: result.occurrencesChanged };
+    }
+
+    default:
+      throw new Error(`Unknown Docs tool: ${name}`);
   }
 }

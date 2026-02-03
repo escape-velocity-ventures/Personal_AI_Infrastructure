@@ -56,6 +56,7 @@ case "$1" in
     echo "  gmail           Gmail CLI (search, read, send, labels)"
     echo "  calendar        Calendar CLI (list, get, create, freebusy)"
     echo "  drive           Drive CLI (list, search, get, read)"
+    echo "  drive docs      Docs CLI (read, get, append, update, replace)"
     echo ""
     echo "  mcp             Start MCP server (for Claude Code)"
     echo "  install         Install dependencies"

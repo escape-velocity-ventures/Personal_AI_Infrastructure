@@ -35,6 +35,42 @@ import { execSync } from "child_process";
 const GHOST_URL =
   process.env.GHOST_URL || "https://blog.escape-velocity-ventures.org";
 
+// Cloudflare Access credentials (for bypassing Zero Trust protection on /ghost/*)
+interface CloudflareAccessCreds {
+  clientId: string;
+  clientSecret: string;
+}
+
+function getCloudflareAccessCreds(): CloudflareAccessCreds | null {
+  // 1. Check environment variables
+  if (process.env.CF_ACCESS_CLIENT_ID && process.env.CF_ACCESS_CLIENT_SECRET) {
+    return {
+      clientId: process.env.CF_ACCESS_CLIENT_ID,
+      clientSecret: process.env.CF_ACCESS_CLIENT_SECRET,
+    };
+  }
+
+  // 2. Try Kubernetes secret
+  try {
+    const clientId = execSync(
+      "kubectl get secret cloudflare-ghost-access-token -n infrastructure -o jsonpath='{.data.client-id}' 2>/dev/null | base64 -d",
+      { encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] }
+    ).trim();
+    const clientSecret = execSync(
+      "kubectl get secret cloudflare-ghost-access-token -n infrastructure -o jsonpath='{.data.client-secret}' 2>/dev/null | base64 -d",
+      { encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] }
+    ).trim();
+
+    if (clientId && clientSecret) {
+      return { clientId, clientSecret };
+    }
+  } catch {
+    // Fall through - CF Access may not be configured
+  }
+
+  return null;
+}
+
 function getAdminKey(): string {
   // 1. Check environment variable
   if (process.env.GHOST_ADMIN_KEY) {
@@ -99,9 +135,34 @@ function generateToken(key: string): string {
 // API Helpers
 // =============================================================================
 
+// Cache Cloudflare Access credentials for the session
+let cfAccessCreds: CloudflareAccessCreds | null | undefined;
+
+function getHeaders(token: string, contentType?: string): Record<string, string> {
+  const headers: Record<string, string> = {
+    Authorization: `Ghost ${token}`,
+  };
+
+  if (contentType) {
+    headers["Content-Type"] = contentType;
+  }
+
+  // Add Cloudflare Access headers if available (for bypassing Zero Trust)
+  if (cfAccessCreds === undefined) {
+    cfAccessCreds = getCloudflareAccessCreds();
+  }
+
+  if (cfAccessCreds) {
+    headers["CF-Access-Client-Id"] = cfAccessCreds.clientId;
+    headers["CF-Access-Client-Secret"] = cfAccessCreds.clientSecret;
+  }
+
+  return headers;
+}
+
 async function apiGet(path: string, token: string): Promise<any> {
   const response = await fetch(`${GHOST_URL}/ghost/api/admin/${path}`, {
-    headers: { Authorization: `Ghost ${token}` },
+    headers: getHeaders(token),
   });
 
   if (!response.ok) {
@@ -115,10 +176,7 @@ async function apiGet(path: string, token: string): Promise<any> {
 async function apiPost(path: string, token: string, body: any): Promise<any> {
   const response = await fetch(`${GHOST_URL}/ghost/api/admin/${path}`, {
     method: "POST",
-    headers: {
-      Authorization: `Ghost ${token}`,
-      "Content-Type": "application/json",
-    },
+    headers: getHeaders(token, "application/json"),
     body: JSON.stringify(body),
   });
 
@@ -133,10 +191,7 @@ async function apiPost(path: string, token: string, body: any): Promise<any> {
 async function apiPut(path: string, token: string, body: any): Promise<any> {
   const response = await fetch(`${GHOST_URL}/ghost/api/admin/${path}`, {
     method: "PUT",
-    headers: {
-      Authorization: `Ghost ${token}`,
-      "Content-Type": "application/json",
-    },
+    headers: getHeaders(token, "application/json"),
     body: JSON.stringify(body),
   });
 
@@ -151,7 +206,7 @@ async function apiPut(path: string, token: string, body: any): Promise<any> {
 async function apiDelete(path: string, token: string): Promise<boolean> {
   const response = await fetch(`${GHOST_URL}/ghost/api/admin/${path}`, {
     method: "DELETE",
-    headers: { Authorization: `Ghost ${token}` },
+    headers: getHeaders(token),
   });
 
   if (response.status === 204) {
@@ -338,9 +393,14 @@ async function uploadImage(imagePath: string, targetName?: string): Promise<stri
   formData.append("purpose", "image");
   formData.append("ref", filename);
 
+  // Get headers with Cloudflare Access support (but don't set Content-Type for FormData)
+  const headers = getHeaders(token);
+  // Remove Content-Type if set - let browser set it with boundary for FormData
+  delete (headers as any)["Content-Type"];
+
   const response = await fetch(url, {
     method: "POST",
-    headers: { Authorization: `Ghost ${token}` },
+    headers,
     body: formData,
   });
 

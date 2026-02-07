@@ -1,0 +1,150 @@
+# TinkerBelle Configuration for pai-state-service
+# ===================================================
+#
+# This configuration manages deployments for pai-state-service
+# using the tb-bg CLI from TinkerBelle.
+#
+# Usage (from this directory):
+#   tb-bg status                    # View current state
+#   tb-bg stage staging             # Deploy to staging
+#   tb-bg promote pai-staging pai-production  # Promote to prod
+#   tb-bg cutover green             # Switch traffic to green
+#   tb-bg verify green              # Health check green slot
+#
+# The Arc Runner executes these commands as part of CI/CD.
+
+apiVersion: tinkerbelle.io/v1
+kind: BlueGreenConfig
+
+metadata:
+  name: pai-state-service
+  description: PAI State Service - REST API for Claude Code state sync
+
+# =============================================================================
+# Deployment Slots
+# =============================================================================
+slots:
+  blue:
+    compute:
+      provider: kubernetes
+      namespace: pai-production-blue
+    services:
+      pai-state-service:
+        deployment: pai-state-service
+        port: 80
+        healthCheck:
+          path: /health
+          timeout: 5
+
+  green:
+    compute:
+      provider: kubernetes
+      namespace: pai-production-green
+    services:
+      pai-state-service:
+        deployment: pai-state-service
+        port: 80
+        healthCheck:
+          path: /health
+          timeout: 5
+
+# =============================================================================
+# Traffic Routing (Cloudflare Tunnel)
+# =============================================================================
+routing:
+  provider: cloudflare
+  tunnelId: "8137c8d7-0981-4f07-8a1e-ff68fda9c4c1"
+
+  hostnames:
+    # Production - switches between blue/green
+    - hostname: pai-state.escape-velocity-ventures.org
+      service: pai-state-service
+
+    # Preview - always points to inactive slot for testing
+    - hostname: pai-state-preview.escape-velocity-ventures.org
+      service: pai-state-service
+      slot: preview
+
+# =============================================================================
+# Health Checks
+# =============================================================================
+healthChecks:
+  - name: pai-state-health
+    type: http
+    path: /health
+    expectedStatus: 200
+    timeout: 5
+
+  - name: pai-state-ready
+    type: http
+    path: /ready
+    expectedStatus: 200
+    timeout: 5
+
+# =============================================================================
+# Staging Enforcement
+# =============================================================================
+stagingEnforcement:
+  enabled: true
+
+  # Staging namespace (direct deploys allowed)
+  staging:
+    - namespace: pai-staging
+      healthEndpoint: /health
+      healthTimeout: 5
+
+  # Production namespaces (require staging validation)
+  production:
+    - namespace: pai-production-blue
+      requiresValidation: true
+      maxValidationAge: 86400    # 24 hours
+
+    - namespace: pai-production-green
+      requiresValidation: true
+      maxValidationAge: 86400
+
+  # Validation registry
+  registry:
+    path: .tb-validation/registry.json
+
+  # Production routing - auto-detect inactive slot
+  productionRouting:
+    aliases:
+      - pai-production
+      - production
+      - prod
+    blueSlot: pai-production-blue
+    greenSlot: pai-production-green
+    offerCutover: true
+
+# =============================================================================
+# Service Dependencies
+# =============================================================================
+serviceDependencies:
+  pai-state-service:
+    tier: 2  # Depends on Redis
+    dependsOn:
+      - name: pai-redis
+        tier: 1
+        type: redis
+        healthCheck:
+          type: tcp
+          port: 6379
+
+# =============================================================================
+# Options
+# =============================================================================
+options:
+  propagationWait: 5
+  autoRollback: true
+  healthCheckRetries: 3
+  healthCheckInterval: 2
+
+# =============================================================================
+# Secrets (Kubernetes)
+# =============================================================================
+secrets:
+  provider: kubernetes
+  namespace: infrastructure
+  items:
+    cloudflareToken: "cloudflare-api-token"

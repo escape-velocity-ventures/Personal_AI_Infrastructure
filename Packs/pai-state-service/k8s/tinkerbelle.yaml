@@ -2,14 +2,14 @@
 # ===================================================
 #
 # This configuration manages deployments for pai-state-service
-# using the tb-bg CLI from TinkerBelle.
+# using the tb-ops CLI from TinkerBelle.
 #
 # Usage (from this directory):
-#   tb-bg status                    # View current state
-#   tb-bg stage staging             # Deploy to staging
-#   tb-bg promote pai-staging pai-production  # Promote to prod
-#   tb-bg cutover green             # Switch traffic to green
-#   tb-bg verify green              # Health check green slot
+#   tb-ops status                    # View current state
+#   tb-ops stage staging             # Deploy to staging
+#   tb-ops promote pai-staging pai-production  # Promote to prod
+#   tb-ops cutover green             # Switch traffic to green
+#   tb-ops verify green              # Health check green slot
 #
 # The Arc Runner executes these commands as part of CI/CD.
 

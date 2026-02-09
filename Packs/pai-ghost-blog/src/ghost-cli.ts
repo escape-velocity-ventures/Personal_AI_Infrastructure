@@ -5,7 +5,7 @@
  * Usage:
  *   ghost-cli list [--drafts|--published|--all]
  *   ghost-cli get <id|slug>
- *   ghost-cli create --file <markdown> [--title "Title"] [--publish]
+ *   ghost-cli create --file <markdown> [--title "Title"] [--publish] [--tags tag1,tag2]
  *   ghost-cli update <id|slug> --file <markdown>
  *   ghost-cli delete <id|slug> [--force]
  *   ghost-cli publish <id|slug>
@@ -13,6 +13,8 @@
  *   ghost-cli upload <image-path> [--name <filename>]
  *   ghost-cli set-image <id|slug> --url <image-url>
  *   ghost-cli set-image <id|slug> --file <image-path>
+ *   ghost-cli pull <id|slug> [--file <output.md>]
+ *   ghost-cli search-tag <tag-slug>
  *
  * Environment:
  *   GHOST_URL - Ghost instance URL
@@ -22,10 +24,11 @@
  *   op://Escape Velocity Ventures Inc./Ghost Admin Key/password
  */
 
-import { readFileSync, existsSync } from "fs";
+import { readFileSync, writeFileSync, existsSync } from "fs";
 import { basename } from "path";
 import { createHmac } from "crypto";
 import { marked } from "marked";
+import TurndownService from "turndown";
 import { execSync } from "child_process";
 
 // =============================================================================
@@ -225,6 +228,12 @@ async function apiDelete(path: string, token: string): Promise<boolean> {
 // Post Operations
 // =============================================================================
 
+interface GhostTag {
+  id: string;
+  name: string;
+  slug: string;
+}
+
 interface Post {
   id: string;
   title: string;
@@ -235,6 +244,7 @@ interface Post {
   url: string;
   html?: string;
   feature_image?: string;
+  tags?: GhostTag[];
 }
 
 async function listPosts(
@@ -273,18 +283,22 @@ async function getPost(idOrSlug: string): Promise<Post> {
 async function createPost(
   title: string,
   html: string,
-  publish: boolean
+  publish: boolean,
+  tags?: string[]
 ): Promise<Post> {
   const token = generateToken(getAdminKey());
 
+  const postData: any = {
+    title,
+    html,
+    status: publish ? "published" : "draft",
+  };
+  if (tags?.length) {
+    postData.tags = tags.map(name => ({ name }));
+  }
+
   const result = await apiPost("posts/?source=html", token, {
-    posts: [
-      {
-        title,
-        html,
-        status: publish ? "published" : "draft",
-      },
-    ],
+    posts: [postData],
   });
 
   return result.posts[0];
@@ -362,6 +376,70 @@ async function setFeatureImage(idOrSlug: string, imageUrl: string): Promise<Post
   });
 
   return result.posts[0];
+}
+
+async function searchPostsByTag(tagSlug: string): Promise<Post[]> {
+  const token = generateToken(getAdminKey());
+  const query = `posts/?filter=tag:${encodeURIComponent(tagSlug)}&include=tags&formats=html&limit=all`;
+  const result = await apiGet(query, token);
+  return result.posts || [];
+}
+
+async function getPostWithTags(idOrSlug: string): Promise<Post> {
+  const token = generateToken(getAdminKey());
+
+  try {
+    const result = await apiGet(
+      `posts/slug/${idOrSlug}/?formats=html&include=tags`,
+      token
+    );
+    return result.posts[0];
+  } catch {
+    const result = await apiGet(`posts/${idOrSlug}/?formats=html&include=tags`, token);
+    return result.posts[0];
+  }
+}
+
+// =============================================================================
+// HTML to Markdown Conversion
+// =============================================================================
+
+function htmlToMarkdown(html: string, title?: string): string {
+  const turndown = new TurndownService({
+    headingStyle: "atx",
+    codeBlockStyle: "fenced",
+    bulletListMarker: "-",
+  });
+
+  // Preserve code block language hints
+  turndown.addRule("fencedCodeBlock", {
+    filter: (node) => {
+      return node.nodeName === "PRE" && !!node.querySelector("code");
+    },
+    replacement: (_content, node) => {
+      const codeEl = (node as HTMLElement).querySelector("code");
+      const code = codeEl?.textContent || "";
+      const lang = codeEl?.className?.replace("language-", "") || "";
+      return `\n\n\`\`\`${lang}\n${code}\n\`\`\`\n\n`;
+    },
+  });
+
+  let markdown = turndown.turndown(html);
+
+  // Prepend title as H1 if provided
+  if (title) {
+    markdown = `# ${title}\n\n${markdown}`;
+  }
+
+  // Clean up excessive blank lines
+  markdown = markdown.replace(/\n{3,}/g, "\n\n");
+
+  // Ensure trailing newline
+  if (!markdown.endsWith("\n")) {
+    markdown += "\n";
+  }
+
+  return markdown;
 }
 
 // =============================================================================
@@ -588,11 +666,8 @@ function formatPostRow(post: Post): string {
         ? "○"
         : "◐";
   const date = formatDate(post.published_at || post.updated_at);
-  // Show full ID and slug - both work for all commands
-  const slug =
-    post.slug.length > 40 ? post.slug.slice(0, 37) + "..." : post.slug;
 
-  return `${status}  ${post.id}  ${date.padEnd(12)}  ${slug}`;
+  return `${status}  ${post.id}  ${date.padEnd(12)}  ${post.slug}`;
 }
 
 // =============================================================================
@@ -647,9 +722,13 @@ async function cmdCreate(args: string[]): Promise<void> {
   const titleIdx = args.indexOf("--title");
   const publish = args.includes("--publish");
   const skipLint = args.includes("--no-lint");
+  const tagsIdx = args.indexOf("--tags");
+  const tags = tagsIdx !== -1 && args[tagsIdx + 1]
+    ? args[tagsIdx + 1].split(",").map(t => t.trim())
+    : undefined;
 
   if (fileIdx === -1 || !args[fileIdx + 1]) {
-    console.error("Usage: ghost-cli create --file <markdown> [--title] [--publish] [--no-lint]");
+    console.error("Usage: ghost-cli create --file <markdown> [--title] [--publish] [--no-lint] [--tags tag1,tag2]");
     process.exit(1);
   }
 
@@ -691,8 +770,11 @@ async function cmdCreate(args: string[]): Promise<void> {
 
   console.log(`Creating post: "${title}"`);
   console.log(`Status: ${publish ? "published" : "draft"}`);
+  if (tags?.length) {
+    console.log(`Tags: ${tags.join(", ")}`);
+  }
 
-  const post = await createPost(title, html, publish);
+  const post = await createPost(title, html, publish, tags);
 
   console.log(`\n✅ Post created successfully!`);
   console.log(`   ID:    ${post.id}`);
@@ -968,6 +1050,73 @@ async function cmdDiff(args: string[]): Promise<void> {
 }
 
 // =============================================================================
+// Pull Command - Fetch Ghost post and save as local markdown
+// =============================================================================
+
+async function cmdPull(args: string[]): Promise<void> {
+  const idOrSlug = args[0];
+  const fileIdx = args.indexOf("--file");
+  const filePath = fileIdx !== -1 ? args[fileIdx + 1] : null;
+
+  if (!idOrSlug) {
+    console.error("Usage: ghost-cli pull <id|slug> --file <output.md>");
+    console.error("       ghost-cli pull <id|slug>  (prints to stdout)");
+    process.exit(1);
+  }
+
+  const post = await getPostWithTags(idOrSlug);
+
+  if (!post.html) {
+    console.error(`\n❌ Post "${post.title}" has no HTML content.\n`);
+    process.exit(1);
+  }
+
+  const markdown = htmlToMarkdown(post.html, post.title);
+
+  // Show post info
+  const tags = post.tags?.map(t => t.name).join(", ") || "none";
+
+  if (filePath) {
+    writeFileSync(filePath, markdown);
+    console.log(`\n✅ Pulled: "${post.title}"`);
+    console.log(`   Slug:   ${post.slug}`);
+    console.log(`   Status: ${post.status}`);
+    console.log(`   Tags:   ${tags}`);
+    console.log(`   Saved:  ${filePath}`);
+    console.log(`   Size:   ${markdown.length} chars, ${markdown.split("\n").length} lines\n`);
+  } else {
+    // Print to stdout for piping
+    process.stdout.write(markdown);
+  }
+}
+
+async function cmdSearchByTag(args: string[]): Promise<Post[]> {
+  const tag = args[0];
+  if (!tag) {
+    console.error("Usage: ghost-cli search-tag <tag-slug>");
+    process.exit(1);
+  }
+
+  const posts = await searchPostsByTag(tag);
+
+  if (posts.length === 0) {
+    console.log(`\nNo posts found with tag: ${tag}\n`);
+    return [];
+  }
+
+  console.log(`\n  Posts tagged "${tag}" (${posts.length}):\n`);
+  for (const post of posts) {
+    const status = post.status === "published" ? "✓" : "○";
+    const postTags = post.tags?.map(t => t.name).join(", ") || "";
+    console.log(`  ${status}  ${post.slug}`);
+    console.log(`     "${post.title}"`);
+    console.log(`     Tags: ${postTags}\n`);
+  }
+
+  return posts;
+}
+
+// =============================================================================
 // Audit Command - Check posts for image issues
 // =============================================================================
 
@@ -1065,11 +1214,14 @@ async function cmdSync(args: string[]): Promise<void> {
   const { readdirSync } = await import("fs");
   const { join, basename } = await import("path");
 
-  // Get directory from args or use default
+  // Get directory from args, BLOG_CONTENT_DIR env, or default
   const dirIdx = args.indexOf("--dir");
+  const defaultBlogDir = process.env.BLOG_CONTENT_DIR
+    ? join(process.env.BLOG_CONTENT_DIR, "blog")
+    : join(process.env.HOME || "", ".claude/MEMORY/WORK/blog");
   const blogDir = dirIdx !== -1 && args[dirIdx + 1]
     ? args[dirIdx + 1]
-    : join(process.env.HOME || "", ".claude/MEMORY/WORK/blog");
+    : defaultBlogDir;
 
   if (!existsSync(blogDir)) {
     console.error(`Error: Directory not found: ${blogDir}`);
@@ -1162,11 +1314,14 @@ async function cmdBulkUpdate(args: string[]): Promise<void> {
   const { readdirSync } = await import("fs");
   const { join } = await import("path");
 
-  // Get directory from args or use default
+  // Get directory from args, BLOG_CONTENT_DIR env, or default
   const dirIdx = args.indexOf("--dir");
+  const defaultBlogDir = process.env.BLOG_CONTENT_DIR
+    ? join(process.env.BLOG_CONTENT_DIR, "blog")
+    : join(process.env.HOME || "", ".claude/MEMORY/WORK/blog");
   const blogDir = dirIdx !== -1 && args[dirIdx + 1]
     ? args[dirIdx + 1]
-    : join(process.env.HOME || "", ".claude/MEMORY/WORK/blog");
+    : defaultBlogDir;
 
   const dryRun = args.includes("--dry-run");
 
@@ -1262,7 +1417,7 @@ Usage:
 Commands:
   list [--drafts|--published]     List posts (default: all)
   get <id|slug>                   Get post details
-  create --file <md> [--publish]  Create post from markdown
+  create --file <md> [--publish] [--tags t1,t2]  Create post from markdown
   update <id|slug> --file <md>    Update post content
   delete <id|slug> [--force]      Delete a post
   publish <id|slug>               Publish a draft
@@ -1276,6 +1431,8 @@ Commands:
   audit [--drafts|--published]    Check posts for image issues
   sync [--dir <path>]             Compare local files against Ghost
   bulk-update [--dir <path>] [--dry-run]  Update all matching posts
+  pull <id|slug> [--file <path>]  Pull Ghost post as local markdown
+  search-tag <tag-slug>           Find posts by Ghost tag
 
 Examples:
   ghost-cli list --drafts
@@ -1352,6 +1509,12 @@ async function main(): Promise<void> {
         break;
       case "bulk-update":
         await cmdBulkUpdate(commandArgs);
+        break;
+      case "pull":
+        await cmdPull(commandArgs);
+        break;
+      case "search-tag":
+        await cmdSearchByTag(commandArgs);
         break;
       default:
         console.error(`Unknown command: ${command}`);

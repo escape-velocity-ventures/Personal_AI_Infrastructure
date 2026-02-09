@@ -25,14 +25,136 @@ import { join, basename } from "path";
 // Paths
 // =============================================================================
 
+// BLOG_CONTENT_DIR env var allows sharing blog content via separate repo
+// Falls back to ~/.claude/MEMORY/WORK for backward compatibility
+const CONTENT_DIR = process.env.BLOG_CONTENT_DIR
+  || join(homedir(), ".claude", "MEMORY", "WORK");
 const MEMORY_DIR = join(homedir(), ".claude", "MEMORY");
 const WORK_DIR = join(MEMORY_DIR, "WORK");
-const PM_INDEX = join(WORK_DIR, "postmortems", "POSTMORTEM-INDEX.md");
-const BLOG_INDEX = join(WORK_DIR, "blog", "BLOG-INDEX.md");
+const PM_INDEX = join(CONTENT_DIR, "postmortems", "POSTMORTEM-INDEX.md");
+const PM_DIR = join(CONTENT_DIR, "postmortems");
+const BLOG_INDEX = join(CONTENT_DIR, "blog", "BLOG-INDEX.md");
+const BLOG_DIR = join(CONTENT_DIR, "blog");
+const CAPTURES_DIR = join(WORK_DIR, "captures");
 const GHOST_CLI = join(
   homedir(),
   "EscapeVelocity/PersonalAI/PAI/Packs/pai-ghost-blog/src/ghost-cli.ts"
 );
+
+// =============================================================================
+// Capture Types
+// =============================================================================
+
+interface CaptureExchange {
+  role: "user" | "assistant";
+  content: string;
+}
+
+interface Capture {
+  id: string;
+  timestamp: string;
+  source: "USER" | "AI-SUGGESTED";
+  status: "confirmed" | "pending";
+  exchange: CaptureExchange[];
+  note?: string;
+  context?: string;
+}
+
+interface CaptureSession {
+  session: string;
+  created: string;
+  context?: string;
+  captures: Capture[];
+}
+
+// =============================================================================
+// Timeline Verification Types
+// =============================================================================
+
+interface TemporalClaim {
+  text: string;
+  pattern: string;
+  line: number;
+  context: string;  // surrounding text
+}
+
+interface TimelineFact {
+  source: string;  // "git", "deployment", "work-session"
+  description: string;
+  timestamp: string;
+  details?: string;
+}
+
+interface VerificationResult {
+  claims: TemporalClaim[];
+  facts: TimelineFact[];
+  warnings: string[];
+}
+
+// Patterns that suggest temporal claims worth verifying
+const TEMPORAL_PATTERNS: Array<{ pattern: RegExp; category: string }> = [
+  // Vague durations
+  { pattern: /for (weeks|months|years|ages|a long time)/gi, category: "vague-duration" },
+  { pattern: /(weeks|months|years) ago/gi, category: "vague-past" },
+  { pattern: /been (dealing|struggling|working|fighting) with .* for/gi, category: "duration-claim" },
+
+  // Relative timing
+  { pattern: /could have (caught|detected|found|prevented) .* (earlier|sooner|months ago)/gi, category: "missed-opportunity" },
+  { pattern: /had been (happening|occurring|broken|failing) for/gi, category: "duration-claim" },
+  { pattern: /since (we started|the beginning|day one)/gi, category: "origin-claim" },
+
+  // Quantified claims
+  { pattern: /dozens of (deployments|commits|changes|fixes)/gi, category: "quantity-claim" },
+  { pattern: /multiple (incidents|failures|outages)/gi, category: "quantity-claim" },
+  { pattern: /countless (hours|times|attempts)/gi, category: "quantity-claim" },
+
+  // Emotional/narrative inflation
+  { pattern: /(finally|at last) (fixed|solved|resolved)/gi, category: "resolution-narrative" },
+  { pattern: /after (much|considerable|extensive) (effort|work|debugging)/gi, category: "effort-narrative" },
+];
+
+// =============================================================================
+// Multi-Audience Adaptation
+// =============================================================================
+
+const AUDIENCES = {
+  technical: { key: "technical", label: "Builders", fabricPattern: null as string | null, ghostTag: "audience-technical", suffix: "" },
+  aspiring:  { key: "aspiring",  label: "Aspiring Builders", fabricPattern: "adapt_for_aspiring", ghostTag: "audience-aspiring", suffix: ".aspiring" },
+  general:   { key: "general",   label: "General", fabricPattern: "adapt_for_general", ghostTag: "audience-general", suffix: ".general" },
+} as const;
+
+type AudienceKey = keyof typeof AUDIENCES;
+
+function getVariantPath(sourcePath: string, audience: AudienceKey): string {
+  if (audience === "technical") return sourcePath;
+  const suffix = AUDIENCES[audience].suffix;
+  // blog-post-29-foo.md → blog-post-29-foo.aspiring.md
+  return sourcePath.replace(/\.md$/, `${suffix}.md`);
+}
+
+function getSourceFromVariant(variantPath: string): string {
+  // blog-post-29-foo.aspiring.md → blog-post-29-foo.md
+  return variantPath.replace(/\.(aspiring|general)\.md$/, ".md");
+}
+
+function getSeriesTag(sourcePath: string): string {
+  // Extract slug from filename for series linking
+  // blog-post-29-five-bugs-one-root-cause.md → series-five-bugs-one-root-cause
+  const base = basename(sourcePath, ".md");
+  const slug = base.replace(/^blog-post-\d+-/, "").replace(/^postmortem-\d+-/, "");
+  return `series-${slug}`;
+}
+
+function getExistingVariants(sourcePath: string): { audience: AudienceKey; path: string; exists: boolean }[] {
+  return (Object.keys(AUDIENCES) as AudienceKey[]).map(key => {
+    const variantPath = getVariantPath(sourcePath, key);
+    return {
+      audience: key,
+      path: variantPath,
+      exists: existsSync(variantPath),
+    };
+  });
+}
 
 const STATE_SERVICE_URL = process.env.PAI_STATE_SERVICE_URL || "https://pai-state.escape-velocity-ventures.org";
 
@@ -183,8 +305,7 @@ async function syncPmIndexFromCloud(): Promise<boolean> {
     }
 
     // Ensure directory exists
-    const pmDir = join(WORK_DIR, "postmortems");
-    mkdirSync(pmDir, { recursive: true });
+    mkdirSync(PM_DIR, { recursive: true });
 
     // Write cloud content to local
     writeFileSync(PM_INDEX, data.content, "utf-8");
@@ -264,6 +385,7 @@ interface BlogEntry {
   source: string;
   type: string; // "Post" | "PM-001" etc
   status?: string; // draft | published
+  variants?: string; // "T" | "T A" | "T A G" etc
 }
 
 interface RatingResult {
@@ -330,7 +452,7 @@ function parseBlogIndex(): { published: BlogEntry[]; drafts: BlogEntry[] } {
     if (line.includes("## Drafts")) section = "drafts";
 
     const match = line.match(
-      /\|\s*(\d+)\s*\|\s*([^|]+)\s*\|\s*([^|]+)\s*\|\s*`?([^`|]+)`?\s*\|(?:\s*([^|]*)\s*\|)?/
+      /\|\s*(\d+)\s*\|\s*([^|]+)\s*\|\s*([^|]+)\s*\|\s*`?([^`|]+)`?\s*\|(?:\s*([^|]*)\s*\|)?(?:\s*([^|]*)\s*\|)?/
     );
     if (match && section) {
       const entry: BlogEntry = {
@@ -339,6 +461,7 @@ function parseBlogIndex(): { published: BlogEntry[]; drafts: BlogEntry[] } {
         title: match[3].trim(),
         source: match[4].trim(),
         type: match[5]?.trim() || "Post",
+        variants: match[6]?.trim() || undefined,
       };
 
       if (section === "published") {
@@ -672,7 +795,8 @@ function addToBlogIndex(entry: BlogEntry): void {
     ? readFileSync(BLOG_INDEX, "utf-8")
     : getDefaultBlogIndex();
 
-  const newRow = `| ${String(entry.blogNumber).padStart(2, "0")} | ${entry.date} | ${entry.title} | \`${entry.source}\` | ${entry.type} |`;
+  const variants = entry.variants || "T";
+  const newRow = `| ${String(entry.blogNumber).padStart(2, "0")} | ${entry.date} | ${entry.title} | \`${entry.source}\` | ${entry.type} | ${variants} |`;
 
   // Add to drafts section
   const draftsMatch = content.match(
@@ -792,9 +916,8 @@ async function pmCreate(title: string, severity: string): Promise<void> {
     .replace(/[^a-z0-9]+/g, "-")
     .slice(0, 40);
   const filename = `postmortem-${pmNumber.replace("PM-", "").padStart(3, "0")}-${slug}.md`;
-  const pmDir = join(WORK_DIR, "postmortems");
-  mkdirSync(pmDir, { recursive: true });
-  const filepath = join(pmDir, filename);
+  mkdirSync(PM_DIR, { recursive: true });
+  const filepath = join(PM_DIR, filename);
 
   // Check for collision - file should not exist
   if (existsSync(filepath)) {
@@ -859,7 +982,7 @@ async function pmList(): Promise<void> {
   console.log(`\n  Total: ${entries.length} postmortems\n`);
 }
 
-async function pmPromote(pmNumber: string): Promise<void> {
+async function pmPromote(pmNumber: string, skipVerify: boolean = false): Promise<void> {
   const entries = parsePostmortemIndex();
   const entry = entries.find(
     (e) => e.pmNumber.toUpperCase() === pmNumber.toUpperCase()
@@ -870,17 +993,48 @@ async function pmPromote(pmNumber: string): Promise<void> {
     process.exit(1);
   }
 
-  const filepath = join(MEMORY_DIR, entry.file);
+  // entry.file is just the filename for pmCreate-generated entries,
+  // or a relative path like "WORK/..." for older ISC-only entries
+  const filepath = entry.file.startsWith("WORK/")
+    ? join(MEMORY_DIR, entry.file)
+    : join(PM_DIR, entry.file);
   if (!existsSync(filepath)) {
     console.error(`\n❌ File not found: ${filepath}\n`);
     process.exit(1);
+  }
+
+  // Timeline verification step
+  if (!skipVerify) {
+    const content = readFileSync(filepath, "utf-8");
+    const claims = extractTemporalClaims(content);
+
+    if (claims.length > 0) {
+      console.log(`\n⚠️  Timeline Verification Warning\n`);
+      console.log(`Found ${claims.length} temporal claim(s) that may need review:\n`);
+
+      for (const claim of claims) {
+        console.log(`   Line ${claim.line}: "${claim.text}"`);
+        console.log(`   Category: ${claim.pattern}\n`);
+      }
+
+      console.log(`${"─".repeat(50)}`);
+      console.log(`\n💡 Consider verifying these claims against actual data:`);
+      console.log(`   content-cli blog verify "${filepath}"\n`);
+      console.log(`To proceed anyway, use: content-cli pm promote ${pmNumber} --skip-verify\n`);
+
+      // Pause for 5 seconds to let user see the warning
+      console.log(`Proceeding in 5 seconds... (Ctrl+C to cancel)\n`);
+      await new Promise((resolve) => setTimeout(resolve, 5000));
+    } else {
+      console.log(`\n✅ Timeline check passed - no vague temporal claims detected.\n`);
+    }
   }
 
   // Get next blog number
   const blogNumber = getNextBlogNumber();
 
   // Create Ghost draft
-  console.log(`\nCreating Ghost draft for ${pmNumber}...`);
+  console.log(`Creating Ghost draft for ${pmNumber}...`);
   try {
     execSync(`bun run "${GHOST_CLI}" create --file "${filepath}"`, {
       stdio: "inherit",
@@ -1290,6 +1444,1154 @@ async function blogImprove(filepath: string, options: ImproveOptions = {}): Prom
 }
 
 // =============================================================================
+// Blog Adapt - Multi-audience variant generation
+// =============================================================================
+
+interface AdaptOptions {
+  audience?: AudienceKey;
+  all?: boolean;
+  force?: boolean;
+  dryRun?: boolean;
+}
+
+async function blogAdapt(filepath: string, options: AdaptOptions = {}): Promise<void> {
+  // Resolve file path (same logic as blogImprove)
+  let resolvedPath = filepath;
+  if (!existsSync(resolvedPath)) {
+    const blogPath = join(BLOG_DIR, filepath);
+    const pmPath = join(PM_DIR, filepath);
+
+    if (existsSync(blogPath)) {
+      resolvedPath = blogPath;
+    } else if (existsSync(pmPath)) {
+      resolvedPath = pmPath;
+    } else if (existsSync(filepath + ".md")) {
+      resolvedPath = filepath + ".md";
+    } else {
+      console.error(`\n❌ File not found: ${filepath}`);
+      console.error(`   Tried: ${filepath}, ${join(BLOG_DIR, filepath)}, ${join(PM_DIR, filepath)}\n`);
+      process.exit(1);
+    }
+  }
+
+  // Ensure we're working with the source (technical) file, not a variant
+  const sourcePath = getSourceFromVariant(resolvedPath);
+  if (sourcePath !== resolvedPath) {
+    console.error(`\n❌ "${basename(resolvedPath)}" is a variant file. Use the source file instead:`);
+    console.error(`   ${basename(sourcePath)}\n`);
+    process.exit(1);
+  }
+
+  const sourceContent = readFileSync(resolvedPath, "utf-8");
+
+  // Determine which audiences to generate
+  let targetAudiences: AudienceKey[];
+  if (options.all) {
+    targetAudiences = ["aspiring", "general"];
+  } else if (options.audience && options.audience !== "technical") {
+    targetAudiences = [options.audience];
+  } else {
+    console.error("\n❌ Specify an audience or use --all:");
+    console.error("   content-cli blog adapt <file> --audience aspiring");
+    console.error("   content-cli blog adapt <file> --audience general");
+    console.error("   content-cli blog adapt <file> --all\n");
+    process.exit(1);
+  }
+
+  console.log(`\n📝 Adapting: ${basename(resolvedPath)}`);
+  console.log(`   Source audience: Builders (technical)`);
+  console.log(`   Target audience(s): ${targetAudiences.map(a => AUDIENCES[a].label).join(", ")}\n`);
+
+  for (const audienceKey of targetAudiences) {
+    const audience = AUDIENCES[audienceKey];
+    const variantPath = getVariantPath(resolvedPath, audienceKey);
+
+    // Check if variant already exists
+    if (existsSync(variantPath) && !options.force) {
+      console.log(`   ⏭️  ${audience.label}: ${basename(variantPath)} already exists (use --force to overwrite)`);
+      continue;
+    }
+
+    console.log(`   🔄 Generating ${audience.label} variant...`);
+
+    // Run fabric pattern
+    let adaptedContent: string;
+    try {
+      adaptedContent = execSync(
+        `cat "${resolvedPath}" | fabric-ai -p ${audience.fabricPattern}`,
+        { encoding: "utf-8", maxBuffer: 10 * 1024 * 1024, shell: "/bin/bash" }
+      );
+    } catch (error) {
+      console.error(`   ❌ Fabric failed for ${audience.label}: ${(error as Error).message}`);
+      continue;
+    }
+
+    // Sanitize output (same as blogImprove)
+    const { sanitized, changes } = sanitizeContent(adaptedContent);
+    if (changes.length > 0) {
+      console.log(`   🧹 Stripped: ${changes.join(", ")}`);
+    }
+
+    // Show diff preview
+    const origLines = sourceContent.split("\n").length;
+    const newLines = sanitized.split("\n").length;
+    const ratio = Math.round((newLines / origLines) * 100);
+    console.log(`   📊 ${origLines} lines → ${newLines} lines (${ratio}% of original)`);
+
+    if (options.dryRun) {
+      console.log(`   🔵 DRY RUN - would save to: ${basename(variantPath)}`);
+      // Show first 10 lines as preview
+      const preview = sanitized.split("\n").slice(0, 10).join("\n");
+      console.log(`\n   Preview:\n${preview.split("\n").map(l => "   │ " + l).join("\n")}\n`);
+      continue;
+    }
+
+    // Save variant
+    writeFileSync(variantPath, sanitized);
+    console.log(`   ✅ Saved: ${basename(variantPath)}`);
+  }
+
+  if (!options.dryRun) {
+    console.log(`\nNext steps:`);
+    console.log(`  1. Review variants in ${basename(BLOG_DIR)}/`);
+    console.log(`  2. Publish all: content-cli blog publish-variants ${basename(resolvedPath)}\n`);
+  }
+}
+
+// =============================================================================
+// Blog Publish Variants - Create Ghost drafts for all audience variants
+// =============================================================================
+
+async function blogPublishVariants(filepath: string): Promise<void> {
+  // Resolve file path
+  let resolvedPath = filepath;
+  if (!existsSync(resolvedPath)) {
+    const blogPath = join(BLOG_DIR, filepath);
+    const pmPath = join(PM_DIR, filepath);
+
+    if (existsSync(blogPath)) {
+      resolvedPath = blogPath;
+    } else if (existsSync(pmPath)) {
+      resolvedPath = pmPath;
+    } else {
+      console.error(`\n❌ File not found: ${filepath}\n`);
+      process.exit(1);
+    }
+  }
+
+  // Ensure we're working with the source file
+  const sourcePath = getSourceFromVariant(resolvedPath);
+  if (sourcePath !== resolvedPath) {
+    resolvedPath = sourcePath;
+  }
+
+  const seriesTag = getSeriesTag(resolvedPath);
+  const variants = getExistingVariants(resolvedPath);
+  const existingVariants = variants.filter(v => v.exists);
+
+  if (existingVariants.length === 0) {
+    console.error(`\n❌ No variant files found for ${basename(resolvedPath)}`);
+    console.error(`   Run 'content-cli blog adapt ${basename(resolvedPath)} --all' first.\n`);
+    process.exit(1);
+  }
+
+  console.log(`\n📤 Publishing variants for: ${basename(resolvedPath)}`);
+  console.log(`   Series tag: ${seriesTag}`);
+  console.log(`   Found ${existingVariants.length} variant(s)\n`);
+
+  for (const variant of existingVariants) {
+    const audience = AUDIENCES[variant.audience];
+    const tags = [audience.ghostTag, seriesTag];
+
+    console.log(`   📝 ${audience.label}: ${basename(variant.path)}`);
+    console.log(`      Tags: ${tags.join(", ")}`);
+
+    try {
+      execSync(
+        `bun run "${GHOST_CLI}" create --file "${variant.path}" --tags "${tags.join(",")}"`,
+        { stdio: "inherit" }
+      );
+      console.log(`      ✅ Ghost draft created\n`);
+    } catch (error) {
+      console.error(`      ❌ Failed to create Ghost draft: ${(error as Error).message}\n`);
+    }
+  }
+
+  console.log(`✅ Done! ${existingVariants.length} Ghost draft(s) created with series tag "${seriesTag}"\n`);
+}
+
+// =============================================================================
+// Blog Adapt List - Show variant status for all indexed posts
+// =============================================================================
+
+function blogAdaptList(): void {
+  const { published, drafts } = parseBlogIndex();
+  const allPosts = [...published, ...drafts];
+
+  if (allPosts.length === 0) {
+    console.log("\nNo blog posts found.\n");
+    return;
+  }
+
+  console.log(`\n  Multi-Audience Variant Status`);
+  console.log(`  ${"═".repeat(65)}\n`);
+
+  for (const post of allPosts) {
+    // Resolve source file path
+    let sourcePath = "";
+    const blogPath = join(BLOG_DIR, post.source);
+    const pmPath = join(PM_DIR, post.source);
+
+    if (post.source.includes("Ghost draft") || post.source.includes("(Ghost draft only)")) {
+      console.log(`  Blog #${String(post.blogNumber).padStart(2, "0")}: ${post.title}`);
+      console.log(`    ☁️  Ghost-only (no local file for adaptation)\n`);
+      continue;
+    }
+
+    if (existsSync(blogPath)) {
+      sourcePath = blogPath;
+    } else if (existsSync(pmPath)) {
+      sourcePath = pmPath;
+    } else {
+      console.log(`  Blog #${String(post.blogNumber).padStart(2, "0")}: ${post.title}`);
+      console.log(`    ⚠️  Source file not found: ${post.source}\n`);
+      continue;
+    }
+
+    const variants = getExistingVariants(sourcePath);
+
+    console.log(`  Blog #${String(post.blogNumber).padStart(2, "0")}: ${post.title}`);
+    for (const v of variants) {
+      const audience = AUDIENCES[v.audience];
+      const icon = v.exists ? "+" : "-";
+      const label = v.audience === "technical" ? `${audience.label}:` : `${audience.label}:`;
+      const file = v.exists ? basename(v.path) : "(not adapted)";
+      const suffix = v.audience === "technical" ? " (source)" : "";
+      console.log(`    ${icon} ${label.padEnd(20)} ${file}${suffix}`);
+    }
+    console.log();
+  }
+}
+
+// =============================================================================
+// Blog Pull Variants - Fetch audience variants from Ghost back to local files
+// =============================================================================
+
+async function blogPullVariants(filepath: string): Promise<void> {
+  // Resolve file path
+  let resolvedPath = filepath;
+  if (!existsSync(resolvedPath)) {
+    const blogPath = join(BLOG_DIR, filepath);
+    const pmPath = join(PM_DIR, filepath);
+
+    if (existsSync(blogPath)) {
+      resolvedPath = blogPath;
+    } else if (existsSync(pmPath)) {
+      resolvedPath = pmPath;
+    } else {
+      console.error(`\n❌ File not found: ${filepath}\n`);
+      process.exit(1);
+    }
+  }
+
+  // Ensure we're working with the source file
+  const sourcePath = getSourceFromVariant(resolvedPath);
+  if (sourcePath !== resolvedPath) {
+    resolvedPath = sourcePath;
+  }
+
+  const seriesTag = getSeriesTag(resolvedPath);
+
+  console.log(`\n🔍 Searching Ghost for posts tagged: ${seriesTag}`);
+
+  // Use ghost-cli search-tag to find matching posts
+  let output: string;
+  try {
+    output = execSync(
+      `bun run "${GHOST_CLI}" search-tag "${seriesTag}" 2>&1`,
+      { encoding: "utf-8" }
+    );
+  } catch {
+    console.log(`   No posts found with tag "${seriesTag}" in Ghost.\n`);
+    return;
+  }
+
+  // For each audience, find the matching Ghost post and pull it
+  const audienceKeys: AudienceKey[] = ["technical", "aspiring", "general"];
+
+  for (const audienceKey of audienceKeys) {
+    const audience = AUDIENCES[audienceKey];
+    const variantPath = getVariantPath(resolvedPath, audienceKey);
+
+    // Search for the specific audience tag
+    console.log(`\n   🔄 Looking for ${audience.label} variant (tag: ${audience.ghostTag})...`);
+
+    let searchOutput: string;
+    try {
+      searchOutput = execSync(
+        `bun run "${GHOST_CLI}" search-tag "${audience.ghostTag}" 2>&1`,
+        { encoding: "utf-8" }
+      );
+    } catch {
+      console.log(`      No posts found with tag "${audience.ghostTag}"`);
+      continue;
+    }
+
+    // Parse the search output to find posts that also have the series tag
+    // We need to find the slug of the post that has BOTH the audience tag and series tag
+    // Use ghost-cli's output format: slug lines start with spaces and contain the slug
+    const slugMatches = searchOutput.match(/^\s+[✓○]\s+(\S+)/gm);
+    if (!slugMatches || slugMatches.length === 0) {
+      console.log(`      No posts with tag "${audience.ghostTag}"`);
+      continue;
+    }
+
+    // For each candidate, check if it also has the series tag
+    let pulled = false;
+    for (const slugLine of slugMatches) {
+      const slug = slugLine.trim().replace(/^[✓○]\s+/, "");
+
+      // Pull the post with tags to verify it has our series tag
+      try {
+        const pullOutput = execSync(
+          `bun run "${GHOST_CLI}" pull "${slug}" --file "${variantPath}" 2>&1`,
+          { encoding: "utf-8" }
+        );
+
+        // Check if this post has our series tag (it's in the pull output)
+        if (pullOutput.includes(seriesTag) || audienceKey === "technical") {
+          console.log(`      ✅ Pulled: ${basename(variantPath)}`);
+          pulled = true;
+          break;
+        } else {
+          // Wrong post - has the audience tag but not our series tag
+          // Clean up the file we just wrote
+          if (existsSync(variantPath) && audienceKey !== "technical") {
+            const { unlinkSync } = await import("fs");
+            unlinkSync(variantPath);
+          }
+        }
+      } catch (error) {
+        console.log(`      ❌ Failed to pull ${slug}: ${(error as Error).message}`);
+      }
+    }
+
+    if (!pulled) {
+      console.log(`      No matching post found for ${audience.label}`);
+    }
+  }
+
+  console.log(`\n✅ Pull complete. Check files in ${basename(BLOG_DIR)}/\n`);
+}
+
+// =============================================================================
+// Blog Pull Missing - Backfill Ghost-only posts with no local files
+// =============================================================================
+
+async function blogPullMissing(): Promise<void> {
+  const { published, drafts } = parseBlogIndex();
+  const allPosts = [...published, ...drafts];
+
+  // Find entries that reference Ghost-only content
+  const ghostOnly = allPosts.filter(p =>
+    p.source.includes("Ghost draft") ||
+    p.source.includes("(Ghost draft only)")
+  );
+
+  if (ghostOnly.length === 0) {
+    console.log("\n✅ All blog entries have local files. Nothing to pull.\n");
+    return;
+  }
+
+  console.log(`\n📥 Found ${ghostOnly.length} Ghost-only post(s) to pull.`);
+  console.log(`   Fetching full Ghost post list for title matching...\n`);
+
+  // Fetch all Ghost posts with full slugs and titles via ghost-cli get-all (JSON)
+  // We shell out to ghost-cli but need full data. Use ghost-cli's list --json or
+  // fetch directly. Simplest: use ghost-cli get for each candidate by trying the slug.
+  // Better: add a JSON list output. Best: fetch the API ourselves.
+  // Since ghost-cli's getAdminKey() handles auth, let's just call get for each,
+  // trying Ghost's likely slug for each title.
+
+  // Ghost slugifies titles as: lowercase, strip apostrophes, replace non-alphanum with -
+  const ghostSlugify = (title: string) =>
+    title.toLowerCase()
+      .replace(/[''`]/g, "")
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "");
+
+  // Fetch full Ghost slug list once for prefix matching fallback
+  let allGhostSlugs: string[] = [];
+  try {
+    const listOutput = execSync(
+      `bun run "${GHOST_CLI}" list 2>&1`,
+      { encoding: "utf-8" }
+    );
+    allGhostSlugs = listOutput.split("\n")
+      .filter(l => l.match(/^\s+[✓○◐]\s+/))
+      .map(l => {
+        const parts = l.trim().split(/\s{2,}/);
+        return parts[parts.length - 1] || "";
+      })
+      .filter(Boolean);
+  } catch {
+    // List failed; we'll rely on direct slug guessing
+  }
+
+  let pulled = 0;
+
+  for (const post of ghostOnly) {
+    console.log(`  Blog #${String(post.blogNumber).padStart(2, "0")}: ${post.title}`);
+
+    // Generate target filename
+    const titleSlug = ghostSlugify(post.title).slice(0, 60);
+    const filename = `blog-post-${post.blogNumber}-${titleSlug}.md`;
+    const filePath = join(BLOG_DIR, filename);
+
+    if (existsSync(filePath)) {
+      console.log(`     ⏭️  ${filename} already exists, skipping`);
+      continue;
+    }
+
+    // Strategy: try exact slug, then -2 suffix, then prefix match against full list
+    const exactSlug = ghostSlugify(post.title);
+    const candidateSlugs = [
+      exactSlug,
+      exactSlug + "-2",
+    ];
+
+    // Prefix match: find Ghost slugs that start with our title slug
+    const prefix = exactSlug.slice(0, 30);
+    const prefixMatches = allGhostSlugs.filter(s => s.startsWith(prefix));
+    for (const pm of prefixMatches) {
+      if (!candidateSlugs.includes(pm)) {
+        candidateSlugs.push(pm);
+      }
+    }
+
+    let success = false;
+    for (const slug of candidateSlugs) {
+      try {
+        execSync(
+          `bun run "${GHOST_CLI}" pull "${slug}" --file "${filePath}" 2>&1`,
+          { encoding: "utf-8" }
+        );
+        console.log(`     ✅ Pulled to: ${filename}`);
+        pulled++;
+        success = true;
+        break;
+      } catch {
+        // Slug didn't match, try next
+      }
+    }
+
+    if (!success) {
+      console.log(`     ⚠️  No matching Ghost post found`);
+      console.log(`         Tried: ${candidateSlugs.slice(0, 3).join(", ")}${candidateSlugs.length > 3 ? ` (+${candidateSlugs.length - 3} more)` : ""}`);
+      console.log(`         Try manually: ghost-cli pull <actual-slug> --file "${filePath}"`);
+    }
+  }
+
+  console.log(`\n📊 Pulled ${pulled}/${ghostOnly.length} posts.`);
+  if (pulled > 0) {
+    console.log(`   Update BLOG-INDEX.md source column to reference the new local files.`);
+  }
+  console.log();
+}
+
+// =============================================================================
+// Capture Functions
+// =============================================================================
+
+function ensureCapturesDir(): void {
+  if (!existsSync(CAPTURES_DIR)) {
+    mkdirSync(CAPTURES_DIR, { recursive: true });
+  }
+}
+
+function getSessionPath(sessionName: string): string {
+  return join(CAPTURES_DIR, `${sessionName}.json`);
+}
+
+function getCurrentSession(): CaptureSession | null {
+  ensureCapturesDir();
+  const currentSessionFile = join(CAPTURES_DIR, ".current-session");
+  if (!existsSync(currentSessionFile)) return null;
+
+  const sessionName = readFileSync(currentSessionFile, "utf-8").trim();
+  const sessionPath = getSessionPath(sessionName);
+
+  if (!existsSync(sessionPath)) return null;
+  return JSON.parse(readFileSync(sessionPath, "utf-8"));
+}
+
+function saveSession(session: CaptureSession): void {
+  ensureCapturesDir();
+  const sessionPath = getSessionPath(session.session);
+  writeFileSync(sessionPath, JSON.stringify(session, null, 2));
+
+  // Also write human-readable markdown
+  const mdPath = sessionPath.replace(".json", ".md");
+  writeFileSync(mdPath, sessionToMarkdown(session));
+}
+
+function setCurrentSession(sessionName: string): void {
+  ensureCapturesDir();
+  const currentSessionFile = join(CAPTURES_DIR, ".current-session");
+  writeFileSync(currentSessionFile, sessionName);
+}
+
+function sessionToMarkdown(session: CaptureSession): string {
+  let md = `# Captures: ${session.session}\n\n`;
+  md += `**Created:** ${session.created}\n`;
+  if (session.context) {
+    md += `**Context:** ${session.context}\n`;
+  }
+  md += `\n---\n\n`;
+
+  const confirmed = session.captures.filter(c => c.status === "confirmed");
+  const pending = session.captures.filter(c => c.status === "pending");
+
+  if (confirmed.length > 0) {
+    md += `## Confirmed Captures (${confirmed.length})\n\n`;
+    for (const cap of confirmed) {
+      md += formatCaptureMarkdown(cap);
+    }
+  }
+
+  if (pending.length > 0) {
+    md += `## Pending Review (${pending.length})\n\n`;
+    for (const cap of pending) {
+      md += formatCaptureMarkdown(cap);
+    }
+  }
+
+  if (session.captures.length === 0) {
+    md += "_No captures yet._\n";
+  }
+
+  return md;
+}
+
+function formatCaptureMarkdown(cap: Capture): string {
+  const time = new Date(cap.timestamp).toLocaleTimeString("en-US", {
+    hour: "2-digit",
+    minute: "2-digit"
+  });
+  const source = cap.source === "USER" ? "📌 USER-TAGGED" : "🤖 AI-SUGGESTED";
+
+  let md = `### [${time}] ${source}\n\n`;
+
+  for (const ex of cap.exchange) {
+    const prefix = ex.role === "user" ? "**User:**" : "**Assistant:**";
+    md += `> ${prefix} ${ex.content}\n\n`;
+  }
+
+  if (cap.note) {
+    md += `_Note: ${cap.note}_\n\n`;
+  }
+
+  md += `---\n\n`;
+  return md;
+}
+
+function getNextCaptureId(session: CaptureSession): string {
+  const num = session.captures.length + 1;
+  return `cap-${String(num).padStart(3, "0")}`;
+}
+
+// ---------------------------------------------------------------------------
+// capture start
+// ---------------------------------------------------------------------------
+
+async function captureStart(name: string, context?: string): Promise<void> {
+  ensureCapturesDir();
+
+  // Generate session name from date + provided name
+  const dateStr = new Date().toISOString().slice(0, 10);
+  const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/-+$/, "");
+  const sessionName = `${dateStr}-${slug}`;
+
+  const sessionPath = getSessionPath(sessionName);
+
+  if (existsSync(sessionPath)) {
+    console.log(`📁 Session already exists: ${sessionName}`);
+    console.log(`   Resuming existing session.\n`);
+    setCurrentSession(sessionName);
+    const session = JSON.parse(readFileSync(sessionPath, "utf-8"));
+    console.log(`   Captures so far: ${session.captures.length}`);
+    return;
+  }
+
+  const session: CaptureSession = {
+    session: sessionName,
+    created: new Date().toISOString(),
+    context: context,
+    captures: [],
+  };
+
+  saveSession(session);
+  setCurrentSession(sessionName);
+
+  console.log(`✅ Started capture session: ${sessionName}`);
+  if (context) {
+    console.log(`   Context: ${context}`);
+  }
+  console.log(`\n   Use 'content-cli capture save "note"' to capture exchanges.`);
+  console.log(`   Use 'content-cli capture list' to see captures.\n`);
+}
+
+// ---------------------------------------------------------------------------
+// capture save (user-tagged)
+// ---------------------------------------------------------------------------
+
+async function captureSave(
+  userContent: string,
+  assistantContent: string,
+  note?: string
+): Promise<void> {
+  const session = getCurrentSession();
+
+  if (!session) {
+    console.error("❌ No active capture session.");
+    console.error("   Start one with: content-cli capture start <name>\n");
+    process.exit(1);
+  }
+
+  const capture: Capture = {
+    id: getNextCaptureId(session),
+    timestamp: new Date().toISOString(),
+    source: "USER",
+    status: "confirmed",
+    exchange: [
+      { role: "user", content: userContent },
+      { role: "assistant", content: assistantContent },
+    ],
+    note: note,
+    context: session.context,
+  };
+
+  session.captures.push(capture);
+  saveSession(session);
+
+  console.log(`✅ Captured exchange as ${capture.id}`);
+  if (note) {
+    console.log(`   Note: ${note}`);
+  }
+  console.log(`   Total captures in session: ${session.captures.length}\n`);
+}
+
+// ---------------------------------------------------------------------------
+// capture suggest (AI-suggested)
+// ---------------------------------------------------------------------------
+
+async function captureSuggest(
+  userContent: string,
+  assistantContent: string,
+  pattern?: string
+): Promise<void> {
+  const session = getCurrentSession();
+
+  if (!session) {
+    console.error("❌ No active capture session.");
+    console.error("   Start one with: content-cli capture start <name>\n");
+    process.exit(1);
+  }
+
+  const capture: Capture = {
+    id: getNextCaptureId(session),
+    timestamp: new Date().toISOString(),
+    source: "AI-SUGGESTED",
+    status: "pending",
+    exchange: [
+      { role: "user", content: userContent },
+      { role: "assistant", content: assistantContent },
+    ],
+    note: pattern ? `Pattern: ${pattern}` : undefined,
+    context: session.context,
+  };
+
+  session.captures.push(capture);
+  saveSession(session);
+
+  console.log(`🤖 Suggested capture: ${capture.id} (pending review)`);
+  if (pattern) {
+    console.log(`   Pattern: ${pattern}`);
+  }
+  console.log(`   Use 'content-cli capture review' to approve/reject.\n`);
+}
+
+// ---------------------------------------------------------------------------
+// capture list
+// ---------------------------------------------------------------------------
+
+function captureList(): void {
+  const session = getCurrentSession();
+
+  if (!session) {
+    console.log("📭 No active capture session.\n");
+
+    // List available sessions
+    ensureCapturesDir();
+    const files = execSync(`ls -1 "${CAPTURES_DIR}"/*.json 2>/dev/null || true`, { encoding: "utf-8" })
+      .split("\n")
+      .filter(f => f.trim() && !f.includes(".current-session"));
+
+    if (files.length > 0) {
+      console.log("Available sessions:");
+      for (const f of files) {
+        const name = basename(f, ".json");
+        console.log(`  - ${name}`);
+      }
+      console.log(`\nResume with: content-cli capture start <session-name>\n`);
+    }
+    return;
+  }
+
+  console.log(`📋 Session: ${session.session}`);
+  console.log(`   Created: ${session.created}`);
+  if (session.context) {
+    console.log(`   Context: ${session.context}`);
+  }
+  console.log();
+
+  const confirmed = session.captures.filter(c => c.status === "confirmed");
+  const pending = session.captures.filter(c => c.status === "pending");
+
+  if (confirmed.length > 0) {
+    console.log(`✅ Confirmed (${confirmed.length}):`);
+    for (const cap of confirmed) {
+      const time = new Date(cap.timestamp).toLocaleTimeString("en-US", {
+        hour: "2-digit",
+        minute: "2-digit"
+      });
+      const preview = cap.exchange[0].content.substring(0, 50);
+      console.log(`   ${cap.id} [${time}] "${preview}..."`);
+      if (cap.note) console.log(`            Note: ${cap.note}`);
+    }
+    console.log();
+  }
+
+  if (pending.length > 0) {
+    console.log(`⏳ Pending review (${pending.length}):`);
+    for (const cap of pending) {
+      const time = new Date(cap.timestamp).toLocaleTimeString("en-US", {
+        hour: "2-digit",
+        minute: "2-digit"
+      });
+      const preview = cap.exchange[0].content.substring(0, 50);
+      console.log(`   ${cap.id} [${time}] "${preview}..."`);
+      if (cap.note) console.log(`            ${cap.note}`);
+    }
+    console.log();
+  }
+
+  if (session.captures.length === 0) {
+    console.log("   No captures yet.\n");
+  }
+
+  console.log(`   Total: ${session.captures.length} captures (${confirmed.length} confirmed, ${pending.length} pending)\n`);
+}
+
+// ---------------------------------------------------------------------------
+// capture review
+// ---------------------------------------------------------------------------
+
+async function captureReview(action?: string, captureId?: string): Promise<void> {
+  const session = getCurrentSession();
+
+  if (!session) {
+    console.error("❌ No active capture session.\n");
+    process.exit(1);
+  }
+
+  const pending = session.captures.filter(c => c.status === "pending");
+
+  if (pending.length === 0) {
+    console.log("✅ No pending captures to review.\n");
+    return;
+  }
+
+  if (!action) {
+    // Show pending captures for review
+    console.log(`⏳ Pending captures (${pending.length}):\n`);
+    for (const cap of pending) {
+      console.log(`${"─".repeat(60)}`);
+      console.log(`${cap.id} - ${new Date(cap.timestamp).toLocaleString()}`);
+      if (cap.note) console.log(`Pattern: ${cap.note}`);
+      console.log();
+      for (const ex of cap.exchange) {
+        const label = ex.role === "user" ? "User" : "Assistant";
+        console.log(`  ${label}: ${ex.content}`);
+      }
+      console.log();
+    }
+    console.log(`${"─".repeat(60)}`);
+    console.log(`\nActions:`);
+    console.log(`  content-cli capture review approve <id>   Confirm a capture`);
+    console.log(`  content-cli capture review reject <id>    Remove a capture`);
+    console.log(`  content-cli capture review approve-all    Confirm all pending`);
+    console.log(`  content-cli capture review reject-all     Remove all pending\n`);
+    return;
+  }
+
+  if (action === "approve-all") {
+    for (const cap of pending) {
+      cap.status = "confirmed";
+    }
+    saveSession(session);
+    console.log(`✅ Approved ${pending.length} captures.\n`);
+    return;
+  }
+
+  if (action === "reject-all") {
+    session.captures = session.captures.filter(c => c.status !== "pending");
+    saveSession(session);
+    console.log(`🗑️  Rejected ${pending.length} captures.\n`);
+    return;
+  }
+
+  if (!captureId) {
+    console.error("❌ Please specify a capture ID.\n");
+    process.exit(1);
+  }
+
+  const cap = session.captures.find(c => c.id === captureId);
+  if (!cap) {
+    console.error(`❌ Capture not found: ${captureId}\n`);
+    process.exit(1);
+  }
+
+  if (action === "approve") {
+    cap.status = "confirmed";
+    saveSession(session);
+    console.log(`✅ Approved: ${captureId}\n`);
+  } else if (action === "reject") {
+    session.captures = session.captures.filter(c => c.id !== captureId);
+    saveSession(session);
+    console.log(`🗑️  Rejected: ${captureId}\n`);
+  } else {
+    console.error(`❌ Unknown action: ${action}. Use 'approve' or 'reject'.\n`);
+    process.exit(1);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// capture export
+// ---------------------------------------------------------------------------
+
+function captureExport(format?: string): void {
+  const session = getCurrentSession();
+
+  if (!session) {
+    console.error("❌ No active capture session.\n");
+    process.exit(1);
+  }
+
+  const confirmed = session.captures.filter(c => c.status === "confirmed");
+
+  if (confirmed.length === 0) {
+    console.log("📭 No confirmed captures to export.\n");
+    return;
+  }
+
+  if (format === "json") {
+    console.log(JSON.stringify(confirmed, null, 2));
+    return;
+  }
+
+  // Default: markdown format for blog inclusion
+  console.log(`## Captured Moments\n`);
+  console.log(`_From session: ${session.session}_\n`);
+
+  for (const cap of confirmed) {
+    console.log(`### ${cap.note || "Exchange"}\n`);
+    for (const ex of cap.exchange) {
+      if (ex.role === "user") {
+        console.log(`> **Me:** "${ex.content}"\n`);
+      } else {
+        console.log(`> **Aurelia:** "${ex.content}"\n`);
+      }
+    }
+    console.log();
+  }
+}
+
+// ---------------------------------------------------------------------------
+// capture clear
+// ---------------------------------------------------------------------------
+
+function captureClear(): void {
+  ensureCapturesDir();
+  const currentSessionFile = join(CAPTURES_DIR, ".current-session");
+
+  if (existsSync(currentSessionFile)) {
+    unlinkSync(currentSessionFile);
+    console.log("✅ Cleared current session pointer.\n");
+    console.log("   Session files are preserved in:");
+    console.log(`   ${CAPTURES_DIR}\n`);
+  } else {
+    console.log("📭 No active session to clear.\n");
+  }
+}
+
+// =============================================================================
+// Timeline Verification Functions
+// =============================================================================
+
+function extractTemporalClaims(content: string): TemporalClaim[] {
+  const claims: TemporalClaim[] = [];
+  const lines = content.split("\n");
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+
+    for (const { pattern, category } of TEMPORAL_PATTERNS) {
+      // Reset regex state for global patterns
+      pattern.lastIndex = 0;
+      let match;
+
+      while ((match = pattern.exec(line)) !== null) {
+        // Get surrounding context (current line plus neighbors)
+        const contextStart = Math.max(0, i - 1);
+        const contextEnd = Math.min(lines.length - 1, i + 1);
+        const context = lines.slice(contextStart, contextEnd + 1).join("\n");
+
+        claims.push({
+          text: match[0],
+          pattern: category,
+          line: i + 1,
+          context: context.trim(),
+        });
+      }
+    }
+  }
+
+  return claims;
+}
+
+function detectProjectContext(content: string): string[] {
+  const projects: string[] = [];
+  const projectPatterns = [
+    { pattern: /harmony/gi, project: "Harmony" },
+    { pattern: /ghost/gi, project: "Ghost" },
+    { pattern: /tinkerbelle/gi, project: "TinkerBelle" },
+    { pattern: /supabase/gi, project: "Supabase" },
+    { pattern: /grafana/gi, project: "Grafana" },
+    { pattern: /prometheus/gi, project: "Prometheus" },
+    { pattern: /pai[- ]?/gi, project: "PAI" },
+  ];
+
+  for (const { pattern, project } of projectPatterns) {
+    if (pattern.test(content) && !projects.includes(project)) {
+      projects.push(project);
+    }
+  }
+
+  return projects;
+}
+
+async function getGitFacts(repoPath: string, since?: string): Promise<TimelineFact[]> {
+  const facts: TimelineFact[] = [];
+
+  try {
+    const sinceArg = since ? `--since="${since}"` : "--since='30 days ago'";
+    const cmd = `cd "${repoPath}" && git log ${sinceArg} --format="%H|%ad|%s" --date=iso 2>/dev/null | head -20`;
+    const output = execSync(cmd, { encoding: "utf-8" });
+
+    const commits = output.trim().split("\n").filter(Boolean);
+
+    if (commits.length > 0) {
+      const firstCommit = commits[commits.length - 1].split("|");
+      const lastCommit = commits[0].split("|");
+
+      facts.push({
+        source: "git",
+        description: `First commit in range: "${firstCommit[2]?.substring(0, 50)}"`,
+        timestamp: firstCommit[1] || "unknown",
+        details: `${commits.length} commits in period`,
+      });
+
+      facts.push({
+        source: "git",
+        description: `Latest commit: "${lastCommit[2]?.substring(0, 50)}"`,
+        timestamp: lastCommit[1] || "unknown",
+      });
+    }
+  } catch {
+    // Git command failed, skip
+  }
+
+  return facts;
+}
+
+async function getDeploymentFacts(service?: string): Promise<TimelineFact[]> {
+  const facts: TimelineFact[] = [];
+
+  try {
+    const cmd = `bun run ~/EscapeVelocity/TinkerBelle/cli/bluegreen/src/index.ts inventory 2>/dev/null`;
+    const output = execSync(cmd, { encoding: "utf-8", timeout: 30000 });
+
+    // Parse the inventory output
+    const lines = output.split("\n").filter(l => l.includes("202"));  // Lines with timestamps
+
+    for (const line of lines) {
+      // Match lines like: "harmony  harmony  production  green   -          2026-01-28 18:39"
+      const match = line.match(/(\w+)\s+(\w+)\s+(\w+)\s+(\w+)\s+\S+\s+([\d-]+\s+[\d:]+)/);
+      if (match) {
+        const [, svc, name, env, slot, timestamp] = match;
+        if (!service || svc.toLowerCase() === service.toLowerCase()) {
+          facts.push({
+            source: "deployment",
+            description: `${svc}/${name} deployed to ${env}/${slot}`,
+            timestamp: timestamp,
+          });
+        }
+      }
+    }
+  } catch {
+    // TinkerBelle command failed, skip
+  }
+
+  return facts;
+}
+
+async function getWorkSessionFacts(topic?: string): Promise<TimelineFact[]> {
+  const facts: TimelineFact[] = [];
+
+  try {
+    const workDirs = execSync(`ls -d ~/.claude/MEMORY/WORK/*/ 2>/dev/null`, { encoding: "utf-8" })
+      .trim()
+      .split("\n")
+      .filter(Boolean);
+
+    for (const dir of workDirs) {
+      const dirName = basename(dir);
+      if (topic && !dirName.toLowerCase().includes(topic.toLowerCase())) continue;
+
+      const stat = execSync(`stat -f '%m' "${dir}" 2>/dev/null`, { encoding: "utf-8" }).trim();
+      const timestamp = new Date(parseInt(stat) * 1000).toISOString();
+
+      facts.push({
+        source: "work-session",
+        description: `Session: ${dirName.substring(0, 50)}`,
+        timestamp: timestamp,
+      });
+    }
+  } catch {
+    // Directory listing failed, skip
+  }
+
+  return facts;
+}
+
+async function blogVerify(filepath: string, options: { project?: string; verbose?: boolean } = {}): Promise<void> {
+  // Resolve file path
+  let resolvedPath = filepath;
+  if (!filepath.startsWith("/")) {
+    resolvedPath = join(BLOG_DIR, filepath);
+  }
+
+  if (!existsSync(resolvedPath)) {
+    console.error(`❌ File not found: ${resolvedPath}\n`);
+    process.exit(1);
+  }
+
+  const content = readFileSync(resolvedPath, "utf-8");
+  const filename = basename(resolvedPath);
+
+  console.log(`\n🔍 Timeline Verification: ${filename}\n`);
+  console.log("─".repeat(60));
+
+  // Step 1: Extract temporal claims
+  const claims = extractTemporalClaims(content);
+
+  if (claims.length === 0) {
+    console.log("\n✅ No temporal claims detected.\n");
+    console.log("   This post appears to use factual timestamps or avoids vague time references.\n");
+    return;
+  }
+
+  console.log(`\n⚠️  Found ${claims.length} temporal claim(s) to verify:\n`);
+
+  for (const claim of claims) {
+    console.log(`   Line ${claim.line}: "${claim.text}"`);
+    console.log(`   Category: ${claim.pattern}`);
+    if (options.verbose) {
+      console.log(`   Context: ${claim.context.substring(0, 100)}...`);
+    }
+    console.log();
+  }
+
+  // Step 2: Detect project context
+  const projects = detectProjectContext(content);
+  console.log("─".repeat(60));
+  console.log(`\n📦 Detected projects: ${projects.join(", ") || "none identified"}\n`);
+
+  // Step 3: Gather facts from data sources
+  console.log("─".repeat(60));
+  console.log("\n📊 Gathering facts from data sources...\n");
+
+  const allFacts: TimelineFact[] = [];
+
+  // Git facts for detected projects
+  const projectPaths: Record<string, string> = {
+    Harmony: "~/EscapeVelocity/Harmony",
+    TinkerBelle: "~/EscapeVelocity/TinkerBelle",
+    PAI: "~/EscapeVelocity/PersonalAI/PAI",
+    Ghost: "~/EscapeVelocity/TinkerBelle-config",  // Ghost config is here
+  };
+
+  for (const proj of projects) {
+    const repoPath = projectPaths[proj];
+    if (repoPath) {
+      const gitFacts = await getGitFacts(repoPath.replace("~", homedir()));
+      allFacts.push(...gitFacts);
+    }
+  }
+
+  // Deployment facts
+  for (const proj of projects) {
+    const deployFacts = await getDeploymentFacts(proj);
+    allFacts.push(...deployFacts);
+  }
+
+  // Work session facts
+  const sessionFacts = await getWorkSessionFacts(projects[0]);
+  allFacts.push(...sessionFacts.slice(0, 5));  // Limit to 5 most relevant
+
+  if (allFacts.length === 0) {
+    console.log("   No facts found from data sources.\n");
+  } else {
+    console.log(`   Found ${allFacts.length} relevant fact(s):\n`);
+    for (const fact of allFacts.slice(0, 10)) {  // Show top 10
+      console.log(`   [${fact.source}] ${fact.description}`);
+      console.log(`            ${fact.timestamp}`);
+      if (fact.details) console.log(`            ${fact.details}`);
+      console.log();
+    }
+  }
+
+  // Step 4: Summary
+  console.log("─".repeat(60));
+  console.log("\n📋 Summary:\n");
+  console.log(`   Temporal claims found: ${claims.length}`);
+  console.log(`   Facts gathered: ${allFacts.length}`);
+  console.log(`   Projects detected: ${projects.length}`);
+
+  if (claims.length > 0) {
+    console.log("\n   ⚠️  Review these claims against the facts above.");
+    console.log("   Consider replacing vague language with specific timestamps.\n");
+  }
+
+  console.log("\n💡 Suggested replacements:\n");
+  for (const claim of claims) {
+    console.log(`   "${claim.text}"`);
+    console.log(`   → Consider: specific date/time, or "within X hours/days"\n`);
+  }
+}
+
+// =============================================================================
 // Help
 // =============================================================================
 
@@ -1303,7 +2605,7 @@ Usage:
 Postmortem Commands:
   pm create <title> [--severity HIGH|MEDIUM|LOW]   Create new postmortem
   pm list                                          List all postmortems
-  pm promote <PM-NNN>                              Create Ghost draft, add to blog
+  pm promote <PM-NNN> [--skip-verify]              Create Ghost draft (runs timeline check)
 
 Blog Commands:
   blog add <file> [--date YYYY-MM-DD]              Add file to blog queue
@@ -1314,6 +2616,22 @@ Blog Commands:
   blog rate --published [--pattern X]              Rate all published articles
   blog status                                      Dashboard of drafts with file status
   blog improve <file> [options]                    Improve article via fabric (with safeguards)
+  blog verify <file> [--verbose]                   Check temporal claims against actual data
+  blog adapt <file> --audience aspiring|general    Generate audience variant
+  blog adapt <file> --all [--force] [--dry-run]    Generate all audience variants
+  blog adapt-list                                  Show variant status for all posts
+  blog publish-variants <file>                     Create Ghost drafts for all variants
+  blog pull-variants <file>                        Pull variants from Ghost to local files
+  blog pull-missing                                Backfill Ghost-only posts to local files
+
+Capture Commands:
+  capture start <name> [--context "..."]           Start a capture session
+  capture save <user> <assistant> [--note "..."]   Save user-tagged capture
+  capture suggest <user> <assistant> [--pattern X] Save AI-suggested capture (pending)
+  capture list                                     List captures in current session
+  capture review [approve|reject] [id]             Review pending captures
+  capture export [--json]                          Export captures as markdown/JSON
+  capture clear                                    Clear current session pointer
 
 Improve Options:
   --dry-run                 Preview changes without saving
@@ -1337,6 +2655,18 @@ Natural Language Mapping:
   "Improve this article"           → blog improve <file>
   "Make this post better"          → blog improve <file>
   "Show blog status"               → blog status
+  "Verify timeline claims"         → blog verify <file>
+  "Check my timelines"             → blog verify <file>
+  "Adapt for beginners"            → blog adapt <file> --audience aspiring
+  "Create all audience versions"   → blog adapt <file> --all
+  "Show variant status"            → blog adapt-list
+  "Publish all variants"           → blog publish-variants <file>
+  "Pull variants from Ghost"      → blog pull-variants <file>
+  "Backfill Ghost-only posts"     → blog pull-missing
+  "Start capturing"                → capture start <name>
+  "Save that exchange"             → capture save <user> <assistant>
+  "What have we captured?"         → capture list
+  "Export captures for blog"       → capture export
 
 ⚠️  FABRIC SAFETY NOTE:
   Always use 'blog improve' instead of running fabric directly on blog files.
@@ -1354,6 +2684,10 @@ Examples:
   content-cli blog improve blog-post-8.md --dry-run
   content-cli blog improve blog-post-8.md --yes
   content-cli blog status
+  content-cli blog adapt blog-post-29-five-bugs.md --all --dry-run
+  content-cli blog adapt blog-post-29-five-bugs.md --audience aspiring
+  content-cli blog adapt-list
+  content-cli blog publish-variants blog-post-29-five-bugs.md
 `);
 }
 
@@ -1387,10 +2721,11 @@ async function main(): Promise<void> {
       } else if (subcommand === "promote") {
         const pmNumber = args[2];
         if (!pmNumber) {
-          console.error("Usage: content-cli pm promote <PM-NNN>");
+          console.error("Usage: content-cli pm promote <PM-NNN> [--skip-verify]");
           process.exit(1);
         }
-        await pmPromote(pmNumber);
+        const skipVerify = args.includes("--skip-verify");
+        await pmPromote(pmNumber, skipVerify);
       } else {
         console.error(`Unknown pm subcommand: ${subcommand}`);
         process.exit(1);
@@ -1460,8 +2795,106 @@ async function main(): Promise<void> {
         }
 
         await blogImprove(target, options);
+      } else if (subcommand === "verify") {
+        const target = args[2];
+        if (!target) {
+          console.error("Usage: content-cli blog verify <file> [--verbose]");
+          process.exit(1);
+        }
+        const verbose = args.includes("--verbose");
+        await blogVerify(target, { verbose });
+      } else if (subcommand === "adapt") {
+        const target = args[2];
+        if (!target) {
+          console.error("Usage: content-cli blog adapt <file> --audience aspiring|general | --all [--force] [--dry-run]");
+          process.exit(1);
+        }
+
+        const audienceIdx = args.indexOf("--audience");
+        let audience: AudienceKey | undefined;
+        if (audienceIdx !== -1 && args[audienceIdx + 1]) {
+          const a = args[audienceIdx + 1] as AudienceKey;
+          if (a in AUDIENCES) {
+            audience = a;
+          } else {
+            console.error(`Unknown audience: ${a}. Use: aspiring, general`);
+            process.exit(1);
+          }
+        }
+
+        const adaptOptions: AdaptOptions = {
+          audience,
+          all: args.includes("--all"),
+          force: args.includes("--force"),
+          dryRun: args.includes("--dry-run"),
+        };
+
+        await blogAdapt(target, adaptOptions);
+      } else if (subcommand === "adapt-list") {
+        blogAdaptList();
+      } else if (subcommand === "publish-variants") {
+        const target = args[2];
+        if (!target) {
+          console.error("Usage: content-cli blog publish-variants <file>");
+          process.exit(1);
+        }
+        await blogPublishVariants(target);
+      } else if (subcommand === "pull-variants") {
+        const target = args[2];
+        if (!target) {
+          console.error("Usage: content-cli blog pull-variants <file>");
+          process.exit(1);
+        }
+        await blogPullVariants(target);
+      } else if (subcommand === "pull-missing") {
+        await blogPullMissing();
       } else {
         console.error(`Unknown blog subcommand: ${subcommand}`);
+        process.exit(1);
+      }
+    } else if (command === "capture") {
+      if (subcommand === "start") {
+        const name = args[2];
+        if (!name) {
+          console.error("Usage: content-cli capture start <name> [--context \"...\"]");
+          process.exit(1);
+        }
+        const contextIdx = args.indexOf("--context");
+        const context = contextIdx !== -1 ? args[contextIdx + 1] : undefined;
+        await captureStart(name, context);
+      } else if (subcommand === "save") {
+        const userContent = args[2];
+        const assistantContent = args[3];
+        if (!userContent || !assistantContent) {
+          console.error("Usage: content-cli capture save <user-content> <assistant-content> [--note \"...\"]");
+          process.exit(1);
+        }
+        const noteIdx = args.indexOf("--note");
+        const note = noteIdx !== -1 ? args[noteIdx + 1] : undefined;
+        await captureSave(userContent, assistantContent, note);
+      } else if (subcommand === "suggest") {
+        const userContent = args[2];
+        const assistantContent = args[3];
+        if (!userContent || !assistantContent) {
+          console.error("Usage: content-cli capture suggest <user-content> <assistant-content> [--pattern \"...\"]");
+          process.exit(1);
+        }
+        const patternIdx = args.indexOf("--pattern");
+        const pattern = patternIdx !== -1 ? args[patternIdx + 1] : undefined;
+        await captureSuggest(userContent, assistantContent, pattern);
+      } else if (subcommand === "list") {
+        captureList();
+      } else if (subcommand === "review") {
+        const action = args[2];
+        const captureId = args[3];
+        await captureReview(action, captureId);
+      } else if (subcommand === "export") {
+        const format = args.includes("--json") ? "json" : undefined;
+        captureExport(format);
+      } else if (subcommand === "clear") {
+        captureClear();
+      } else {
+        console.error(`Unknown capture subcommand: ${subcommand}`);
         process.exit(1);
       }
     } else {

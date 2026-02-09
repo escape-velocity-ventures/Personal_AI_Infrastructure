@@ -31,10 +31,15 @@ const CONTENT_DIR = process.env.BLOG_CONTENT_DIR
   || join(homedir(), ".claude", "MEMORY", "WORK");
 const MEMORY_DIR = join(homedir(), ".claude", "MEMORY");
 const WORK_DIR = join(MEMORY_DIR, "WORK");
-const PM_INDEX = join(CONTENT_DIR, "postmortems", "POSTMORTEM-INDEX.md");
-const PM_DIR = join(CONTENT_DIR, "postmortems");
-const BLOG_INDEX = join(CONTENT_DIR, "blog", "BLOG-INDEX.md");
+
+// POSTMORTEM_DIR allows postmortems to live in a separate repo (e.g., TinkerBelle-config)
+// Falls back to CONTENT_DIR/postmortems for backward compatibility
+const PM_DIR = process.env.POSTMORTEM_DIR
+  || join(CONTENT_DIR, "postmortems");
+const PM_INDEX = join(PM_DIR, "POSTMORTEM-INDEX.md");
+
 const BLOG_DIR = join(CONTENT_DIR, "blog");
+const BLOG_INDEX = join(BLOG_DIR, "BLOG-INDEX.md");
 const CAPTURES_DIR = join(WORK_DIR, "captures");
 const GHOST_CLI = join(
   homedir(),
@@ -2667,6 +2672,11 @@ Natural Language Mapping:
   "Save that exchange"             → capture save <user> <assistant>
   "What have we captured?"         → capture list
   "Export captures for blog"       → capture export
+
+Configuration:
+  BLOG_CONTENT_DIR    Directory for blog posts (default: ~/.claude/MEMORY/WORK)
+  POSTMORTEM_DIR      Directory for postmortems (default: $BLOG_CONTENT_DIR/postmortems)
+                      Set this to keep postmortems in a separate repo (e.g., TinkerBelle-config)
 
 ⚠️  FABRIC SAFETY NOTE:
   Always use 'blog improve' instead of running fabric directly on blog files.

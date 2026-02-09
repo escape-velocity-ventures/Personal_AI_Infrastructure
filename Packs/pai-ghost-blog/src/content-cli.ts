@@ -163,6 +163,24 @@ function getExistingVariants(sourcePath: string): { audience: AudienceKey; path:
 
 const STATE_SERVICE_URL = process.env.PAI_STATE_SERVICE_URL || "https://pai-state.escape-velocity-ventures.org";
 
+// Detect whether PM_DIR is inside a git repo.
+// If yes: local-first mode — git is source of truth, cloud is optional push for agent discovery.
+// If no: cloud-first mode — cloud is source of truth (remote agent on ephemeral VM).
+function isGitTracked(dir: string): boolean {
+  try {
+    execSync("git rev-parse --is-inside-work-tree", {
+      cwd: dir,
+      encoding: "utf-8",
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+const PM_IS_LOCAL_FIRST = existsSync(PM_DIR) && isGitTracked(PM_DIR);
+
 // =============================================================================
 // Sanitization Patterns - Strip metadata injected by fabric patterns
 // =============================================================================
@@ -280,9 +298,16 @@ async function getApiKey(): Promise<string | null> {
 
 /**
  * Sync PM index from cloud BEFORE operating on it.
- * This prevents numbering collisions when cloud has newer data.
+ *
+ * LOCAL-FIRST mode (git-tracked PM_DIR): Skip — git is source of truth.
+ * CLOUD-FIRST mode (remote agent): Pull cloud index to local — cloud is source of truth.
  */
 async function syncPmIndexFromCloud(): Promise<boolean> {
+  if (PM_IS_LOCAL_FIRST) {
+    // Git-tracked: local files are canonical. Don't overwrite from cloud.
+    return true;
+  }
+
   const apiKey = await getApiKey();
   if (!apiKey) {
     console.error("⚠️  Warning: Cannot sync from cloud (no API key). Using local index only.");
@@ -312,7 +337,7 @@ async function syncPmIndexFromCloud(): Promise<boolean> {
     // Ensure directory exists
     mkdirSync(PM_DIR, { recursive: true });
 
-    // Write cloud content to local
+    // Write cloud content to local (cloud-first mode only)
     writeFileSync(PM_INDEX, data.content, "utf-8");
     return true;
   } catch (err) {
@@ -910,9 +935,12 @@ Chronological numbering for blog publication.
 // =============================================================================
 
 async function pmCreate(title: string, severity: string): Promise<void> {
-  // CRITICAL: Sync from cloud FIRST to prevent numbering collisions
-  console.log("🔄 Syncing PM index from cloud...");
-  await syncPmIndexFromCloud();
+  if (PM_IS_LOCAL_FIRST) {
+    console.log("📁 Local-first mode (git-tracked). Using local index.");
+  } else {
+    console.log("🔄 Cloud-first mode. Syncing PM index from cloud...");
+    await syncPmIndexFromCloud();
+  }
 
   const pmNumber = getNextPmNumber();
   const date = new Date().toISOString().split("T")[0];
@@ -964,8 +992,9 @@ async function pmCreate(title: string, severity: string): Promise<void> {
 }
 
 async function pmList(): Promise<void> {
-  // Sync from cloud first to show latest state
-  await syncPmIndexFromCloud();
+  if (!PM_IS_LOCAL_FIRST) {
+    await syncPmIndexFromCloud();
+  }
   const entries = parsePostmortemIndex();
 
   if (entries.length === 0) {
@@ -985,6 +1014,118 @@ async function pmList(): Promise<void> {
   }
 
   console.log(`\n  Total: ${entries.length} postmortems\n`);
+}
+
+/**
+ * Pull agent-created postmortems from the State Service into the local git repo.
+ * Compares cloud index entries against local files and downloads any missing ones.
+ */
+async function pmPull(): Promise<void> {
+  const apiKey = await getApiKey();
+  if (!apiKey) {
+    console.error("❌ Cannot pull from cloud — no API key available.");
+    process.exit(1);
+  }
+
+  console.log("🔄 Fetching PM index from cloud...");
+
+  let cloudEntries: PostmortemEntry[];
+  try {
+    const response = await fetch(`${STATE_SERVICE_URL}/memory/WORK/postmortems/POSTMORTEM-INDEX.md`, {
+      headers: { Authorization: `Bearer ${apiKey}` },
+      signal: AbortSignal.timeout(10000),
+    });
+
+    if (!response.ok) {
+      console.error(`❌ Cloud fetch failed (${response.status}).`);
+      process.exit(1);
+    }
+
+    const data = await response.json();
+    if (!data.content) {
+      console.log("☁️  Cloud index is empty. Nothing to pull.");
+      return;
+    }
+
+    // Parse the cloud index content the same way we parse local
+    const lines = (data.content as string).split("\n");
+    cloudEntries = [];
+    for (const line of lines) {
+      const match = line.match(
+        /\|\s*(PM-\d+)\s*\|\s*(\d{4}-\d{2}-\d{2})\s*\|\s*([^|]+)\s*\|\s*(\w+)\s*\|\s*([^|]+)\s*\|\s*`?([^`|]+)`?\s*\|/
+      );
+      if (match) {
+        cloudEntries.push({
+          pmNumber: match[1].trim(),
+          date: match[2].trim(),
+          title: match[3].trim(),
+          severity: match[4].trim(),
+          blogStatus: match[5].trim(),
+          file: match[6].trim(),
+        });
+      }
+    }
+  } catch (err) {
+    console.error(`❌ Cloud fetch error: ${err}`);
+    process.exit(1);
+  }
+
+  const localEntries = parsePostmortemIndex();
+  const localPmNumbers = new Set(localEntries.map(e => e.pmNumber));
+
+  // Find entries in cloud that aren't in local index
+  const missing = cloudEntries.filter(e => !localPmNumbers.has(e.pmNumber));
+
+  if (missing.length === 0) {
+    console.log("✅ Local is up to date with cloud. No new postmortems to pull.");
+    return;
+  }
+
+  console.log(`\n📥 Found ${missing.length} new postmortem(s) in cloud:\n`);
+
+  let pulled = 0;
+  for (const entry of missing) {
+    const filename = entry.file;
+    // Skip ISC-only entries (no downloadable file)
+    if (filename.startsWith("WORK/") && !filename.endsWith(".md")) {
+      console.log(`   ⏭️  ${entry.pmNumber}: ${entry.title} (ISC-only, skipping)`);
+      continue;
+    }
+
+    const cloudPath = `WORK/postmortems/${filename}`;
+    console.log(`   📄 ${entry.pmNumber}: ${entry.title}`);
+
+    try {
+      const fileResponse = await fetch(`${STATE_SERVICE_URL}/memory/${cloudPath}`, {
+        headers: { Authorization: `Bearer ${apiKey}` },
+        signal: AbortSignal.timeout(10000),
+      });
+
+      if (fileResponse.ok) {
+        const fileData = await fileResponse.json();
+        if (fileData.content) {
+          mkdirSync(PM_DIR, { recursive: true });
+          const localPath = join(PM_DIR, filename);
+          writeFileSync(localPath, fileData.content, "utf-8");
+          console.log(`      ✓ Downloaded to ${localPath}`);
+          pulled++;
+        }
+      } else {
+        console.log(`      ⚠️ File not in cloud (${fileResponse.status}), index entry only`);
+      }
+    } catch (err) {
+      console.log(`      ⚠️ Download failed: ${err}`);
+    }
+
+    // Add to local index
+    addToPostmortemIndex(entry);
+  }
+
+  console.log(`\n✅ Pulled ${pulled} postmortem(s). Local index updated.`);
+  if (PM_IS_LOCAL_FIRST) {
+    console.log("   💡 Don't forget to commit: git add postmortems/ && git commit");
+  }
+  console.log();
 }
 
 async function pmPromote(pmNumber: string, skipVerify: boolean = false): Promise<void> {
@@ -2611,6 +2752,7 @@ Postmortem Commands:
   pm create <title> [--severity HIGH|MEDIUM|LOW]   Create new postmortem
   pm list                                          List all postmortems
   pm promote <PM-NNN> [--skip-verify]              Create Ghost draft (runs timeline check)
+  pm pull                                          Pull agent-created PMs from cloud into local repo
 
 Blog Commands:
   blog add <file> [--date YYYY-MM-DD]              Add file to blog queue
@@ -2651,6 +2793,7 @@ Natural Language Mapping:
   "Create a postmortem about X"    → pm create "X"
   "List postmortems"               → pm list
   "Make PM-007 a blog post"        → pm promote PM-007
+  "Pull agent postmortems"         → pm pull
   "Add this to the blog"           → blog add <file>
   "What drafts do we have"         → blog list --drafts
   "Rate my drafts"                 → blog rate --all-drafts
@@ -2677,6 +2820,13 @@ Configuration:
   BLOG_CONTENT_DIR    Directory for blog posts (default: ~/.claude/MEMORY/WORK)
   POSTMORTEM_DIR      Directory for postmortems (default: $BLOG_CONTENT_DIR/postmortems)
                       Set this to keep postmortems in a separate repo (e.g., TinkerBelle-config)
+
+Sync Modes (auto-detected):
+  Local-first         When POSTMORTEM_DIR is git-tracked: git is source of truth,
+                      cloud gets optional push for agent discovery. Use 'pm pull'
+                      to import agent-created PMs back into the repo.
+  Cloud-first         When POSTMORTEM_DIR is not git-tracked (e.g., remote agent VM):
+                      cloud is source of truth, pulled before each operation.
 
 ⚠️  FABRIC SAFETY NOTE:
   Always use 'blog improve' instead of running fabric directly on blog files.
@@ -2736,6 +2886,8 @@ async function main(): Promise<void> {
         }
         const skipVerify = args.includes("--skip-verify");
         await pmPromote(pmNumber, skipVerify);
+      } else if (subcommand === "pull") {
+        await pmPull();
       } else {
         console.error(`Unknown pm subcommand: ${subcommand}`);
         process.exit(1);

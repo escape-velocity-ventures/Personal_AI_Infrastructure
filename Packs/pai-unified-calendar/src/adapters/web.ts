@@ -1,5 +1,5 @@
 import type { CalendarAdapter, WebCalendarSource, UnifiedEvent, WebSelectors } from '../types';
-import Anthropic from '@anthropic-ai/sdk';
+import { spawn } from 'child_process';
 
 interface ExtractedEvent {
   title: string;
@@ -236,14 +236,10 @@ function extractWithSelectors(html: string, selectors: WebSelectors): ExtractedE
   return events;
 }
 
-// Use Claude AI for extraction when other methods fail (for JS-rendered content)
+// Use Claude CLI for extraction when other methods fail (for JS-rendered content)
+// Uses subscription auth (claude --print) instead of ANTHROPIC_API_KEY
 async function extractWithAI(html: string, url: string): Promise<ExtractedEvent[]> {
   try {
-    const apiKey = process.env.ANTHROPIC_API_KEY;
-    if (!apiKey) return [];
-
-    const client = new Anthropic({ apiKey });
-
     // Find the event section by looking for event-related class names
     let relevantHtml = html;
 
@@ -277,13 +273,7 @@ async function extractWithAI(html: string, url: string): Promise<ExtractedEvent[
       day: 'numeric',
     });
 
-    const response = await client.messages.create({
-      model: 'claude-3-5-haiku-20241022',
-      max_tokens: 4000,
-      messages: [
-        {
-          role: 'user',
-          content: `Today is ${dateContext}. Extract ALL events from this webpage HTML, including future events. For each event, identify:
+    const prompt = `Today is ${dateContext}. Extract ALL events from this webpage HTML, including future events. For each event, identify:
 - title: event name
 - date: date string in YYYY-MM-DD format
 - time: time string (e.g., "7:00 PM")
@@ -297,13 +287,10 @@ Return ONLY a JSON array. Example:
 If no events found, return: []
 
 HTML:
-${truncatedHtml}`,
-        },
-      ],
-    });
+${truncatedHtml}`;
 
-    // Parse response
-    const text = response.content[0].type === 'text' ? response.content[0].text : '';
+    const text = await runClaudeInference(prompt);
+    if (!text) return [];
 
     // Extract JSON from response - strip markdown code blocks if present
     const cleanedText = text.replace(/```json\s*/g, '').replace(/```\s*/g, '');
@@ -320,6 +307,35 @@ ${truncatedHtml}`,
     console.error('AI extraction failed:', error);
     return [];
   }
+}
+
+// Run inference via Claude CLI with subscription billing (no API key needed)
+function runClaudeInference(prompt: string): Promise<string> {
+  return new Promise((resolve) => {
+    const env = { ...process.env };
+    delete env.ANTHROPIC_API_KEY;
+
+    const args = [
+      '--print',
+      '--model', 'haiku',
+      '--tools', '',
+      '--output-format', 'text',
+      '--setting-sources', '',
+      prompt,
+    ];
+
+    let stdout = '';
+    const proc = spawn('claude', args, {
+      env,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+
+    proc.stdout.on('data', (data: Buffer) => { stdout += data.toString(); });
+    proc.on('close', () => resolve(stdout.trim()));
+    proc.on('error', () => resolve(''));
+
+    setTimeout(() => { proc.kill(); resolve(''); }, 15000);
+  });
 }
 
 function parseEventDate(dateStr?: string, timeStr?: string): { start: Date; end: Date } {

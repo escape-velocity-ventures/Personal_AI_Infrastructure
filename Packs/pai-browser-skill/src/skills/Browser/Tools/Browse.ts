@@ -313,24 +313,30 @@ function formatDiagnostics(
 // ============================================
 
 async function debugUrl(url: string): Promise<void> {
+  console.log(`PAI Browser Action: Navigating to ${url}`)
+
   // Navigate
   await sessionCommand('navigate', { url })
 
   // Take screenshot
   const timestamp = Date.now()
   const screenshotPath = `/tmp/browse-${timestamp}.png`
+  console.log(`PAI Browser Action: Taking screenshot`)
   await sessionCommand('screenshot', { path: screenshotPath })
 
   // Get diagnostics
   const diag = await sessionCommand('diagnostics', {}, 'GET') as Diagnostics
 
   // Output
+  console.log(`PAI Browser Results:`)
   console.log(formatDiagnostics(diag, screenshotPath))
 }
 
 async function showErrors(): Promise<void> {
+  console.log(`PAI Browser Action: Checking console errors`)
   const diag = await sessionCommand('diagnostics', {}, 'GET') as Diagnostics
 
+  console.log(`PAI Browser Results:`)
   if (diag.errors.length === 0) {
     console.log('✅ No console errors')
     return
@@ -344,8 +350,10 @@ async function showErrors(): Promise<void> {
 }
 
 async function showWarnings(): Promise<void> {
+  console.log(`PAI Browser Action: Checking console warnings`)
   const diag = await sessionCommand('diagnostics', {}, 'GET') as Diagnostics
 
+  console.log(`PAI Browser Results:`)
   if (diag.warnings.length === 0) {
     console.log('✅ No console warnings')
     return
@@ -359,12 +367,14 @@ async function showWarnings(): Promise<void> {
 }
 
 async function showConsole(): Promise<void> {
+  console.log(`PAI Browser Action: Getting console output`)
   const logs = await sessionCommand('console', {}, 'GET') as Array<{
     type: string
     text: string
     timestamp: number
   }>
 
+  console.log(`PAI Browser Results:`)
   if (logs.length === 0) {
     console.log('📋 No console output')
     return
@@ -381,6 +391,7 @@ async function showConsole(): Promise<void> {
 }
 
 async function showNetwork(): Promise<void> {
+  console.log(`PAI Browser Action: Getting network activity`)
   const logs = await sessionCommand('network', {}, 'GET') as Array<{
     type: string
     url: string
@@ -390,6 +401,7 @@ async function showNetwork(): Promise<void> {
     size?: number
   }>
 
+  console.log(`PAI Browser Results:`)
   if (logs.length === 0) {
     console.log('🌐 No network activity')
     return
@@ -410,8 +422,10 @@ async function showNetwork(): Promise<void> {
 }
 
 async function showFailed(): Promise<void> {
+  console.log(`PAI Browser Action: Checking failed requests`)
   const diag = await sessionCommand('diagnostics', {}, 'GET') as Diagnostics
 
+  console.log(`PAI Browser Results:`)
   if (diag.failedRequests.length === 0) {
     console.log('✅ No failed requests')
     return
@@ -425,44 +439,53 @@ async function showFailed(): Promise<void> {
 
 async function takeScreenshot(path?: string): Promise<void> {
   const screenshotPath = path || `/tmp/screenshot-${Date.now()}.png`
+  console.log(`PAI Browser Action: Taking screenshot`)
   await sessionCommand('screenshot', { path: screenshotPath })
-  console.log(`📸 Screenshot: ${screenshotPath}`)
+  console.log(`PAI Browser Results: Screenshot saved to ${screenshotPath}`)
 }
 
 async function navigate(url: string): Promise<void> {
+  console.log(`PAI Browser Action: Navigating to ${url}`)
   const result = await sessionCommand('navigate', { url })
-  console.log(`Navigated to: ${result.url}`)
+  console.log(`PAI Browser Results: Navigated to ${result.url}`)
 }
 
 async function click(selector: string): Promise<void> {
+  console.log(`PAI Browser Action: Clicking ${selector}`)
   await sessionCommand('click', { selector })
-  console.log(`Clicked: ${selector}`)
+  console.log(`PAI Browser Results: Clicked ${selector}`)
 }
 
 async function fill(selector: string, value: string): Promise<void> {
+  console.log(`PAI Browser Action: Filling ${selector}`)
   await sessionCommand('fill', { selector, value })
-  console.log(`Filled: ${selector}`)
+  console.log(`PAI Browser Results: Filled ${selector}`)
 }
 
 async function type(selector: string, text: string): Promise<void> {
+  console.log(`PAI Browser Action: Typing in ${selector}`)
   await sessionCommand('type', { selector, text })
-  console.log(`Typed in: ${selector}`)
+  console.log(`PAI Browser Results: Typed in ${selector}`)
 }
 
 async function evaluate(script: string): Promise<void> {
+  console.log(`PAI Browser Action: Evaluating JavaScript`)
   const result = await sessionCommand('evaluate', { script })
+  console.log(`PAI Browser Results:`)
   console.log(JSON.stringify(result.result, null, 2))
 }
 
 async function showStatus(): Promise<void> {
+  console.log(`PAI Browser Action: Getting session status`)
   try {
     const state = await getSessionState()
     if (!state) {
-      console.log('No session running')
+      console.log('PAI Browser Results: No session running')
       return
     }
 
     const session = await sessionCommand('session', {}, 'GET')
+    console.log('PAI Browser Results:')
     console.log('Browser Session:')
     console.log(`  ID: ${session.sessionId}`)
     console.log(`  Port: ${session.port}`)
@@ -471,11 +494,12 @@ async function showStatus(): Promise<void> {
     console.log(`  Started: ${session.startedAt}`)
     console.log(`  Idle timeout: ${session.idleTimeout}`)
   } catch {
-    console.log('Session not responding')
+    console.log('PAI Browser Results: Session not responding')
   }
 }
 
 async function restart(): Promise<void> {
+  console.log(`PAI Browser Action: Restarting session`)
   // Stop if running
   try {
     const state = await getSessionState()
@@ -496,13 +520,14 @@ async function restart(): Promise<void> {
 
   // Start fresh
   await ensureSession()
-  console.log('Session restarted')
+  console.log('PAI Browser Results: Session restarted')
 }
 
 async function stop(): Promise<void> {
+  console.log(`PAI Browser Action: Stopping session`)
   const state = await getSessionState()
   if (!state) {
-    console.log('No session running')
+    console.log('PAI Browser Results: No session running')
     return
   }
 
@@ -511,18 +536,19 @@ async function stop(): Promise<void> {
       method: 'POST',
       signal: AbortSignal.timeout(2000)
     })
-    console.log('Session stopped')
+    console.log('PAI Browser Results: Session stopped')
   } catch {
-    console.log('Session already stopped')
+    console.log('PAI Browser Results: Session already stopped')
   }
 }
 
 async function openUrl(url: string): Promise<void> {
+  console.log(`PAI Browser Action: Opening URL in browser`)
   // Use browser from settings.json techStack
   const browser = await getBrowser()
   const { spawn } = await import('child_process')
   spawn('open', ['-a', browser, url], { detached: true, stdio: 'ignore' }).unref()
-  console.log(`Opened in ${browser}: ${url}`)
+  console.log(`PAI Browser Results: Opened in ${browser}: ${url}`)
 }
 
 // ============================================

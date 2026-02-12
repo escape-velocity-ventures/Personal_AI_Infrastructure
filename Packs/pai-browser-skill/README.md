@@ -1,7 +1,7 @@
 ---
 name: PAI Browser Skill
-pack-id: danielmiessler-pai-browser-skill-v2.3.0
-version: 2.3.0
+pack-id: danielmiessler-pai-browser-skill-v2.3.1
+version: 2.3.1
 author: danielmiessler
 description: Debug-first browser automation with always-on visibility - console logs, network requests, and errors captured by default
 type: skill

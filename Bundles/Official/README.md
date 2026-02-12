@@ -2,9 +2,14 @@
   <img src="pai-bundle.png" alt="The Official PAI Bundle" width="256">
 </p>
 
-# The Official PAI Bundle v2.3.0
+# The Official PAI Bundle v2.4.0
 
-> **FOR AI AGENTS:** You are about to install the complete PAI bundle. Run the wizard, then install each pack in order.
+> [!WARNING]
+> **This wizard creates a SKELETON directory structure only.** After running the wizard, you must manually install each pack in order (pai-hook-system → pai-core-install → etc.) to have a working system.
+>
+> **Want a complete working system immediately?** Use the [Full Release Install](../../Releases/v2.4/) instead — it includes all packs pre-configured.
+
+> **FOR AI AGENTS:** You are about to install the PAI bundle skeleton. Run the wizard, then install each pack in order. The wizard alone does NOT create a working system.
 
 **Origin:** This bundle is extracted from Daniel Miessler's production Kai system - a battle-tested Personal AI Infrastructure that has been refined through daily use since 2024.
 
@@ -112,7 +117,10 @@ Update mode will:
 
 ## What This Bundle Provides
 
-When fully installed, the PAI bundle gives you:
+> [!IMPORTANT]
+> The features below are only available **after you install the required packs**. The wizard alone only creates the directory structure and configuration files.
+
+When fully installed (wizard + all required packs), the PAI bundle gives you:
 
 - A custom **History system** - Automatically captures sessions, decisions, learnings, and research
 - A custom set of **Hooks** - Event-driven automation that triggers on session start, tool use, and task completion
@@ -124,6 +132,9 @@ When fully installed, the PAI bundle gives you:
 ---
 
 ## Installation Order (CRITICAL)
+
+> [!CAUTION]
+> **The wizard does NOT install these packs for you.** You must install them manually using your AI assistant after the wizard completes. Without these packs, you have an empty skeleton — not a working PAI system.
 
 **After running the wizard, install these packs IN ORDER:**
 
@@ -165,7 +176,7 @@ When fully installed, the PAI bundle gives you:
 | [pai-system-skill](../../Packs/pai-system-skill/) | System maintenance |
 | [pai-telos-skill](../../Packs/pai-telos-skill/) | Life OS and goals |
 
-> **Alternative:** Use a [Full Release](../../Releases/v2.3/) which includes all 23 packs pre-configured in a complete `.claude/` directory.
+> **Alternative:** Use a [Full Release](../../Releases/v2.4/) which includes all 23 packs pre-configured in a complete `.claude/` directory.
 
 ### How to Install Packs
 
@@ -272,6 +283,15 @@ The PAI system embeds these principles from [Personal AI Infrastructure](https:/
 ---
 
 ## Changelog
+
+### 2.4.0 - 2026-01-23
+- **The Algorithm:** 7-phase problem-solving with ISC tracking for verifiable iteration
+- **29 Skills:** Up from 23, expanded domain coverage
+- **15 Hooks:** Refined hook architecture
+- **331 Workflows:** Comprehensive automation library
+- **Improved Wizard:** Renamed to PAIInstallWizard.ts, better interactive setup
+- **Voice Notifications:** ElevenLabs integration for spoken alerts
+- **Observability Dashboard:** Real-time system monitoring
 
 ### 2.3.0 - 2026-01-15
 - **Full Releases Return:** Added Releases/v2.3/ with complete .claude directory

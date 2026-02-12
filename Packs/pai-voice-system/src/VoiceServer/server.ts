@@ -126,6 +126,30 @@ try {
   console.warn('Failed to load agent voice personalities');
 }
 
+// Load user pronunciation customizations
+let pronunciations: Record<string, string> = {};
+try {
+  const pronunciationsPath = join(homedir(), '.claude', 'skills', 'CORE', 'USER', 'pronunciations.json');
+  if (existsSync(pronunciationsPath)) {
+    const content = readFileSync(pronunciationsPath, 'utf-8');
+    pronunciations = JSON.parse(content);
+    console.log(`Loaded ${Object.keys(pronunciations).length} pronunciation(s) from USER config`);
+  }
+} catch (error) {
+  console.warn('Failed to load pronunciation customizations');
+}
+
+// Apply pronunciation substitutions to text before TTS
+function applyPronunciations(text: string): string {
+  let result = text;
+  for (const [term, pronunciation] of Object.entries(pronunciations)) {
+    // Case-insensitive replacement with word boundaries
+    const regex = new RegExp(`\\b${term}\\b`, 'gi');
+    result = result.replace(regex, pronunciation);
+  }
+  return result;
+}
+
 // Escape special characters for AppleScript
 function escapeForAppleScript(input: string): string {
   // Escape backslashes first, then double quotes
@@ -392,18 +416,19 @@ async function sendNotification(
         const volume = (prosody as any)?.volume ?? daVoiceProsody?.volume;
         console.log(`Generating speech (voice: ${voice}, stability: ${settings.stability}, style: ${settings.style}, speed: ${settings.speed}, volume: ${volume ?? 1.0})`);
 
-        const audioBuffer = await generateSpeech(safeMessage, voice, prosody);
+        const spokenMessage = applyPronunciations(safeMessage);
+        const audioBuffer = await generateSpeech(spokenMessage, voice, prosody);
         await playAudio(audioBuffer, volume);
       } else {
         // Fallback to macOS say
         console.log('Using macOS say (no API key)');
-        await speakWithSay(safeMessage);
+        await speakWithSay(applyPronunciations(safeMessage));
       }
     } catch (error) {
       console.error("Failed to generate/play speech:", error);
       // Try fallback to say command
       try {
-        await speakWithSay(safeMessage);
+        await speakWithSay(applyPronunciations(safeMessage));
       } catch (sayError) {
         console.error("Fallback say also failed:", sayError);
       }

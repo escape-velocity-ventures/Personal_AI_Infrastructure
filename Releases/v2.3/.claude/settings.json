@@ -33,7 +33,7 @@
   "techStack": {
     "terminal": "Kitty",
     "packageManager": "bun",
-    "pythonPackageManager": "pip",
+    "pythonPackageManager": "uv",
     "language": "TypeScript"
   },
   "permissions": {

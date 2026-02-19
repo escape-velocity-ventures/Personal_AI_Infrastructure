@@ -63,7 +63,7 @@ routing:
     # Preview - always points to inactive slot for testing
     - hostname: pai-state-preview.escape-velocity-ventures.org
       service: pai-state-service
-      slot: preview
+      slot: inactive
 
 # =============================================================================
 # Health Checks

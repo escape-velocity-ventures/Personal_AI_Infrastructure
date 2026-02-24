@@ -50,6 +50,10 @@ loadPaiEnv();
 const GHOST_URL = process.env.GHOST_URL || 'http://localhost:2368';
 const GHOST_ADMIN_KEY = process.env.GHOST_ADMIN_KEY || '';
 
+// Cloudflare Access service token (for bypassing CF Access on Ghost Admin API)
+const CF_ACCESS_CLIENT_ID = process.env.CF_ACCESS_CLIENT_ID || '';
+const CF_ACCESS_CLIENT_SECRET = process.env.CF_ACCESS_CLIENT_SECRET || '';
+
 interface PostOptions {
   title: string;
   html: string;
@@ -146,12 +150,19 @@ async function createPost(options: PostOptions): Promise<any> {
     }]
   };
 
+  const headers: Record<string, string> = {
+    'Authorization': `Ghost ${token}`,
+    'Content-Type': 'application/json',
+  };
+  // Add Cloudflare Access headers if configured
+  if (CF_ACCESS_CLIENT_ID && CF_ACCESS_CLIENT_SECRET) {
+    headers['CF-Access-Client-Id'] = CF_ACCESS_CLIENT_ID;
+    headers['CF-Access-Client-Secret'] = CF_ACCESS_CLIENT_SECRET;
+  }
+
   const response = await fetch(url, {
     method: 'POST',
-    headers: {
-      'Authorization': `Ghost ${token}`,
-      'Content-Type': 'application/json'
-    },
+    headers,
     body: JSON.stringify(postData)
   });
 

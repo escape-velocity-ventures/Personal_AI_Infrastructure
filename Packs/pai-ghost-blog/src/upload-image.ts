@@ -26,6 +26,17 @@ if (existsSync(envPath)) {
 
 const GHOST_URL = process.env.GHOST_URL || 'http://localhost:2368';
 const GHOST_ADMIN_KEY = process.env.GHOST_ADMIN_KEY || '';
+const CF_ACCESS_CLIENT_ID = process.env.CF_ACCESS_CLIENT_ID || '';
+const CF_ACCESS_CLIENT_SECRET = process.env.CF_ACCESS_CLIENT_SECRET || '';
+
+function cfHeaders(): Record<string, string> {
+  const h: Record<string, string> = {};
+  if (CF_ACCESS_CLIENT_ID && CF_ACCESS_CLIENT_SECRET) {
+    h['CF-Access-Client-Id'] = CF_ACCESS_CLIENT_ID;
+    h['CF-Access-Client-Secret'] = CF_ACCESS_CLIENT_SECRET;
+  }
+  return h;
+}
 
 function generateToken(key: string): string {
   const [id, secret] = key.split(':');
@@ -70,7 +81,7 @@ async function uploadImage(imagePath: string, targetName?: string): Promise<stri
 
   const response = await fetch(url, {
     method: 'POST',
-    headers: { 'Authorization': `Ghost ${token}` },
+    headers: { 'Authorization': `Ghost ${token}`, ...cfHeaders() },
     body: formData
   });
 

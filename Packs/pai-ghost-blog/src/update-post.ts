@@ -6,8 +6,39 @@
 
 import { createHmac } from 'crypto';
 
+// Load .env from PAI repository
+import { homedir } from 'os';
+import { readFileSync, existsSync } from 'fs';
+import { join } from 'path';
+
+function loadPaiEnv(): void {
+  const paiRepo = process.env.PAI_REPO || join(homedir(), 'EscapeVelocity/PersonalAI/PAI');
+  const envPath = join(paiRepo, '.env');
+  if (!existsSync(envPath)) return;
+  const envContent = readFileSync(envPath, 'utf-8');
+  for (const line of envContent.split('\n')) {
+    if (line.trim() && !line.startsWith('#')) {
+      const [key, ...valueParts] = line.split('=');
+      const value = valueParts.join('=');
+      if (key && value && !process.env[key]) process.env[key] = value;
+    }
+  }
+}
+loadPaiEnv();
+
 const GHOST_URL = process.env.GHOST_URL || 'https://blog.escape-velocity-ventures.org';
 const GHOST_ADMIN_KEY = process.env.GHOST_ADMIN_KEY || '';
+const CF_ACCESS_CLIENT_ID = process.env.CF_ACCESS_CLIENT_ID || '';
+const CF_ACCESS_CLIENT_SECRET = process.env.CF_ACCESS_CLIENT_SECRET || '';
+
+function cfHeaders(): Record<string, string> {
+  const h: Record<string, string> = {};
+  if (CF_ACCESS_CLIENT_ID && CF_ACCESS_CLIENT_SECRET) {
+    h['CF-Access-Client-Id'] = CF_ACCESS_CLIENT_ID;
+    h['CF-Access-Client-Secret'] = CF_ACCESS_CLIENT_SECRET;
+  }
+  return h;
+}
 
 function generateToken(key: string): string {
   const [id, secret] = key.split(':');
@@ -26,7 +57,7 @@ async function getPostBySlug(slug: string): Promise<any> {
   const url = `${GHOST_URL}/ghost/api/admin/posts/slug/${slug}/?formats=html,lexical`;
 
   const response = await fetch(url, {
-    headers: { 'Authorization': `Ghost ${token}` }
+    headers: { 'Authorization': `Ghost ${token}`, ...cfHeaders() }
   });
 
   if (!response.ok) {
@@ -46,7 +77,8 @@ async function updatePost(id: string, updatedAt: string, html: string): Promise<
     method: 'PUT',
     headers: {
       'Authorization': `Ghost ${token}`,
-      'Content-Type': 'application/json'
+      'Content-Type': 'application/json',
+      ...cfHeaders()
     },
     body: JSON.stringify({
       posts: [{

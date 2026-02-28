@@ -26,6 +26,17 @@ if (existsSync(envPath)) {
 
 const GHOST_URL = process.env.GHOST_URL || 'https://blog.escape-velocity-ventures.org';
 const GHOST_ADMIN_KEY = process.env.GHOST_ADMIN_KEY || '';
+const CF_ACCESS_CLIENT_ID = process.env.CF_ACCESS_CLIENT_ID || '';
+const CF_ACCESS_CLIENT_SECRET = process.env.CF_ACCESS_CLIENT_SECRET || '';
+
+function cfHeaders(): Record<string, string> {
+  const h: Record<string, string> = {};
+  if (CF_ACCESS_CLIENT_ID && CF_ACCESS_CLIENT_SECRET) {
+    h['CF-Access-Client-Id'] = CF_ACCESS_CLIENT_ID;
+    h['CF-Access-Client-Secret'] = CF_ACCESS_CLIENT_SECRET;
+  }
+  return h;
+}
 
 function generateToken(key: string): string {
   const [id, secret] = key.split(':');
@@ -43,7 +54,7 @@ async function getPostBySlug(slug: string): Promise<any> {
   const token = generateToken(GHOST_ADMIN_KEY);
   const url = `${GHOST_URL}/ghost/api/admin/posts/slug/${slug}/`;
   const response = await fetch(url, {
-    headers: { 'Authorization': `Ghost ${token}` }
+    headers: { 'Authorization': `Ghost ${token}`, ...cfHeaders() }
   });
   if (!response.ok) throw new Error(`Get post error: ${response.status}`);
   const result = await response.json();
@@ -57,7 +68,8 @@ async function updatePost(id: string, updatedAt: string, html: string): Promise<
     method: 'PUT',
     headers: {
       'Authorization': `Ghost ${token}`,
-      'Content-Type': 'application/json'
+      'Content-Type': 'application/json',
+      ...cfHeaders()
     },
     body: JSON.stringify({
       posts: [{

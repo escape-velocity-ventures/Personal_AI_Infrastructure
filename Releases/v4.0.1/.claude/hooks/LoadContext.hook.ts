@@ -32,7 +32,7 @@
  * - Skipped for subagents: Yes
  */
 
-import { readFileSync, existsSync, readdirSync } from 'fs';
+import { readFileSync, existsSync, readdirSync, lstatSync } from 'fs';
 import { join } from 'path';
 import { getPaiDir } from './lib/paths';
 import { recordSessionStart } from './lib/notifications';
@@ -433,6 +433,48 @@ async function checkActiveProgress(paiDir: string): Promise<string | null> {
   return summary;
 }
 
+// PM-046: Verify critical skills exist as real directories (not broken symlinks)
+function checkCriticalSkills(paiDir: string): void {
+  const criticalSkills = ['CORE', 'Infra'];
+  const skillsDir = join(paiDir, 'skills');
+  const warnings: string[] = [];
+
+  for (const skill of criticalSkills) {
+    const skillPath = join(skillsDir, skill);
+    if (!existsSync(skillPath)) {
+      warnings.push(`  ⚠️  Skill '${skill}' is MISSING at ${skillPath}`);
+      continue;
+    }
+
+    try {
+      const stat = lstatSync(skillPath);
+      if (stat.isSymbolicLink()) {
+        // Symlink — check if target exists
+        if (!existsSync(skillPath)) {
+          warnings.push(`  ⚠️  Skill '${skill}' is a BROKEN SYMLINK at ${skillPath}`);
+        }
+      } else if (stat.isDirectory()) {
+        // Real directory — check it has content
+        const files = readdirSync(skillPath);
+        if (files.length === 0) {
+          warnings.push(`  ⚠️  Skill '${skill}' directory is EMPTY at ${skillPath}`);
+        }
+      }
+    } catch {
+      warnings.push(`  ⚠️  Skill '${skill}' could not be checked at ${skillPath}`);
+    }
+  }
+
+  if (warnings.length > 0) {
+    console.error('\n🚨 [PAI] CRITICAL SKILL HEALTH CHECK FAILED:');
+    for (const w of warnings) {
+      console.error(w);
+    }
+    console.error('  Restore with: rsync -a ~/EscapeVelocity/TinkerBelle/skill/ ~/.claude/skills/Infra/');
+    console.error('');
+  }
+}
+
 async function main() {
   try {
     // Subagents don't need dynamic context injection
@@ -524,6 +566,9 @@ Dynamic context loaded. Core identity, rules, and format are in CLAUDE.md.
     } else {
       console.error('⏭️ Skipped active work summary (disabled)');
     }
+
+    // PM-046: Critical skill health check
+    checkCriticalSkills(paiDir);
 
     console.error('✅ PAI session initialization complete (v4.0)');
     process.exit(0);

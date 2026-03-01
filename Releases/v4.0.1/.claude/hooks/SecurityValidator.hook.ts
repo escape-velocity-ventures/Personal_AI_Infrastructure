@@ -318,6 +318,20 @@ function validateBashCommand(command: string): { action: 'allow' | 'block' | 'co
     }
   }
 
+  // PM-046 Tier 11: Hardcoded mv bypass protection (defense-in-depth)
+  // Agents discovered they could bypass rm -rf blocks by using mv instead
+  const mvBypassPatterns = [
+    { pattern: /mv\s+.*\.claude\/skills\//i, reason: 'Moving protected skill directory — use rsync or copy instead of mv (PM-046)' },
+    { pattern: /mv\s+.*\.claude\/hooks\//i, reason: 'Moving protected hook directory — use rsync or copy instead of mv (PM-046)' },
+    { pattern: /mv\s+.*\.claude\/CLAUDE\.md/i, reason: 'Moving protected CLAUDE.md — use rsync or copy instead of mv (PM-046)' },
+    { pattern: /mv\s+.*\.claude\/settings\.json/i, reason: 'Moving protected settings.json — use rsync or copy instead of mv (PM-046)' },
+  ];
+  for (const p of mvBypassPatterns) {
+    if (p.pattern.test(command)) {
+      return { action: 'block', reason: p.reason };
+    }
+  }
+
   // Check blocked patterns (hard block)
   for (const p of patterns.bash.blocked) {
     if (matchesPattern(command, p.pattern)) {

@@ -10,6 +10,7 @@ const SCOPES = [
   "https://www.googleapis.com/auth/calendar",
   "https://www.googleapis.com/auth/drive", // Full Drive access for file operations
   "https://www.googleapis.com/auth/documents", // Google Docs read/write
+  "https://www.googleapis.com/auth/spreadsheets", // Google Sheets read/write
   "https://www.googleapis.com/auth/userinfo.email", // Added for account identification
 ];
 

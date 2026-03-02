@@ -1,6 +1,12 @@
 #!/usr/bin/env bun
 /**
- * Voice Server - Personal AI Voice notification server using ElevenLabs TTS
+ * Voice Server - Personal AI Voice notification server
+ *
+ * TTS cascade (configurable via TTS_BACKEND env var):
+ *   1. Cluster Qwen3-TTS (network, 2s timeout)
+ *   2. Local Qwen3-TTS sidecar (localhost:8889, 5s timeout)
+ *   3. ElevenLabs API
+ *   4. macOS say (fallback)
  */
 
 import { serve } from "bun";
@@ -36,6 +42,84 @@ if (!ELEVENLABS_API_KEY) {
   console.error('Warning: ELEVENLABS_API_KEY not found in ~/.env');
   console.error('Voice server will use macOS say command as fallback');
   console.error('Add: ELEVENLABS_API_KEY=your_key_here to ~/.env');
+}
+
+// ==========================================================================
+// Qwen3-TTS Configuration
+// ==========================================================================
+
+// TTS backend selection: "auto" (default), "qwen3" (skip ElevenLabs), "elevenlabs" (skip Qwen3)
+const TTS_BACKEND = (process.env.TTS_BACKEND || 'auto') as 'auto' | 'qwen3' | 'elevenlabs';
+
+// Qwen3-TTS endpoints — cluster (network) and local sidecar
+const QWEN3_CLUSTER_URL = process.env.QWEN3_CLUSTER_URL || 'http://qwen3-tts.infrastructure.svc.cluster.local:8889';
+const QWEN3_LOCAL_URL = process.env.QWEN3_LOCAL_URL || 'http://localhost:8889';
+const QWEN3_CLUSTER_TIMEOUT = 2000;  // 2s — fail fast to local if cluster unreachable
+const QWEN3_LOCAL_TIMEOUT = 15000;   // 15s — MLX inference on Apple Silicon takes 2-8s depending on text length
+
+// Map ElevenLabs voice IDs to Qwen3 voice reference names
+const QWEN3_VOICE_MAP: Record<string, string> = {
+  // --- Primary voices ---
+  'odyUrTN5HMVKujvVAgWW': 'aurelia',     // Aurelia (DA)
+  'cgSgspJ2msm6clMCkdW9': 'tinkerbelle', // TinkerBelle
+
+  // --- Role-based voices (voices.json) ---
+  'bIHbv24MWmeRgasZH58o': 'will',        // Default/Assistant/Engineer/Security
+  'MClEFoImJXBTgLwdLI5n': 'researcher',  // Researcher/Architect/Designer/Writer
+  'M563YhMmA0S8vEYwkgYa': 'analyst',     // Analyst/Intern
+
+  // --- Named agent voices ---
+  'fTtv3eikoepIosk8dTZ5': 'vera',        // Vera Sterling (Algorithm)
+  'ZF6FPAbjXT4488VcRRnw': 'priya',       // Priya Desai (Artist + Designer)
+  'AXdMgz6evoL7OPd7eU12': 'ava',         // Ava Chen/Sterling (Researchers + QA)
+  '8xsdoepm9GrzPPzYsiLP': 'remy',        // Remy (CodexResearcher)
+  'iLVmqjzCGGvqtMCk6vVQ': 'marcus',     // Marcus Webb (Engineer + Gemini)
+  'fSw26yDDQPyodv5JgLow': 'johannes',    // Johannes (GrokResearcher)
+  // NOTE: serena (muZKMsIDGYtIkjjiUS82) and rook (xvHLFjaUEpx4BOf7EiDd)
+  // not cloned — ElevenLabs voices deleted/expired. They fall through to ElevenLabs API.
+};
+
+// Generate speech using Qwen3-TTS sidecar (returns WAV audio)
+async function generateSpeechQwen3(
+  text: string,
+  qwen3Voice: string,
+  baseUrl: string,
+  timeout: number,
+  speed: number = 1.0,
+): Promise<ArrayBuffer> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeout);
+
+  try {
+    const response = await fetch(`${baseUrl}/tts`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text, voice: qwen3Voice, speed }),
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Qwen3-TTS error: ${response.status} - ${errorText}`);
+    }
+
+    return await response.arrayBuffer();
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// Check if a Qwen3-TTS endpoint is healthy
+async function checkQwen3Health(baseUrl: string, timeout: number = 1500): Promise<boolean> {
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeout);
+    const response = await fetch(`${baseUrl}/health`, { signal: controller.signal });
+    clearTimeout(timer);
+    return response.ok;
+  } catch {
+    return false;
+  }
 }
 
 // Load DA identity from DAIDENTITY.md (single source of truth)
@@ -308,6 +392,22 @@ async function playAudio(audioBuffer: ArrayBuffer, requestVolume?: number): Prom
   });
 }
 
+// Play WAV audio using afplay (macOS) — for Qwen3-TTS output
+async function playAudioWav(audioBuffer: ArrayBuffer, requestVolume?: number): Promise<void> {
+  const tempFile = `/tmp/voice-${Date.now()}.wav`;
+  await Bun.write(tempFile, audioBuffer);
+  const volume = getVolumeSetting(requestVolume);
+
+  return new Promise((resolve, reject) => {
+    const proc = spawn('/usr/bin/afplay', ['-v', volume.toString(), tempFile]);
+    proc.on('error', (error) => { console.error('Error playing WAV:', error); reject(error); });
+    proc.on('exit', (code) => {
+      spawn('/bin/rm', [tempFile]);
+      code === 0 ? resolve() : reject(new Error(`afplay exited with code ${code}`));
+    });
+  });
+}
+
 // Use macOS say command as fallback
 async function speakWithSay(text: string): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -372,65 +472,82 @@ async function sendNotification(
   const safeTitle = titleValidation.sanitized!;
   let safeMessage = stripMarkers(messageValidation.sanitized!);
 
-  // Generate and play voice
+  // Generate and play voice using TTS cascade
   if (voiceEnabled) {
-    try {
-      if (ELEVENLABS_API_KEY) {
-        const voice = voiceId || DEFAULT_VOICE_ID;
+    const voice = voiceId || DEFAULT_VOICE_ID;
+    const spokenMessage = applyPronunciations(safeMessage);
+    const qwen3Voice = QWEN3_VOICE_MAP[voice];
 
-        // Get voice configuration (personality settings)
-        const voiceConfig = getVoiceConfig(voice);
+    // Resolve prosody for ElevenLabs (used as fallback)
+    const voiceConfigEntry = getVoiceConfig(voice);
+    let prosody: Partial<ProsodySettings> = {};
+    if (voiceConfigEntry) {
+      prosody = voiceConfigEntry.prosody ?? {
+        stability: voiceConfigEntry.stability,
+        similarity_boost: voiceConfigEntry.similarity_boost,
+        style: voiceConfigEntry.style ?? DEFAULT_PROSODY.style,
+        speed: voiceConfigEntry.speed ?? DEFAULT_PROSODY.speed,
+        use_speaker_boost: voiceConfigEntry.use_speaker_boost ?? DEFAULT_PROSODY.use_speaker_boost,
+      };
+    } else if (voice === DEFAULT_VOICE_ID && daVoiceProsody) {
+      prosody = daVoiceProsody;
+    }
+    if (requestProsody) {
+      prosody = { ...prosody, ...requestProsody };
+    }
+    const settings = { ...DEFAULT_PROSODY, ...prosody };
+    const volume = (prosody as any)?.volume ?? daVoiceProsody?.volume;
+    const speed = settings.speed ?? 1.0;
 
-        // Build prosody: request > voice config > DA config > defaults
-        let prosody: Partial<ProsodySettings> = {};
+    let played = false;
 
-        // First try voice config from AGENTPERSONALITIES.md
-        if (voiceConfig) {
-          if (voiceConfig.prosody) {
-            // New format: nested prosody object
-            prosody = voiceConfig.prosody;
-          } else {
-            // Legacy format: flat fields
-            prosody = {
-              stability: voiceConfig.stability,
-              similarity_boost: voiceConfig.similarity_boost,
-              style: voiceConfig.style ?? DEFAULT_PROSODY.style,
-              speed: voiceConfig.speed ?? DEFAULT_PROSODY.speed,
-              use_speaker_boost: voiceConfig.use_speaker_boost ?? DEFAULT_PROSODY.use_speaker_boost,
-            };
-          }
-          console.log(`Voice: ${voiceConfig.description}`);
-        } else if (voice === DEFAULT_VOICE_ID && daVoiceProsody) {
-          // Using DA's default voice - use prosody from settings.json
-          prosody = daVoiceProsody;
-          console.log(`Voice: DA default`);
-        }
+    // --- Tier 1: Cluster Qwen3-TTS (network) ---
+    if (!played && qwen3Voice && TTS_BACKEND !== 'elevenlabs') {
+      try {
+        console.log(`[Tier 1] Cluster Qwen3-TTS: voice=${qwen3Voice}, speed=${speed}`);
+        const wavBuffer = await generateSpeechQwen3(spokenMessage, qwen3Voice, QWEN3_CLUSTER_URL, QWEN3_CLUSTER_TIMEOUT, speed);
+        await playAudioWav(wavBuffer, volume);
+        played = true;
+        console.log(`[Tier 1] Success — cluster Qwen3-TTS`);
+      } catch (err: any) {
+        console.log(`[Tier 1] Cluster Qwen3-TTS unavailable: ${err.message?.substring(0, 80)}`);
+      }
+    }
 
-        // Request prosody overrides config prosody
-        if (requestProsody) {
-          prosody = { ...prosody, ...requestProsody };
-          console.log(`Using request prosody overrides`);
-        }
+    // --- Tier 2: Local Qwen3-TTS sidecar ---
+    if (!played && qwen3Voice && TTS_BACKEND !== 'elevenlabs') {
+      try {
+        console.log(`[Tier 2] Local Qwen3-TTS: voice=${qwen3Voice}, speed=${speed}`);
+        const wavBuffer = await generateSpeechQwen3(spokenMessage, qwen3Voice, QWEN3_LOCAL_URL, QWEN3_LOCAL_TIMEOUT, speed);
+        await playAudioWav(wavBuffer, volume);
+        played = true;
+        console.log(`[Tier 2] Success — local Qwen3-TTS`);
+      } catch (err: any) {
+        console.log(`[Tier 2] Local Qwen3-TTS failed: ${err.message?.substring(0, 80)}`);
+      }
+    }
 
-        const settings = { ...DEFAULT_PROSODY, ...prosody };
-        const volume = (prosody as any)?.volume ?? daVoiceProsody?.volume;
-        console.log(`Generating speech (voice: ${voice}, stability: ${settings.stability}, style: ${settings.style}, speed: ${settings.speed}, volume: ${volume ?? 1.0})`);
-
-        const spokenMessage = applyPronunciations(safeMessage);
+    // --- Tier 3: ElevenLabs API ---
+    if (!played && ELEVENLABS_API_KEY && TTS_BACKEND !== 'qwen3') {
+      try {
+        console.log(`[Tier 3] ElevenLabs: voice=${voice}, speed=${speed}, stability=${settings.stability}`);
         const audioBuffer = await generateSpeech(spokenMessage, voice, prosody);
         await playAudio(audioBuffer, volume);
-      } else {
-        // Fallback to macOS say
-        console.log('Using macOS say (no API key)');
-        await speakWithSay(applyPronunciations(safeMessage));
+        played = true;
+        console.log(`[Tier 3] Success — ElevenLabs`);
+      } catch (err: any) {
+        console.error(`[Tier 3] ElevenLabs failed: ${err.message?.substring(0, 80)}`);
       }
-    } catch (error) {
-      console.error("Failed to generate/play speech:", error);
-      // Try fallback to say command
+    }
+
+    // --- Tier 4: macOS say (last resort) ---
+    if (!played) {
       try {
-        await speakWithSay(applyPronunciations(safeMessage));
+        console.log(`[Tier 4] macOS say fallback`);
+        await speakWithSay(spokenMessage);
+        played = true;
       } catch (sayError) {
-        console.error("Fallback say also failed:", sayError);
+        console.error("[Tier 4] macOS say also failed:", sayError);
       }
     }
   }
@@ -569,13 +686,24 @@ const server = serve({
     }
 
     if (url.pathname === "/health") {
+      const [clusterHealthy, localHealthy] = await Promise.all([
+        checkQwen3Health(QWEN3_CLUSTER_URL),
+        checkQwen3Health(QWEN3_LOCAL_URL),
+      ]);
+
       return new Response(
         JSON.stringify({
           status: "healthy",
           port: PORT,
-          voice_system: ELEVENLABS_API_KEY ? "ElevenLabs" : "macOS Say",
+          tts_backend: TTS_BACKEND,
+          tts_cascade: [
+            { tier: 1, name: "cluster-qwen3", url: QWEN3_CLUSTER_URL, available: clusterHealthy },
+            { tier: 2, name: "local-qwen3", url: QWEN3_LOCAL_URL, available: localHealthy },
+            { tier: 3, name: "elevenlabs", available: !!ELEVENLABS_API_KEY },
+            { tier: 4, name: "macos-say", available: true },
+          ],
           default_voice_id: DEFAULT_VOICE_ID,
-          api_key_configured: !!ELEVENLABS_API_KEY
+          qwen3_voices: Object.values(QWEN3_VOICE_MAP),
         }),
         {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -592,7 +720,17 @@ const server = serve({
 });
 
 console.log(`Voice Server running on port ${PORT}`);
-console.log(`Using ${ELEVENLABS_API_KEY ? 'ElevenLabs' : 'macOS Say'} TTS (default voice: ${DEFAULT_VOICE_ID})`);
+console.log(`TTS backend: ${TTS_BACKEND}`);
+console.log(`TTS cascade: cluster-qwen3 → local-qwen3 → elevenlabs → macos-say`);
+console.log(`Qwen3 cluster: ${QWEN3_CLUSTER_URL}`);
+console.log(`Qwen3 local: ${QWEN3_LOCAL_URL}`);
+console.log(`Qwen3 voices: ${Object.values(QWEN3_VOICE_MAP).join(', ')}`);
+console.log(`ElevenLabs: ${ELEVENLABS_API_KEY ? 'configured' : 'not configured'}`);
+console.log(`Default voice: ${DEFAULT_VOICE_ID}`);
 console.log(`POST to http://localhost:${PORT}/notify`);
-console.log(`Security: CORS restricted to localhost, rate limiting enabled`);
-console.log(`API Key: ${ELEVENLABS_API_KEY ? 'Configured' : 'Not configured (using fallback)'}`);
+
+// Check Qwen3-TTS availability at startup (non-blocking)
+Promise.all([
+  checkQwen3Health(QWEN3_CLUSTER_URL).then(ok => console.log(`Qwen3 cluster: ${ok ? 'reachable' : 'unreachable'}`)),
+  checkQwen3Health(QWEN3_LOCAL_URL).then(ok => console.log(`Qwen3 local: ${ok ? 'reachable' : 'unreachable'}`)),
+]);

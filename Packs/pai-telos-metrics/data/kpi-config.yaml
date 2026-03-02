@@ -41,10 +41,24 @@ kpis:
     frequency: daily
     unit: commits
 
+  - id: features_shipped
+    name: Features Shipped
+    description: New capabilities added to PAI or related tools
+    goal_ref: G2
+    type: counter
+    target: 3
+    frequency: weekly
+    unit: features
+
+  # ===========================================================================
+  # Second Stage Goals (G6, G7, G8)
+  # ===========================================================================
+
+  # G6: Build the second stage - tools that take prototypes to production
   - id: tinkerbelle_commits
     name: TinkerBelle Commits
     description: Commits to TinkerBelle infrastructure repo
-    goal_ref: G2
+    goal_ref: G6
     type: counter
     target: 3
     frequency: daily
@@ -54,7 +68,7 @@ kpis:
   - id: tinkerbelle_modules
     name: TinkerBelle Modules
     description: New Terraform modules created
-    goal_ref: G2
+    goal_ref: G6
     type: counter
     target: 1
     frequency: weekly
@@ -64,20 +78,95 @@ kpis:
   - id: infra_deployments
     name: Infrastructure Deployments
     description: Successful terraform applies
-    goal_ref: G2
+    goal_ref: G6
     type: counter
     target: 2
     frequency: weekly
     unit: deployments
 
-  - id: features_shipped
-    name: Features Shipped
-    description: New capabilities added to PAI or related tools
-    goal_ref: G2
+  - id: second_stage_tools
+    name: Second Stage Tools
+    description: Tools shipped that bridge prototype to production
+    goal_ref: G6
     type: counter
-    target: 3
+    target: 1
+    frequency: weekly
+    unit: tools
+
+  # G7: Lower barriers for non-technical users
+  - id: cluster_features
+    name: Cluster Features
+    description: Distinct capabilities added to the turnkey cluster template (TinkerBelle-config). Each represents something a SaaS customer would get out-of-the-box — monitoring, secret management, auto-upgrades, DHCP sync, etc. TinkerBelle SaaS delivers this as a one-click deploy to AWS/GCP/Azure/bare-metal.
+    goal_ref: G7
+    type: counter
+    target: 2
     frequency: weekly
     unit: features
+    repo: escape-velocity-ventures/TinkerBelle-config
+
+  - id: cluster_stability
+    name: Cluster Stability
+    description: Log true each day the cluster runs without unplanned incidents. Track as a streak — early on it resets often (that's fine), over time the streak should grow. A reset means the product has a bug. Anti-goal — this should trend toward infinite. A stable cluster is what makes TinkerBelle SaaS viable for non-technical users.
+    goal_ref: G7
+    type: boolean
+    target: true
+    frequency: daily
+
+  - id: harmony_commits
+    name: Harmony Assistant Commits
+    description: Commits to Harmony Assistant — a virtual AI receptionist and the user-facing product that non-technical users interact with first. Serves as the front door to the platform.
+    goal_ref: G7
+    type: counter
+    target: 3
+    frequency: daily
+    unit: commits
+    repo: escape-velocity-ventures/harmony-assistant
+
+  - id: non_technical_demos
+    name: Non-Technical Demos
+    description: Demos given to non-technical friends showing what's possible
+    goal_ref: G7
+    type: counter
+    target: 1
+    frequency: weekly
+    unit: demos
+
+  - id: users_launched
+    name: Users Launched
+    description: People who successfully launched something with your help
+    goal_ref: G7
+    type: counter
+    target: 1
+    frequency: monthly
+    unit: users
+
+  - id: natural_language_infra
+    name: Natural Language Infra
+    description: Infrastructure operations completed via AI conversation
+    goal_ref: G7
+    type: counter
+    target: 5
+    frequency: daily
+    unit: operations
+
+  # G8: Reduce adjacent work
+  - id: complexity_abstracted
+    name: Complexity Abstracted
+    description: Automation that removes adjacent work for users
+    goal_ref: G8
+    type: counter
+    target: 1
+    frequency: weekly
+    unit: automations
+
+  - id: business_ops_automated
+    name: Business Ops Automated
+    description: Customer mgmt, accounting, marketing, IT tasks automated
+    goal_ref: G8
+    type: counter
+    target: 2
+    frequency: weekly
+    unit: tasks
 
   - id: deep_work_hours
     name: Deep Work Hours

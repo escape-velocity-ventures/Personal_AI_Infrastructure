@@ -341,9 +341,10 @@ async function main() {
         const kpiIndex = args.indexOf("--kpi");
         const valueIndex = args.indexOf("--value");
         const noteIndex = args.indexOf("--note");
+        const dateIndex = args.indexOf("--date");
 
         if (kpiIndex === -1 || valueIndex === -1) {
-          console.error("Usage: log --kpi <id> --value <n> [--note \"...\"]");
+          console.error("Usage: log --kpi <id> --value <n> [--note \"...\"] [--date YYYY-MM-DD]");
           process.exit(1);
         }
 
@@ -352,8 +353,10 @@ async function main() {
                       args[valueIndex + 1] === "false" ? false :
                       parseFloat(args[valueIndex + 1]);
         const note = noteIndex !== -1 ? args[noteIndex + 1] : undefined;
+        const dateStr = dateIndex !== -1 ? args[dateIndex + 1] : undefined;
+        const timestamp = dateStr ? new Date(`${dateStr}T12:00:00`) : undefined;
 
-        const entry = logMetric(kpiId, value, note);
+        const entry = logMetric(kpiId, value, note, timestamp);
         console.log("Logged:", JSON.stringify(entry, null, 2));
         break;
       }

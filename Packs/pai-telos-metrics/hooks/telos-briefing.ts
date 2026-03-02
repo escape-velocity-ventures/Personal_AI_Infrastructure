@@ -2,34 +2,34 @@
 /**
  * telos-briefing.ts - SessionStart hook for TELOS Metrics
  *
- * Displays daily alignment briefing at session start.
- * Shows KPI progress, streaks, and focus suggestions.
+ * Displays unified daily briefing at session start:
+ * - TELOS KPI progress, streaks, and focus suggestions
+ * - YouTube Digest: TELOS-aligned videos from subscribed channels
+ * - Info Hygiene: Competing narratives from balanced news sources
  */
 
 import { join, dirname } from "path";
 import { homedir } from "os";
 import { existsSync, readFileSync } from "fs";
 import { parse as parseYaml } from "yaml";
+import { Database } from "bun:sqlite";
 
 // Dynamic import for gastown-bridge (may not exist on all machines)
-let shouldRunSafe: (options: { feature: string }) => Promise<{ shouldRun: boolean; reason: string }>;
-let initBridge: () => Promise<boolean>;
+let shouldRunFn: (options: { feature: string }) => { shouldRun: boolean; reason: string };
 
-async function loadBridge() {
+async function loadBridge(): Promise<boolean> {
   const bridgePath = join(homedir(), 'EscapeVelocity/PersonalAI/PAI/Packs/pai-gastown-bridge/src');
   if (existsSync(bridgePath)) {
     try {
       const mod = await import(bridgePath);
-      shouldRunSafe = mod.shouldRunSafe;
-      initBridge = mod.initBridge;
+      shouldRunFn = mod.shouldRun;
       return true;
     } catch {
       // Fall through
     }
   }
   // Fallback: always allow
-  shouldRunSafe = async () => ({ shouldRun: true, reason: 'bridge-unavailable' });
-  initBridge = async () => false;
+  shouldRunFn = () => ({ shouldRun: true, reason: 'bridge-unavailable' });
   return false;
 }
 
@@ -46,6 +46,13 @@ const PAI_DIR = process.env.PAI_DIR || join(homedir(), ".claude");
 const CONFIG_PATH = join(PACK_DIR, "data", "kpi-config.yaml");
 const METRICS_PATH = join(PACK_DIR, "data", "metrics.jsonl");
 const TELOS_PATH = join(PAI_DIR, "skills", "CORE", "USER", "TELOS.md");
+
+// YouTube Digest paths
+const YOUTUBE_DIGEST_DIR = join(PAI_DIR, "MEMORY", "youtube-digest");
+const YOUTUBE_DB_PATH = join(YOUTUBE_DIGEST_DIR, "youtube.db");
+
+// Info Hygiene paths
+const INFO_HYGIENE_DB_PATH = join(homedir(), ".cache/pai-info-hygiene/hygiene.db");
 
 // Removed isSubagentSession() - now using shouldRun() from pai-gastown-bridge
 
@@ -122,6 +129,97 @@ function calculateStreak(kpiId: string, metrics: MetricEntry[], target: number):
   return streak;
 }
 
+// Get YouTube Digest summary (TELOS-aligned videos from today/yesterday)
+function getYouTubeDigestSummary(): string | null {
+  if (!existsSync(YOUTUBE_DB_PATH)) return null;
+
+  try {
+    const db = new Database(YOUTUBE_DB_PATH, { readonly: true });
+
+    // Get TELOS-aligned videos from last 2 days
+    const videos = db.prepare(`
+      SELECT title, channel, g1_score, g2_score, telos_tags, takeaway
+      FROM videos
+      WHERE telos_aligned = 1
+        AND processed_at > datetime('now', '-2 days')
+      ORDER BY (g1_score + g2_score) DESC
+      LIMIT 5
+    `).all() as Array<{
+      title: string;
+      channel: string;
+      g1_score: number;
+      g2_score: number;
+      telos_tags: string;
+      takeaway: string | null;
+    }>;
+
+    db.close();
+
+    if (videos.length === 0) return null;
+
+    let output = `\n📺 **YouTube Digest** (${videos.length} TELOS-aligned)\n`;
+    for (const v of videos.slice(0, 3)) {
+      const tags = JSON.parse(v.telos_tags || '[]').join(' ');
+      output += `• ${v.channel}: ${v.title.substring(0, 50)}${v.title.length > 50 ? '...' : ''} ${tags}\n`;
+    }
+    if (videos.length > 3) {
+      output += `  (+${videos.length - 3} more in digest)\n`;
+    }
+
+    return output;
+  } catch {
+    return null;
+  }
+}
+
+// Get Info Hygiene summary (competing narratives)
+function getInfoHygieneSummary(): string | null {
+  if (!existsSync(INFO_HYGIENE_DB_PATH)) return null;
+
+  try {
+    const db = new Database(INFO_HYGIENE_DB_PATH, { readonly: true });
+
+    // Get article count by bias from last 24 hours
+    const biasCounts = db.prepare(`
+      SELECT bias, COUNT(*) as cnt
+      FROM articles
+      WHERE published_at > datetime('now', '-24 hours')
+      GROUP BY bias
+      ORDER BY
+        CASE bias
+          WHEN 'left' THEN 1
+          WHEN 'lean-left' THEN 2
+          WHEN 'center' THEN 3
+          WHEN 'lean-right' THEN 4
+          WHEN 'right' THEN 5
+        END
+    `).all() as Array<{ bias: string; cnt: number }>;
+
+    const totalArticles = biasCounts.reduce((sum, b) => sum + b.cnt, 0);
+
+    db.close();
+
+    if (totalArticles === 0) return null;
+
+    // Format bias breakdown compactly
+    const biasEmoji: Record<string, string> = {
+      'left': '◀◀',
+      'lean-left': '◀',
+      'center': '●',
+      'lean-right': '▶',
+      'right': '▶▶'
+    };
+
+    const breakdown = biasCounts
+      .map(b => `${biasEmoji[b.bias] || '?'}${b.cnt}`)
+      .join(' ');
+
+    return `\n📰 **Info Hygiene** (${totalArticles} articles): ${breakdown}\n`;
+  } catch {
+    return null;
+  }
+}
+
 function generateCompactBriefing(): string {
   const config = loadConfig();
   if (!config) {
@@ -186,6 +284,18 @@ function generateCompactBriefing(): string {
     }
   }
 
+  // Add YouTube Digest summary
+  const youtubeSummary = getYouTubeDigestSummary();
+  if (youtubeSummary) {
+    output += youtubeSummary;
+  }
+
+  // Add Info Hygiene summary
+  const infoHygieneSummary = getInfoHygieneSummary();
+  if (infoHygieneSummary) {
+    output += infoHygieneSummary;
+  }
+
   return output;
 }
 
@@ -193,8 +303,7 @@ async function main() {
   try {
     // Load bridge and check if telos feature should run
     await loadBridge();
-    await initBridge();
-    const runResult = await shouldRunSafe({ feature: 'telos' });
+    const runResult = shouldRunFn({ feature: 'telos' });
     if (!runResult.shouldRun) {
       process.exit(0);
     }
@@ -218,9 +327,7 @@ async function main() {
     // Output as system-reminder
     const output = `<system-reminder>
 ${briefing}
-
-Use \`bun run ${PACK_DIR}/src/tools/DailyBriefing.ts\` for full briefing.
-Use \`bun run ${PACK_DIR}/src/tools/MetricsLogger.ts log --kpi <id> --value <n>\` to log metrics.
+Commands: "daily briefing" for details | "YouTube digest" for videos | "news briefing" for narratives
 </system-reminder>`;
 
     console.log(output);

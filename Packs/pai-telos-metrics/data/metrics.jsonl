@@ -75,3 +75,31 @@
 {"timestamp":"2026-01-23T22:57:41.354Z","kpi_id":"infra_deployments","value":2,"goal_ref":"G2","machine":"MacBook-Air-L4V6F20KQ6"}
 {"timestamp":"2026-01-24T00:47:01.542Z","kpi_id":"tinkerbelle_commits","value":1,"goal_ref":"G2","machine":"MacBook-Air-L4V6F20KQ6"}
 {"timestamp":"2026-01-24T00:48:56.638Z","kpi_id":"features_shipped","value":1,"goal_ref":"G2","machine":"MacBook-Air-L4V6F20KQ6"}
+{"timestamp":"2026-02-09T22:38:23.208Z","kpi_id":"tinkerbelle_commits","value":3,"goal_ref":"G6","machine":"MacBook-Air-L4V6F20KQ6","note":"Phase 6 DHCP reservations, Phase 7a/b IPAM validate+map, Phase 7d/e allocate+import"}
+{"timestamp":"2026-02-09T22:41:25.216Z","kpi_id":"pai_commits","value":4,"goal_ref":"G2","machine":"MacBook-Air-L4V6F20KQ6","note":"content-cli sync modes, POSTMORTEM_DIR env var, ghost-blog multi-audience adaptation, tb-ops CLI rename refs"}
+{"timestamp":"2026-02-09T22:51:55.144Z","kpi_id":"cluster_features","value":5,"goal_ref":"G6","machine":"MacBook-Air-L4V6F20KQ6","note":"ESO/1Password Connect, k3s auto-upgrades (SUC), Mimir meta-monitoring alerts, Ghost 5xx error alerts, tb-net Prometheus exporter"}
+{"timestamp":"2026-02-09T22:51:57.286Z","kpi_id":"cluster_stability","value":false,"goal_ref":"G6","machine":"MacBook-Air-L4V6F20KQ6","note":"3 incidents resolved today (PM-024 Ghost DB auth, PM-025 Ghost 5xx alerts, PM-026 Mimir blind spot) — streak starts tomorrow"}
+{"timestamp":"2026-02-03T18:00:00.000Z","kpi_id":"tinkerbelle_commits","value":111,"goal_ref":"G6","machine":"MacBook-Air-L4V6F20KQ6","note":"SaaS extract, SPA deploy, monitoring agents, Supabase provisioning"}
+{"timestamp":"2026-02-03T18:00:00.000Z","kpi_id":"cluster_features","value":3,"goal_ref":"G7","machine":"MacBook-Air-L4V6F20KQ6","note":"SaaS image tag policy, staging ExposedService, kubernetes-vip multi-VIP"}
+{"timestamp":"2026-02-04T18:00:00.000Z","kpi_id":"tinkerbelle_commits","value":6,"goal_ref":"G6","machine":"MacBook-Air-L4V6F20KQ6","note":"Bootstrap pipeline, Supabase secrets, exposure DNS reconciliation"}
+{"timestamp":"2026-02-04T18:00:00.000Z","kpi_id":"cluster_features","value":4,"goal_ref":"G7","machine":"MacBook-Air-L4V6F20KQ6","note":"Guacamole VDI+Zero Trust, K8s dashboard, monitoring dedup, bootstrap configs"}
+{"timestamp":"2026-02-04T18:00:00.000Z","kpi_id":"harmony_commits","value":3,"goal_ref":"G7","machine":"MacBook-Air-L4V6F20KQ6","note":"Calendar integration, CPU limits, build cleanup"}
+{"timestamp":"2026-02-05T18:00:00.000Z","kpi_id":"tinkerbelle_commits","value":2,"goal_ref":"G6","machine":"MacBook-Air-L4V6F20KQ6","note":"Mutable tag elimination, Cloudflare cache purge"}
+{"timestamp":"2026-02-05T18:00:00.000Z","kpi_id":"harmony_commits","value":15,"goal_ref":"G7","machine":"MacBook-Air-L4V6F20KQ6","note":"Rekey-profile fixes, calendar timezone, cutover"}
+{"timestamp":"2026-02-05T18:00:00.000Z","kpi_id":"content_published","value":1,"goal_ref":"G1","machine":"MacBook-Air-L4V6F20KQ6","note":"PAI installation guide + initial blog import"}
+{"timestamp":"2026-02-06T18:00:00.000Z","kpi_id":"tinkerbelle_commits","value":42,"goal_ref":"G6","machine":"MacBook-Air-L4V6F20KQ6","note":"Slack agent, blue-green ConfigMap, exposure reconciler, K8s-native bootstrap"}
+{"timestamp":"2026-02-06T18:00:00.000Z","kpi_id":"cluster_features","value":5,"goal_ref":"G7","machine":"MacBook-Air-L4V6F20KQ6","note":"PAI state blue-green, Slack bot exposure, MinIO scrape+alerts, Loki WAL, Prometheus external health"}
+{"timestamp":"2026-02-06T18:00:00.000Z","kpi_id":"pai_commits","value":3,"goal_ref":"G2","machine":"MacBook-Air-L4V6F20KQ6","note":"PAI state: node affinity, blue-green manifests, TinkerBelle deployment config"}
+{"timestamp":"2026-02-06T18:00:00.000Z","kpi_id":"harmony_commits","value":10,"goal_ref":"G7","machine":"MacBook-Air-L4V6F20KQ6","note":"MSH pipeline, PM-018 manifest validation, cross-repo standardization, RBAC"}
+{"timestamp":"2026-02-06T18:00:00.000Z","kpi_id":"content_published","value":2,"goal_ref":"G1","machine":"MacBook-Air-L4V6F20KQ6","note":"Blog #31 Million-Dollar Business, PM-024 blue-green drift"}
+{"timestamp":"2026-02-07T18:00:00.000Z","kpi_id":"cluster_features","value":4,"goal_ref":"G7","machine":"MacBook-Air-L4V6F20KQ6","note":"Flux CD Phase 2-3, kube-vip HA failover, Mimir read/write split, Loki 90d retention"}
+{"timestamp":"2026-02-07T18:00:00.000Z","kpi_id":"harmony_commits","value":3,"goal_ref":"G7","machine":"MacBook-Air-L4V6F20KQ6","note":"Cache purge fix, MSH removal, jq emoji fix"}
+{"timestamp":"2026-02-07T18:00:00.000Z","kpi_id":"cluster_stability","value":false,"goal_ref":"G7","machine":"MacBook-Air-L4V6F20KQ6","note":"PM-022 Flux OOM, PM-025 Mimir compaction, PM-026 kube-vip failover"}
+{"timestamp":"2026-02-08T18:00:00.000Z","kpi_id":"tinkerbelle_commits","value":14,"goal_ref":"G6","machine":"MacBook-Air-L4V6F20KQ6","note":"Slack bot CI, alerts tool, tb-ops rename, tb-net Phases 1-7"}
+{"timestamp":"2026-02-08T18:00:00.000Z","kpi_id":"cluster_features","value":5,"goal_ref":"G7","machine":"MacBook-Air-L4V6F20KQ6","note":"ESO/1Password Connect, k3s auto-upgrades, Ghost readiness probe, Ghost 5xx alerts, tb-net exporter"}
+{"timestamp":"2026-02-08T18:00:00.000Z","kpi_id":"pai_commits","value":4,"goal_ref":"G2","machine":"MacBook-Air-L4V6F20KQ6","note":"content-cli sync, POSTMORTEM_DIR, ghost-blog multi-audience, tb-ops rename"}
+{"timestamp":"2026-02-08T18:00:00.000Z","kpi_id":"harmony_commits","value":1,"goal_ref":"G7","machine":"MacBook-Air-L4V6F20KQ6","note":"tb-ops rename refs"}
+{"timestamp":"2026-02-08T18:00:00.000Z","kpi_id":"content_published","value":2,"goal_ref":"G1","machine":"MacBook-Air-L4V6F20KQ6","note":"Blog #32 Vibe Coding, PM-022/023/024 postmortems"}
+{"timestamp":"2026-02-08T18:00:00.000Z","kpi_id":"cluster_stability","value":false,"goal_ref":"G7","machine":"MacBook-Air-L4V6F20KQ6","note":"PM-024 Ghost DB auth failure resolved"}
+{"timestamp":"2026-02-09T22:57:50.648Z","kpi_id":"harmony_commits","value":2,"goal_ref":"G7","machine":"MacBook-Air-L4V6F20KQ6","note":"tb-ops rename, merge main"}
+{"timestamp":"2026-02-09T22:57:50.697Z","kpi_id":"content_published","value":1,"goal_ref":"G1","machine":"MacBook-Air-L4V6F20KQ6","note":"Postmortem migration to TinkerBelle-config, PM numbering fixes"}

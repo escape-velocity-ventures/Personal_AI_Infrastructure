@@ -103,3 +103,7 @@
 {"timestamp":"2026-02-08T18:00:00.000Z","kpi_id":"cluster_stability","value":false,"goal_ref":"G7","machine":"MacBook-Air-L4V6F20KQ6","note":"PM-024 Ghost DB auth failure resolved"}
 {"timestamp":"2026-02-09T22:57:50.648Z","kpi_id":"harmony_commits","value":2,"goal_ref":"G7","machine":"MacBook-Air-L4V6F20KQ6","note":"tb-ops rename, merge main"}
 {"timestamp":"2026-02-09T22:57:50.697Z","kpi_id":"content_published","value":1,"goal_ref":"G1","machine":"MacBook-Air-L4V6F20KQ6","note":"Postmortem migration to TinkerBelle-config, PM numbering fixes"}
+{"timestamp":"2026-02-23T12:00:00.000Z","kpi_id":"steps_count","value":1077,"goal_ref":"G3","source":"health_auto_export"}
+{"timestamp":"2026-02-24T12:00:00.000Z","kpi_id":"steps_count","value":427,"goal_ref":"G3","source":"health_auto_export"}
+{"timestamp":"2026-02-27T12:00:00.000Z","kpi_id":"steps_count","value":74,"goal_ref":"G3","source":"health_auto_export"}
+{"timestamp":"2026-02-28T12:00:00.000Z","kpi_id":"steps_count","value":408,"goal_ref":"G3","source":"health_auto_export"}

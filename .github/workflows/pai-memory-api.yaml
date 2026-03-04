@@ -1,0 +1,18 @@
+name: Build pai-memory-api
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'Packs/pai-memory/**'
+  workflow_dispatch:
+
+jobs:
+  build:
+    uses: escape-velocity-ventures/TinkerBelle/.github/workflows/reusable-container-build.yml@main
+    with:
+      image-name: pai-memory-api
+      context: Packs/pai-memory
+      dockerfile: Packs/pai-memory/Dockerfile
+    secrets:
+      github-token: ${{ secrets.GITHUB_TOKEN }}

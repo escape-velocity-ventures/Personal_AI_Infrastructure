@@ -14,5 +14,4 @@ jobs:
       image-name: pai-memory-api
       context: Packs/pai-memory
       dockerfile: Packs/pai-memory/Dockerfile
-    secrets:
-      github-token: ${{ secrets.GITHUB_TOKEN }}
+    secrets: inherit

@@ -10,7 +10,7 @@ on:
 
 jobs:
   build:
-    uses: escape-velocity-ventures/TinkerBelle/.github/workflows/reusable-container-build.yml@main
+    uses: escape-velocity-ventures/workflow-templates/.github/workflows/reusable-container-build.yml@main
     with:
       image-name: pai-memory-api
       context: Packs/pai-memory

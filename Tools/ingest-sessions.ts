@@ -27,6 +27,7 @@ const DEFAULT_PROJECTS_DIR = `${process.env.HOME}/.claude/projects`;
 
 const args = Bun.argv.slice(2);
 const dryRun = args.includes('--dry-run');
+const singleFile = args.find(a => a.startsWith('--file='))?.split('=')[1];
 const projectsDir = args.find(a => a.startsWith('--dir='))?.split('=')[1] ?? DEFAULT_PROJECTS_DIR;
 const machineId = args.find(a => a.startsWith('--machine='))?.split('=')[1] ?? process.env.HOSTNAME ?? 'unknown';
 const agentId = args.find(a => a.startsWith('--agent='))?.split('=')[1] ?? 'main';
@@ -208,29 +209,36 @@ async function main() {
   );
   const ingestedPaths = new Set(ingested.rows.map(r => r.source_path));
 
-  // Find all .jsonl files under projects dir
-  const jsonlFiles: string[] = [];
-  const projectDirs = await readdir(projectsDir).catch(() => [] as string[]);
+  // Single-file mode (--file=<path>) — used by the Stop hook
+  let newFiles: string[];
+  if (singleFile) {
+    newFiles = ingestedPaths.has(singleFile) ? [] : [singleFile];
+    console.log(`📄 Single file mode: ${singleFile}${newFiles.length === 0 ? ' (already ingested)' : ''}`);
+  } else {
+    // Find all .jsonl files under projects dir
+    const jsonlFiles: string[] = [];
+    const projectDirs = await readdir(projectsDir).catch(() => [] as string[]);
 
-  for (const proj of projectDirs) {
-    const projPath = join(projectsDir, proj);
-    const projStat = await stat(projPath).catch(() => null);
-    if (!projStat?.isDirectory()) continue;
+    for (const proj of projectDirs) {
+      const projPath = join(projectsDir, proj);
+      const projStat = await stat(projPath).catch(() => null);
+      if (!projStat?.isDirectory()) continue;
 
-    const files = await readdir(projPath).catch(() => [] as string[]);
-    for (const f of files) {
-      if (f.endsWith('.jsonl')) jsonlFiles.push(join(projPath, f));
+      const files = await readdir(projPath).catch(() => [] as string[]);
+      for (const f of files) {
+        if (f.endsWith('.jsonl')) jsonlFiles.push(join(projPath, f));
+      }
     }
-  }
 
-  // Also check top-level .jsonl files
-  const rootFiles = await readdir(projectsDir).catch(() => [] as string[]);
-  for (const f of rootFiles) {
-    if (f.endsWith('.jsonl')) jsonlFiles.push(join(projectsDir, f));
-  }
+    // Also check top-level .jsonl files
+    const rootFiles = await readdir(projectsDir).catch(() => [] as string[]);
+    for (const f of rootFiles) {
+      if (f.endsWith('.jsonl')) jsonlFiles.push(join(projectsDir, f));
+    }
 
-  const newFiles = jsonlFiles.filter(f => !ingestedPaths.has(f));
-  console.log(`📂 Found ${jsonlFiles.length} session files | ${newFiles.length} new`);
+    newFiles = jsonlFiles.filter(f => !ingestedPaths.has(f));
+    console.log(`📂 Found ${jsonlFiles.length} session files | ${newFiles.length} new`);
+  }
 
   if (newFiles.length === 0) {
     console.log('✅ Nothing new to ingest.');

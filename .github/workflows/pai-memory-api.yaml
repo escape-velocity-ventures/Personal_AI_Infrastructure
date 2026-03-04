@@ -1,5 +1,21 @@
 name: Build pai-memory-api
 
+# NOTE: This workflow inlines the build steps rather than calling
+# escape-velocity-ventures/TinkerBelle/.github/workflows/reusable-container-build.yml
+# directly. Cross-repo reusable workflow calls require an org-level setting:
+#   escape-velocity-ventures org → Settings → Actions → General →
+#   "Allow reusable workflows from private repositories"
+# TinkerBelle repo access_level is already set to 'organization'.
+# Once the org setting is enabled, replace jobs.build with:
+#
+#   build:
+#     uses: escape-velocity-ventures/TinkerBelle/.github/workflows/reusable-container-build.yml@main
+#     with:
+#       image-name: pai-memory-api
+#       context: Packs/pai-memory
+#       dockerfile: Packs/pai-memory/Dockerfile
+#     secrets: inherit
+
 on:
   push:
     branches: [main]
@@ -8,11 +24,51 @@ on:
       - '.github/workflows/pai-memory-api.yaml'
   workflow_dispatch:
 
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: escape-velocity-ventures/pai-memory-api
+
 jobs:
-  build:
-    uses: escape-velocity-ventures/TinkerBelle/.github/workflows/reusable-container-build.yml@main
-    with:
-      image-name: pai-memory-api
-      context: Packs/pai-memory
-      dockerfile: Packs/pai-memory/Dockerfile
-    secrets: inherit
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=sha,prefix=sha-
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: Packs/pai-memory
+          file: Packs/pai-memory/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

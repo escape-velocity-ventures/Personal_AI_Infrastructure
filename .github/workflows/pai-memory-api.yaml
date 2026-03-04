@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'Packs/pai-memory/**'
+      - '.github/workflows/pai-memory-api.yaml'
   workflow_dispatch:
 
 jobs:

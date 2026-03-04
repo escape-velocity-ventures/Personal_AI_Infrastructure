@@ -76,6 +76,103 @@ PG_URL=... REDIS_URL=... bun run src/setup.ts --check
 
 ---
 
+## HTTP API (Remote Agents)
+
+Agents that can't connect directly to pgvector (different infrastructure, different network) can use the memory-api HTTP service instead. It exposes the full MemoryClient surface over REST.
+
+**Base URL:** `https://memory-api.escape-velocity-ventures.org`
+
+**Auth:** `Authorization: Bearer <MEMORY_API_KEY>` on all endpoints except `/health`, `/ready`, `/metrics`.
+
+### Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/health` | Liveness — `{ status, pg, redis }` |
+| `GET` | `/ready` | Readiness check |
+| `GET` | `/stats` | Corpus counts — chunks, entities, commands |
+| `GET` | `/bootstrap?agent=<id>` | Cold-start context for a session |
+| `POST` | `/search` | Semantic / full-text / hybrid search |
+| `POST` | `/remember` | Write a new memory chunk |
+| `GET` | `/entity/:name` | Entity summary + metadata |
+| `GET` | `/entity/:name/chunks` | All chunks mentioning that entity |
+| `POST` | `/commands` | Log a command (flight recorder) |
+| `POST` | `/commands/search` | Semantic search over command history |
+| `GET` | `/patterns?minCount=3&days=30` | Repeated command patterns |
+| `GET` | `/session/:id` | Read ephemeral session scratchpad |
+| `PUT` | `/session/:id` | Write ephemeral session scratchpad |
+
+### Session Start
+
+Call `/bootstrap` at the top of every session and inject the returned chunks into your system prompt:
+
+```bash
+curl -s https://memory-api.escape-velocity-ventures.org/bootstrap?agent=my-agent \
+  -H "Authorization: Bearer $MEMORY_API_KEY" | jq '.chunks[].content'
+```
+
+### Search
+
+```json
+POST /search
+{
+  "query": "what do we know about the SD530 servers?",
+  "mode": "hybrid",
+  "limit": 10,
+  "memoryType": "semantic",
+  "tags": ["infrastructure"]
+}
+```
+
+`mode` options: `vector` (embedding similarity), `fts` (full-text), `hybrid` (default, both merged).
+
+### Remember
+
+```json
+POST /remember
+{
+  "content": "The SD530 nodes support 768GB RAM across 12 DIMM slots.",
+  "memoryType": "semantic",
+  "tags": ["hardware", "sd530"],
+  "visibility": "shared",
+  "decayClass": "long-term"
+}
+```
+
+`visibility`: `shared` (readable by all agents) or `private` (owner only).
+`decayClass`: `long-term`, `standard`, or `ephemeral`.
+
+### Command Log
+
+```json
+POST /commands
+{
+  "toolName": "Bash",
+  "commandText": "kubectl rollout restart deployment/harmony",
+  "sessionId": "abc123",
+  "agentId": "my-agent",
+  "outcome": "success"
+}
+```
+
+### Session Scratchpad
+
+```bash
+# Write
+curl -X PUT https://memory-api.escape-velocity-ventures.org/session/my-session \
+  -H "Authorization: Bearer $MEMORY_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"currentTask": "deploy harmony", "step": 2}'
+
+# Read
+curl https://memory-api.escape-velocity-ventures.org/session/my-session \
+  -H "Authorization: Bearer $MEMORY_API_KEY"
+```
+
+Default TTL is 7 days. Pass `?ttl=<seconds>` to override.
+
+---
+
 ## Cluster Deployment (k8s)
 
 If you're running a k8s cluster, the k8s manifests belong in your cluster config repo rather than here. The schema and tooling in this pack are cluster-agnostic.

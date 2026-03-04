@@ -171,6 +171,76 @@ curl https://memory-api.escape-velocity-ventures.org/session/my-session \
 
 Default TTL is 7 days. Pass `?ttl=<seconds>` to override.
 
+### Importing Session Logs (Claude Code)
+
+Claude Code writes JSONL session files to `~/.claude/projects/<project>/`. Each file contains every tool call, result, and conversation turn from a session. Importing these populates `command_log` with your full agent history, which powers `/patterns` and `/commands/search`.
+
+**Remote agents (HTTP API only):** Parse the JSONL yourself and POST each tool call:
+
+```typescript
+import { readFileSync } from 'fs';
+
+const API = 'https://memory-api.escape-velocity-ventures.org';
+const KEY = process.env.MEMORY_API_KEY;
+
+const lines = readFileSync('~/.claude/projects/my-project/session.jsonl', 'utf8')
+  .split('\n').filter(Boolean).map(l => JSON.parse(l));
+
+for (const line of lines) {
+  if (line.type !== 'tool_use') continue;
+  await fetch(`${API}/commands`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${KEY}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      agentId:     'my-agent',
+      sessionId:   line.session_id,
+      toolName:    line.name,
+      commandText: line.input?.command ?? JSON.stringify(line.input),
+      ts:          line.timestamp ?? new Date().toISOString(),
+    }),
+  });
+}
+```
+
+**Direct DB access (TypeScript client):** Use the `ingest-sessions.ts` tool — it handles deduplication, result parsing, and conversation context automatically:
+
+```bash
+bun run ../Tools/ingest-sessions.ts --machine=my-machine --agent=my-agent
+```
+
+Safe to re-run — already-ingested sessions are skipped via `ingestion_sources`.
+
+### Bulk-Loading Knowledge (HTTP API)
+
+For loading existing documents, notes, or structured knowledge bases:
+
+```typescript
+const memories = [
+  { content: 'pgvector runs on PostgreSQL 17 with the pgvector extension.',
+    tags: ['database', 'infrastructure'], memoryType: 'semantic', decayClass: 'long-term' },
+  { content: 'We use nomic-embed-text for 768-dim embeddings via Ollama.',
+    tags: ['embeddings', 'ollama'], memoryType: 'semantic', decayClass: 'long-term' },
+  // ...
+];
+
+for (const mem of memories) {
+  await fetch(`${API}/remember`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${KEY}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(mem),
+  });
+}
+```
+
+**Chunking guidance:** Break long documents at natural boundaries (paragraphs, sections) — each chunk should be self-contained enough to be useful when returned alone by search. 200–500 words per chunk is a good target. The embedding model has a 512-token context window; content beyond that is truncated.
+
+**What to tag:** Tags are free-form strings used to filter search results. Good candidates: project name, topic area, source type (`conversation`, `document`, `decision`, `incident`), and people involved.
+
+**Decay classes:**
+- `long-term` — persists indefinitely (architecture decisions, facts, reference material)
+- `standard` — default, subject to future pruning
+- `ephemeral` — short-lived context (current task state, scratch notes)
+
 ---
 
 ## Cluster Deployment (k8s)

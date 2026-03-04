@@ -1,0 +1,28 @@
+{
+  "name": "pai-memory",
+  "version": "1.0.0",
+  "description": "Shared memory system for PAI agents — pgvector + Redis",
+  "type": "module",
+  "scripts": {
+    "setup":          "bun run src/setup.ts",
+    "check":          "bun run src/setup.ts --check",
+    "server":         "bun run src/server.ts",
+    "ingest":         "bun run ../../../Tools/ingest-sessions.ts",
+    "extract":        "bun run ../../../Tools/extract-entities.ts"
+  },
+  "exports": {
+    ".": "./src/client.ts",
+    "./types": "./src/types.ts"
+  },
+  "dependencies": {
+    "hono": "^4.6.0",
+    "pg": "^8.13.0",
+    "prom-client": "^15.1.0",
+    "redis": "^4.7.0"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/pg": "^8.11.0",
+    "typescript": "^5.0.0"
+  }
+}

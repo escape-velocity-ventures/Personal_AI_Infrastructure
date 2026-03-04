@@ -1,0 +1,36 @@
+# pai-memory — local deployment (Docker Compose)
+# For k8s cluster deployment, see your cluster config (e.g. TinkerBelle-config)
+
+services:
+  pgvector:
+    image: pgvector/pgvector:pg17
+    environment:
+      POSTGRES_DB:       memory
+      POSTGRES_USER:     memory
+      POSTGRES_PASSWORD: ${MEMORY_DB_PASSWORD:-changeme}
+    volumes:
+      - pgvector-data:/var/lib/postgresql/data/pgdata
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "memory"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7.4-alpine
+    command: redis-server --appendonly yes --save 300 1
+    volumes:
+      - redis-data:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  pgvector-data:
+  redis-data:

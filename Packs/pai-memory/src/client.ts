@@ -205,7 +205,7 @@ export class MemoryClient {
       const rows = await this.pool.query<MemoryChunk>(`
         SELECT id, content, source_path as "sourcePath", source_type as "sourceType",
                memory_type as "memoryType", tags, agent_id as "agentId",
-               visibility, decay_client as "decayClass", created_at as "createdAt",
+               visibility, decay_class as "decayClass", created_at as "createdAt",
                ts_rank(to_tsvector('english', content), plainto_tsquery('english', $${params.length - 1})) as similarity
         FROM memory_chunks
         WHERE ${where}

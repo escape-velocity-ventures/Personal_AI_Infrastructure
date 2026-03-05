@@ -183,19 +183,24 @@ app.get('/bootstrap', async (c) => {
 // ─── Memory Search ────────────────────────────────────────────────────────────
 
 app.post('/search', async (c) => {
-  const body = await c.req.json();
-  const { query, limit, memoryType, tags, mode, minSimilarity } = body;
-  if (!query) return c.json({ error: 'query is required' }, 400);
+  try {
+    const body = await c.req.json();
+    const { query, limit, memoryType, tags, mode, minSimilarity } = body;
+    if (!query) return c.json({ error: 'query is required' }, 400);
 
-  const mem = await getMem();
-  const resolvedMode = mode ?? 'hybrid';
-  searchRequestTotal.labels(resolvedMode).inc();
+    const mem = await getMem();
+    const resolvedMode = mode ?? 'hybrid';
+    searchRequestTotal.labels(resolvedMode).inc();
 
-  const start = performance.now();
-  const results = await mem.search(query, { limit, memoryType, tags, mode: resolvedMode, minSimilarity });
-  operationDuration.labels('search').observe((performance.now() - start) / 1000);
+    const start = performance.now();
+    const results = await mem.search(query, { limit, memoryType, tags, mode: resolvedMode, minSimilarity });
+    operationDuration.labels('search').observe((performance.now() - start) / 1000);
 
-  return c.json({ results, count: results.length, query });
+    return c.json({ results, count: results.length, query });
+  } catch (err) {
+    console.error('[memory-api] /search failed:', err);
+    return c.json({ error: 'Search failed' }, 500);
+  }
 });
 
 // ─── Entity Graph ─────────────────────────────────────────────────────────────

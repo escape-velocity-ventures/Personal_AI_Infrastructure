@@ -11,7 +11,7 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
-import { MemoryClient } from './client';
+import { EmbeddingUnavailableError, MemoryClient } from './client';
 import {
   registry,
   httpRequestDuration,
@@ -232,16 +232,27 @@ app.get('/entity/:name/chunks', async (c) => {
 // ─── Memory Write ─────────────────────────────────────────────────────────────
 
 app.post('/remember', async (c) => {
-  const body = await c.req.json();
-  const { content, ...opts } = body;
-  if (!content) return c.json({ error: 'content is required' }, 400);
+  try {
+    const body = await c.req.json();
+    const { content, ...opts } = body;
+    if (!content) return c.json({ error: 'content is required' }, 400);
 
-  const mem = await getMem();
-  const start = performance.now();
-  const id = await mem.remember(content, opts);
-  operationDuration.labels('remember').observe((performance.now() - start) / 1000);
+    const mem = await getMem();
+    const start = performance.now();
+    const id = await mem.remember(content, opts);
+    operationDuration.labels('remember').observe((performance.now() - start) / 1000);
 
-  return c.json({ id, status: 'saved' }, 201);
+    return c.json({ id, status: 'saved' }, 201);
+  } catch (err) {
+    const message = (err as Error)?.message ?? String(err);
+    console.error('[memory-api] /remember failed:', message);
+
+    // Dependency failure (Ollama/embed unavailable) should surface as service unavailable.
+    if (err instanceof EmbeddingUnavailableError) {
+      return c.json({ error: 'Embedding backend unavailable; memory was not written' }, 503);
+    }
+    return c.json({ error: 'Remember failed' }, 500);
+  }
 });
 
 // ─── Command Log ─────────────────────────────────────────────────────────────

@@ -29,6 +29,13 @@ const CHANNELS = {
   COMMAND_RAN:       'memory:command-ran',
 } as const;
 
+export class EmbeddingUnavailableError extends Error {
+  constructor(message = 'Embedding backend unavailable') {
+    super(message);
+    this.name = 'EmbeddingUnavailableError';
+  }
+}
+
 // ─── Client ──────────────────────────────────────────────────────────────────
 
 export class MemoryClient {
@@ -36,7 +43,7 @@ export class MemoryClient {
   private redis: RedisClientType;
   private redisSub: RedisClientType;
   private cfg: Required<Omit<MemoryClientConfig, 'onEmbed'>>;
-  private onEmbed?: (durationSec: number, success: boolean) => void;
+  private onEmbed?: (durationSec: number, success: boolean, cached: boolean) => void;
   private connected = false;
 
   constructor(config: MemoryClientConfig) {
@@ -80,6 +87,24 @@ export class MemoryClient {
 
   // ─── Embedding ─────────────────────────────────────────────────────────────
 
+  private extractEmbeddingVector(data: unknown): number[] | null {
+    if (!data || typeof data !== 'object') return null;
+    const d = data as { embedding?: unknown; embeddings?: unknown };
+
+    // /api/embeddings shape: { embedding: number[] }
+    if (Array.isArray(d.embedding) && d.embedding.every(n => typeof n === 'number')) {
+      return d.embedding as number[];
+    }
+
+    // /api/embed shape: { embeddings: number[][] }
+    if (Array.isArray(d.embeddings) && Array.isArray(d.embeddings[0])) {
+      const first = d.embeddings[0];
+      if (Array.isArray(first) && first.every(n => typeof n === 'number')) return first as number[];
+    }
+
+    return null;
+  }
+
   async embed(text: string): Promise<number[] | null> {
     const textSlice = text.slice(0, 4000);
     const hash      = createHash('sha256').update(textSlice).digest('hex').slice(0, 32);
@@ -95,29 +120,48 @@ export class MemoryClient {
       }
     } catch { /* cache unavailable — fall through to Ollama */ }
 
-    // Ollama call
-    try {
-      const res = await fetch(`${this.cfg.ollamaUrl}/api/embeddings`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model: this.cfg.embeddingModel, prompt: textSlice }),
-      });
-      if (!res.ok) {
-        this.onEmbed?.((performance.now() - start) / 1000, false, false);
-        return null;
+    // Ollama call (support both /api/embeddings and /api/embed payload formats).
+    const attempts: Array<{ path: string; body: Record<string, unknown> }> = [
+      { path: '/api/embeddings', body: { model: this.cfg.embeddingModel, prompt: textSlice } },
+      { path: '/api/embed', body: { model: this.cfg.embeddingModel, input: textSlice } },
+    ];
+
+    let lastError = 'no attempts made';
+    for (const attempt of attempts) {
+      try {
+        const res = await fetch(`${this.cfg.ollamaUrl}${attempt.path}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(attempt.body),
+          signal: AbortSignal.timeout(6000),
+        });
+
+        if (!res.ok) {
+          const body = (await res.text().catch(() => '')).slice(0, 200);
+          lastError = `${attempt.path} HTTP ${res.status}${body ? `: ${body}` : ''}`;
+          continue;
+        }
+
+        const data = await res.json() as unknown;
+        const vector = this.extractEmbeddingVector(data);
+        if (!vector || vector.length === 0) {
+          lastError = `${attempt.path} returned no embedding vector`;
+          continue;
+        }
+
+        // Store in Redis — fire and forget, 24h TTL
+        this.redis.set(cacheKey, JSON.stringify(vector), { EX: 86400 }).catch(() => {});
+
+        this.onEmbed?.((performance.now() - start) / 1000, true, false);
+        return vector;
+      } catch (err) {
+        lastError = `${attempt.path} ${(err as Error)?.message ?? String(err)}`;
       }
-      const data   = await res.json() as { embedding: number[] };
-      const vector = data.embedding;
-
-      // Store in Redis — fire and forget, 24h TTL
-      this.redis.set(cacheKey, JSON.stringify(vector), { EX: 86400 }).catch(() => {});
-
-      this.onEmbed?.((performance.now() - start) / 1000, true, false);
-      return vector;
-    } catch {
-      this.onEmbed?.((performance.now() - start) / 1000, false, false);
-      return null;
     }
+
+    console.error(`[memory:embed] failed model=${this.cfg.embeddingModel} ollama=${this.cfg.ollamaUrl} err=${lastError}`);
+    this.onEmbed?.((performance.now() - start) / 1000, false, false);
+    return null;
   }
 
   /** Check if the bootstrap cache key exists in Redis (without fetching content). */
@@ -267,6 +311,9 @@ export class MemoryClient {
 
   async remember(content: string, opts: WriteMemoryOptions = {}): Promise<string> {
     const embedding = await this.embed(content);
+    if (!embedding) {
+      throw new EmbeddingUnavailableError('Embedding backend unavailable: unable to generate vector for memory write');
+    }
     const result = await this.pool.query<{ id: string }>(`
       INSERT INTO memory_chunks
         (content, embedding, source_type, source_path, memory_type,

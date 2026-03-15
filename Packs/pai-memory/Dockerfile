@@ -1,12 +1,18 @@
-FROM oven/bun:1.2-alpine AS builder
+# Stage 1: Build UI
+FROM oven/bun:1.2-alpine AS ui-builder
+
+WORKDIR /app/ui
+COPY ui/package.json ui/bun.lockb* ./
+RUN bun install --frozen-lockfile 2>/dev/null || bun install
+COPY ui/ .
+RUN bun run build
+
+# Stage 2: Build API
+FROM oven/bun:1.2-alpine AS api-builder
 
 WORKDIR /app
-
-# Install dependencies first (layer cache)
-COPY package.json ./
+COPY package.json bun.lockb* ./
 RUN bun install --frozen-lockfile 2>/dev/null || bun install
-
-# Copy source
 COPY src/ ./src/
 
 # ── Runtime ──────────────────────────────────────────────────────────────────
@@ -14,8 +20,9 @@ FROM oven/bun:1.2-alpine
 
 WORKDIR /app
 
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/src ./src
+COPY --from=api-builder /app/node_modules ./node_modules
+COPY --from=api-builder /app/src ./src
+COPY --from=ui-builder /app/ui/dist ./ui/dist
 COPY package.json ./
 
 EXPOSE 3000

@@ -4,25 +4,41 @@
   "description": "Shared memory system for PAI agents — pgvector + Redis",
   "type": "module",
   "scripts": {
-    "setup":          "bun run src/setup.ts",
-    "check":          "bun run src/setup.ts --check",
-    "server":         "bun run src/server.ts",
-    "ingest":         "bun run ../../../Tools/ingest-sessions.ts",
-    "extract":        "bun run ../../../Tools/extract-entities.ts"
+    "setup": "bun run src/setup.ts",
+    "check": "bun run src/setup.ts --check",
+    "server": "bun run src/server.ts",
+    "ingest": "bun run ../../../Tools/ingest-sessions.ts",
+    "extract": "bun run ../../../Tools/extract-entities.ts",
+    "migrate": "bun run src/migrations/backfill-tenants.ts",
+    "migrate:dry": "bun run src/migrations/backfill-tenants.ts --dry-run",
+    "credential:add": "bun run src/cli/credential-add.ts",
+    "source:add": "bun run src/cli/source-add.ts",
+    "source:sync": "bun run src/cli/source-sync.ts",
+    "source:list": "bun run src/cli/source-list.ts",
+    "import:md": "bun run src/cli/import-markdown.ts",
+    "import:claude": "bun run src/cli/import-claude-memory.ts",
+    "export:md": "bun run src/cli/export-markdown.ts",
+    "export:json": "bun run src/cli/export-json.ts",
+    "mcp": "bun run src/mcp-server.ts"
   },
   "exports": {
     ".": "./src/client.ts",
     "./types": "./src/types.ts"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.27.1",
     "hono": "^4.6.0",
+    "jose": "^6.0.0",
     "pg": "^8.13.0",
+    "picomatch": "^4.0.3",
     "prom-client": "^15.1.0",
-    "redis": "^4.7.0"
+    "redis": "^4.7.0",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@types/bun": "latest",
     "@types/pg": "^8.11.0",
+    "@types/picomatch": "^4.0.2",
     "typescript": "^5.0.0"
   }
 }

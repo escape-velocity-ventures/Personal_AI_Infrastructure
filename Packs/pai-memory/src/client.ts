@@ -17,7 +17,7 @@ import { createHash } from 'crypto';
 import { Pool, type PoolClient } from 'pg';
 import { createClient, type RedisClientType } from 'redis';
 import type {
-  MemoryChunk, WriteMemoryOptions, SearchOptions,
+  MemoryChunk, WriteMemoryOptions, UpdateMemoryOptions, SearchOptions,
   Entity, CommandEntry, PatternResult, MemoryClientConfig, PoolStats,
 } from './types';
 
@@ -42,7 +42,7 @@ export class MemoryClient {
   private pool: Pool;
   private redis: RedisClientType;
   private redisSub: RedisClientType;
-  private cfg: Required<Omit<MemoryClientConfig, 'onEmbed'>>;
+  private cfg: Required<Omit<MemoryClientConfig, 'onEmbed' | 'userId' | 'tenantIds'>> & { userId?: string; tenantIds: string[] };
   private onEmbed?: (durationSec: number, success: boolean, cached: boolean) => void;
   private connected = false;
 
@@ -54,6 +54,8 @@ export class MemoryClient {
       bootstrapTtlSeconds:  config.bootstrapTtlSeconds ?? 300,
       pgUrl:                config.pgUrl,
       redisUrl:             config.redisUrl,
+      userId:               config.userId             ?? undefined,
+      tenantIds:            config.tenantIds          ?? [],
     };
     this.onEmbed = config.onEmbed;
     this.pool    = new Pool({ connectionString: config.pgUrl });
@@ -165,8 +167,12 @@ export class MemoryClient {
   }
 
   /** Check if the bootstrap cache key exists in Redis (without fetching content). */
-  async isBootstrapCached(agentId = this.cfg.agentId): Promise<boolean> {
-    return (await this.redis.exists(`bootstrap:${agentId}`)) === 1;
+  async isBootstrapCached(agentOrUserId = this.cfg.agentId): Promise<boolean> {
+    // Check both key patterns
+    const agentHit = await this.redis.exists(`bootstrap:${agentOrUserId}`);
+    if (agentHit === 1) return true;
+    const userHit = await this.redis.exists(`bootstrap:user:${agentOrUserId}`);
+    return userHit === 1;
   }
 
   /** pg connection pool utilization stats. */
@@ -210,18 +216,129 @@ export class MemoryClient {
     return chunks;
   }
 
+  /**
+   * Multi-tenant bootstrap: returns org + personal memories for a user.
+   * Org memories first, then personal. Redis-cached by userId.
+   */
+  async bootstrapMultiTenant(userId: string, tenantIds?: string[]): Promise<MemoryChunk[]> {
+    const effectiveTenantIds = tenantIds ?? this.cfg.tenantIds;
+    if (!effectiveTenantIds.length) return this.bootstrap(); // fallback
+
+    const cacheKey = `bootstrap:user:${userId}`;
+    const cached = await this.redis.get(cacheKey);
+    if (cached) return JSON.parse(cached) as MemoryChunk[];
+
+    const result = await this.pool.query<MemoryChunk>(`
+      SELECT mc.id, mc.content, mc.source_path as "sourcePath",
+             mc.source_type as "sourceType", mc.memory_type as "memoryType",
+             mc.tags, mc.agent_id as "agentId", mc.visibility,
+             mc.decay_class as "decayClass", mc.created_at as "createdAt",
+             mc.tenant_id as "tenantId", mc.author_id as "authorId", mc.scope,
+             t.type as "tenantType", t.slug as "tenantSlug"
+      FROM memory_chunks mc
+      JOIN tenants t ON mc.tenant_id = t.id
+      WHERE mc.tenant_id = ANY($1::uuid[])
+        AND (mc.tags && ARRAY['curated','memory-md']::text[])
+        AND (mc.scope = 'org' OR (mc.scope = 'personal' AND mc.author_id = $2::uuid))
+        AND (mc.expires_at IS NULL OR mc.expires_at > NOW())
+      ORDER BY
+        CASE t.type WHEN 'organization' THEN 0 ELSE 1 END,
+        mc.created_at DESC
+    `, [effectiveTenantIds, userId]);
+
+    const chunks = result.rows;
+    await this.redis.set(cacheKey, JSON.stringify(chunks), { EX: this.cfg.bootstrapTtlSeconds });
+    return chunks;
+  }
+
   private async invalidateBootstrap(agentId?: string): Promise<void> {
     if (agentId) {
       await this.redis.del(`bootstrap:${agentId}`);
     } else {
-      // Invalidate all bootstrap caches
-      const keys = await this.redis.keys('bootstrap:*');
-      if (keys.length) await this.redis.del(keys);
+      // Invalidate all bootstrap caches (both agent-keyed and user-keyed)
+      const agentKeys = await this.redis.keys('bootstrap:*');
+      if (agentKeys.length) await this.redis.del(agentKeys);
     }
     await this.redis.publish(CHANNELS.MEMORY_BOOTSTRAP, JSON.stringify({ agentId, ts: Date.now() }));
   }
 
   // ─── Memory Read ───────────────────────────────────────────────────────────
+
+  /** Fetch a single chunk by ID. */
+  async get(id: string): Promise<MemoryChunk | null> {
+    const result = await this.pool.query<MemoryChunk>(`
+      SELECT id, content, source_path as "sourcePath", source_type as "sourceType",
+             memory_type as "memoryType", tags, agent_id as "agentId",
+             visibility, decay_class as "decayClass", created_at as "createdAt",
+             tenant_id as "tenantId", author_id as "authorId", scope
+      FROM memory_chunks WHERE id = $1
+    `, [id]);
+    return result.rows[0] ?? null;
+  }
+
+  /** List memory chunks with filtering and pagination. */
+  async listChunks(opts: {
+    tenant_ids?: string[];
+    offset?: number;
+    limit?: number;
+    source?: string;
+    tags?: string[];
+    memory_type?: string;
+  }): Promise<{ chunks: MemoryChunk[]; total: number }> {
+    let sql = 'SELECT * FROM memory_chunks WHERE 1=1';
+    let countSql = 'SELECT count(*)::int as total FROM memory_chunks WHERE 1=1';
+    const params: any[] = [];
+    let idx = 0;
+
+    if (opts.tenant_ids?.length) {
+      idx++;
+      const clause = ` AND tenant_id = ANY($${idx})`;
+      sql += clause;
+      countSql += clause;
+      params.push(opts.tenant_ids);
+    }
+    if (opts.tags?.length) {
+      idx++;
+      const clause = ` AND tags && $${idx}`;
+      sql += clause;
+      countSql += clause;
+      params.push(opts.tags);
+    }
+    if (opts.memory_type) {
+      idx++;
+      const clause = ` AND memory_type = $${idx}`;
+      sql += clause;
+      countSql += clause;
+      params.push(opts.memory_type);
+    }
+    if (opts.source) {
+      idx++;
+      const clause = ` AND source_path = $${idx}`;
+      sql += clause;
+      countSql += clause;
+      params.push(opts.source);
+    }
+
+    sql += ' ORDER BY created_at DESC';
+
+    const limit = opts.limit ?? 50;
+    const offset = opts.offset ?? 0;
+    sql += ` LIMIT ${limit} OFFSET ${offset}`;
+
+    const [dataResult, countResult] = await Promise.all([
+      this.pool.query(sql, params),
+      this.pool.query(countSql, params),
+    ]);
+
+    return { chunks: dataResult.rows, total: countResult.rows[0]?.total ?? 0 };
+  }
+
+  /** Delete memory chunks by ID. Returns number deleted. */
+  async deleteChunks(ids: string[]): Promise<number> {
+    if (ids.length === 0) return 0;
+    const result = await this.pool.query('DELETE FROM memory_chunks WHERE id = ANY($1)', [ids]);
+    return result.rowCount ?? 0;
+  }
 
   /**
    * Semantic + optional FTS hybrid search.
@@ -233,11 +350,37 @@ export class MemoryClient {
       tags,
       minSimilarity = 0.5,
       mode = 'hybrid',
+      tenantIds: optTenantIds,
+      scopes,
+      userId: optUserId,
     } = opts;
 
     const embedding = await this.embed(query);
-    const conditions: string[] = ["visibility = 'shared'", "(expires_at IS NULL OR expires_at > NOW())"];
+    const conditions: string[] = ["(expires_at IS NULL OR expires_at > NOW())"];
     const params: unknown[] = [];
+
+    // Tenant isolation
+    const effectiveTenantIds = optTenantIds ?? this.cfg.tenantIds;
+    const effectiveUserId = optUserId ?? this.cfg.userId;
+
+    if (effectiveTenantIds.length > 0) {
+      params.push(effectiveTenantIds);
+      conditions.push(`tenant_id = ANY($${params.length}::uuid[])`);
+      // Personal scope: only visible to author
+      if (effectiveUserId) {
+        params.push(effectiveUserId);
+        conditions.push(`(scope != 'personal' OR author_id = $${params.length}::uuid)`);
+      }
+    } else {
+      // Backward compat: no tenants → use old visibility filter
+      conditions.push("visibility = 'shared'");
+    }
+
+    // Scope filter
+    if (scopes?.length) {
+      params.push(scopes);
+      conditions.push(`scope = ANY($${params.length}::text[])`);
+    }
 
     if (memoryType) { params.push(memoryType); conditions.push(`memory_type = $${params.length}`); }
     if (tags?.length) { params.push(tags); conditions.push(`tags && $${params.length}::text[]`); }
@@ -250,6 +393,7 @@ export class MemoryClient {
         SELECT id, content, source_path as "sourcePath", source_type as "sourceType",
                memory_type as "memoryType", tags, agent_id as "agentId",
                visibility, decay_class as "decayClass", created_at as "createdAt",
+               tenant_id as "tenantId", author_id as "authorId", scope,
                ts_rank(to_tsvector('english', content), plainto_tsquery('english', $${params.length - 1})) as similarity
         FROM memory_chunks
         WHERE ${where}
@@ -270,6 +414,7 @@ export class MemoryClient {
       SELECT id, content, source_path as "sourcePath", source_type as "sourceType",
              memory_type as "memoryType", tags, agent_id as "agentId",
              visibility, decay_class as "decayClass", created_at as "createdAt",
+             tenant_id as "tenantId", author_id as "authorId", scope,
              1 - (embedding <=> $${embIdx}::vector) AS similarity
       FROM memory_chunks
       WHERE ${where}
@@ -317,8 +462,9 @@ export class MemoryClient {
     const result = await this.pool.query<{ id: string }>(`
       INSERT INTO memory_chunks
         (content, embedding, source_type, source_path, memory_type,
-         tags, agent_id, visibility, decay_class, expires_at, session_id)
-      VALUES ($1, $2::vector, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+         tags, agent_id, visibility, decay_class, expires_at, session_id,
+         tenant_id, author_id, scope)
+      VALUES ($1, $2::vector, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
       RETURNING id
     `, [
       content,
@@ -332,6 +478,9 @@ export class MemoryClient {
       opts.decayClass  ?? 'standard',
       opts.expiresAt   ?? null,
       opts.sessionId   ?? null,
+      opts.tenantId    ?? this.cfg.tenantIds[0] ?? null,
+      this.cfg.userId  ?? null,
+      opts.scope       ?? 'org',
     ]);
 
     const id = result.rows[0].id;
@@ -349,6 +498,86 @@ export class MemoryClient {
     return id;
   }
 
+  /**
+   * Update an existing memory chunk. Re-embeds if content changes.
+   * Returns true if the chunk existed and was updated.
+   */
+  async update(id: string, opts: UpdateMemoryOptions): Promise<boolean> {
+    const sets: string[] = ['updated_at = NOW()'];
+    const params: unknown[] = [id];
+
+    if (opts.content !== undefined) {
+      const embedding = await this.embed(opts.content);
+      params.push(opts.content);
+      sets.push(`content = $${params.length}`);
+      params.push(this.embeddingVal(embedding));
+      sets.push(`embedding = $${params.length}::vector`);
+    }
+    if (opts.tags !== undefined)       { params.push(opts.tags);       sets.push(`tags = $${params.length}`); }
+    if (opts.sourcePath !== undefined)  { params.push(opts.sourcePath);  sets.push(`source_path = $${params.length}`); }
+    if (opts.sourceType !== undefined)  { params.push(opts.sourceType);  sets.push(`source_type = $${params.length}`); }
+    if (opts.memoryType !== undefined)  { params.push(opts.memoryType);  sets.push(`memory_type = $${params.length}`); }
+    if (opts.visibility !== undefined)  { params.push(opts.visibility);  sets.push(`visibility = $${params.length}`); }
+    if (opts.decayClass !== undefined)  { params.push(opts.decayClass);  sets.push(`decay_class = $${params.length}`); }
+    if (opts.expiresAt !== undefined)   { params.push(opts.expiresAt);   sets.push(`expires_at = $${params.length}`); }
+
+    const result = await this.pool.query(
+      `UPDATE memory_chunks SET ${sets.join(', ')} WHERE id = $1`,
+      params,
+    );
+
+    const updated = (result.rowCount ?? 0) > 0;
+    if (updated) await this.invalidateBootstrap();
+    return updated;
+  }
+
+  /**
+   * Delete a memory chunk by ID. Cascades to chunk_entity_refs.
+   * Returns true if the chunk existed and was deleted.
+   */
+  async forget(id: string): Promise<boolean> {
+    const existing = await this.get(id);
+    const result = await this.pool.query(`DELETE FROM memory_chunks WHERE id = $1`, [id]);
+    const deleted = (result.rowCount ?? 0) > 0;
+
+    if (deleted && existing?.tags?.some(t => ['curated', 'memory-md'].includes(t))) {
+      await this.invalidateBootstrap();
+    }
+    return deleted;
+  }
+
+  /**
+   * Promote a personal memory to an organization tenant.
+   * Copies the chunk (doesn't move it). Returns the new chunk's ID.
+   */
+  async promote(chunkId: string, toTenantId: string, userId: string): Promise<string> {
+    const source = await this.get(chunkId);
+    if (!source) throw new Error(`Chunk not found: ${chunkId}`);
+    if (source.authorId !== userId) throw new Error('Only the author can promote a memory');
+    if (source.scope !== 'personal') throw new Error('Only personal-scope memories can be promoted');
+
+    const result = await this.pool.query<{ id: string }>(`
+      INSERT INTO memory_chunks
+        (content, embedding, source_type, source_path, memory_type,
+         tags, agent_id, visibility, decay_class, expires_at, session_id,
+         tenant_id, author_id, scope)
+      SELECT content, embedding, 'promoted', 'promoted-from:' || id::text, memory_type,
+             tags, agent_id, visibility, decay_class, expires_at, session_id,
+             $1, author_id, 'org'
+      FROM memory_chunks WHERE id = $2
+      RETURNING id
+    `, [toTenantId, chunkId]);
+
+    const newId = result.rows[0].id;
+
+    // Invalidate bootstrap if promoted chunk has curated tags
+    if (source.tags?.some(t => ['curated', 'memory-md'].includes(t))) {
+      await this.invalidateBootstrap();
+    }
+
+    return newId;
+  }
+
   // ─── Command Log ───────────────────────────────────────────────────────────
 
   async logCommand(cmd: CommandEntry): Promise<void> {
@@ -359,8 +588,8 @@ export class MemoryClient {
       INSERT INTO command_log
         (agent_id, session_id, machine_id, project_path, git_branch, ts,
          tool_name, command_text, description, user_prompt, reasoning,
-         outcome, result_text, exit_code, embedding)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15::vector)
+         outcome, result_text, exit_code, embedding, tenant_id, author_id)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15::vector,$16,$17)
     `, [
       cmd.agentId      ?? this.cfg.agentId,
       cmd.sessionId,
@@ -377,6 +606,8 @@ export class MemoryClient {
       cmd.resultText   ?? null,
       cmd.exitCode     ?? null,
       this.embeddingVal(embedding),
+      cmd.tenantId     ?? this.cfg.tenantIds[0] ?? null,
+      cmd.authorId     ?? this.cfg.userId ?? null,
     ]);
 
     await this.redis.publish(CHANNELS.COMMAND_RAN, JSON.stringify({
@@ -408,9 +639,18 @@ export class MemoryClient {
     return result.rows;
   }
 
-  async searchCommands(query: string, limit = 20): Promise<CommandEntry[]> {
+  async searchCommands(query: string, limit = 20, tenantIds?: string[]): Promise<CommandEntry[]> {
     const embedding = await this.embed(query);
     if (!embedding) return [];
+
+    const effectiveTenantIds = tenantIds ?? this.cfg.tenantIds;
+    let tenantFilter = '';
+    const params: unknown[] = [`[${embedding.join(',')}]`, limit];
+
+    if (effectiveTenantIds.length > 0) {
+      params.push(effectiveTenantIds);
+      tenantFilter = `AND tenant_id = ANY($${params.length}::uuid[])`;
+    }
 
     const result = await this.pool.query<CommandEntry>(`
       SELECT agent_id as "agentId", session_id as "sessionId",
@@ -418,12 +658,13 @@ export class MemoryClient {
              git_branch as "gitBranch", ts, tool_name as "toolName",
              command_text as "commandText", description, user_prompt as "userPrompt",
              reasoning, outcome, result_text as "resultText", exit_code as "exitCode",
+             tenant_id as "tenantId", author_id as "authorId",
              1 - (embedding <=> $1::vector) as similarity
       FROM command_log
-      WHERE embedding IS NOT NULL
+      WHERE embedding IS NOT NULL ${tenantFilter}
       ORDER BY embedding <=> $1::vector
       LIMIT $2
-    `, [`[${embedding.join(',')}]`, limit]);
+    `, params);
     return result.rows;
   }
 

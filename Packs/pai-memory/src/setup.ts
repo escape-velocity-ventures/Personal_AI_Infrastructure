@@ -112,6 +112,178 @@ CREATE INDEX IF NOT EXISTS idx_cmdlog_fts     ON command_log USING gin(
 );
 `;
 
+const MIGRATION_V2 = `
+-- Multi-tenancy migration: users, tenants, RLS
+
+-- Users table
+CREATE TABLE IF NOT EXISTS users (
+  id                uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  handle            text NOT NULL UNIQUE,
+  email             text,
+  default_tenant_id uuid,
+  created_at        timestamptz NOT NULL DEFAULT NOW(),
+  updated_at        timestamptz NOT NULL DEFAULT NOW()
+);
+
+-- Tenants table
+CREATE TABLE IF NOT EXISTS tenants (
+  id         uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  slug       text NOT NULL UNIQUE,
+  type       text NOT NULL CHECK (type IN ('personal', 'organization')),
+  name       text NOT NULL,
+  settings   jsonb NOT NULL DEFAULT '{}',
+  created_at timestamptz NOT NULL DEFAULT NOW(),
+  updated_at timestamptz NOT NULL DEFAULT NOW()
+);
+
+-- FK from users to tenants
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'fk_users_default_tenant'
+  ) THEN
+    ALTER TABLE users
+      ADD CONSTRAINT fk_users_default_tenant
+      FOREIGN KEY (default_tenant_id) REFERENCES tenants(id);
+  END IF;
+END $$;
+
+-- Tenant membership
+CREATE TABLE IF NOT EXISTS tenant_members (
+  tenant_id  uuid NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  user_id    uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  role       text NOT NULL CHECK (role IN ('owner', 'admin', 'member', 'reader')),
+  joined_at  timestamptz NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (tenant_id, user_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_tenant_members_user ON tenant_members(user_id);
+
+-- Alter existing tables for multi-tenancy
+ALTER TABLE memory_chunks
+  ADD COLUMN IF NOT EXISTS tenant_id uuid REFERENCES tenants(id);
+ALTER TABLE memory_chunks
+  ADD COLUMN IF NOT EXISTS author_id uuid REFERENCES users(id);
+ALTER TABLE memory_chunks
+  ADD COLUMN IF NOT EXISTS scope text NOT NULL DEFAULT 'org'
+  CHECK (scope IN ('personal', 'org', 'team'));
+
+CREATE INDEX IF NOT EXISTS idx_chunks_tenant ON memory_chunks(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_chunks_author ON memory_chunks(author_id);
+CREATE INDEX IF NOT EXISTS idx_chunks_scope ON memory_chunks(scope);
+CREATE INDEX IF NOT EXISTS idx_chunks_tenant_scope ON memory_chunks(tenant_id, scope);
+
+ALTER TABLE command_log
+  ADD COLUMN IF NOT EXISTS tenant_id uuid REFERENCES tenants(id);
+ALTER TABLE command_log
+  ADD COLUMN IF NOT EXISTS author_id uuid REFERENCES users(id);
+
+CREATE INDEX IF NOT EXISTS idx_cmdlog_tenant ON command_log(tenant_id);
+
+ALTER TABLE entities
+  ADD COLUMN IF NOT EXISTS tenant_id uuid REFERENCES tenants(id);
+
+CREATE INDEX IF NOT EXISTS idx_entities_tenant ON entities(tenant_id);
+
+-- Enable RLS
+ALTER TABLE memory_chunks ENABLE ROW LEVEL SECURITY;
+ALTER TABLE command_log ENABLE ROW LEVEL SECURITY;
+ALTER TABLE entities ENABLE ROW LEVEL SECURITY;
+ALTER TABLE tenant_members ENABLE ROW LEVEL SECURITY;
+
+-- RLS policies for memory_chunks
+DROP POLICY IF EXISTS tenant_isolation_select ON memory_chunks;
+CREATE POLICY tenant_isolation_select ON memory_chunks FOR SELECT
+  USING (
+    tenant_id IS NULL
+    OR tenant_id IN (
+      SELECT tenant_id FROM tenant_members
+      WHERE user_id = current_setting('app.current_user_id', true)::uuid
+    )
+  );
+
+DROP POLICY IF EXISTS tenant_isolation_insert ON memory_chunks;
+CREATE POLICY tenant_isolation_insert ON memory_chunks FOR INSERT
+  WITH CHECK (
+    tenant_id IN (
+      SELECT tenant_id FROM tenant_members
+      WHERE user_id = current_setting('app.current_user_id', true)::uuid
+    )
+  );
+
+DROP POLICY IF EXISTS tenant_isolation_update ON memory_chunks;
+CREATE POLICY tenant_isolation_update ON memory_chunks FOR UPDATE
+  USING (
+    tenant_id IS NULL
+    OR tenant_id IN (
+      SELECT tenant_id FROM tenant_members
+      WHERE user_id = current_setting('app.current_user_id', true)::uuid
+    )
+  );
+
+DROP POLICY IF EXISTS tenant_isolation_delete ON memory_chunks;
+CREATE POLICY tenant_isolation_delete ON memory_chunks FOR DELETE
+  USING (
+    tenant_id IS NULL
+    OR tenant_id IN (
+      SELECT tenant_id FROM tenant_members
+      WHERE user_id = current_setting('app.current_user_id', true)::uuid
+    )
+  );
+
+-- RLS policies for command_log
+DROP POLICY IF EXISTS tenant_isolation_select ON command_log;
+CREATE POLICY tenant_isolation_select ON command_log FOR SELECT
+  USING (
+    tenant_id IS NULL
+    OR tenant_id IN (
+      SELECT tenant_id FROM tenant_members
+      WHERE user_id = current_setting('app.current_user_id', true)::uuid
+    )
+  );
+
+DROP POLICY IF EXISTS tenant_isolation_insert ON command_log;
+CREATE POLICY tenant_isolation_insert ON command_log FOR INSERT
+  WITH CHECK (
+    tenant_id IN (
+      SELECT tenant_id FROM tenant_members
+      WHERE user_id = current_setting('app.current_user_id', true)::uuid
+    )
+  );
+
+-- RLS policies for entities
+DROP POLICY IF EXISTS tenant_isolation_select ON entities;
+CREATE POLICY tenant_isolation_select ON entities FOR SELECT
+  USING (
+    tenant_id IS NULL
+    OR tenant_id IN (
+      SELECT tenant_id FROM tenant_members
+      WHERE user_id = current_setting('app.current_user_id', true)::uuid
+    )
+  );
+
+DROP POLICY IF EXISTS tenant_isolation_insert ON entities;
+CREATE POLICY tenant_isolation_insert ON entities FOR INSERT
+  WITH CHECK (
+    tenant_id IN (
+      SELECT tenant_id FROM tenant_members
+      WHERE user_id = current_setting('app.current_user_id', true)::uuid
+    )
+  );
+
+-- RLS policies for tenant_members
+DROP POLICY IF EXISTS member_isolation ON tenant_members;
+CREATE POLICY member_isolation ON tenant_members FOR SELECT
+  USING (
+    user_id = current_setting('app.current_user_id', true)::uuid
+    OR tenant_id IN (
+      SELECT tenant_id FROM tenant_members
+      WHERE user_id = current_setting('app.current_user_id', true)::uuid
+      AND role IN ('owner', 'admin')
+    )
+  );
+`;
+
 async function main() {
   console.log('🔍 pai-memory setup\n');
 
@@ -176,20 +348,66 @@ async function main() {
     process.exit(1);
   }
 
+  // ── Apply multi-tenancy migration if needed ──
+  const tenantCheck = await pool.query(`
+    SELECT EXISTS (
+      SELECT FROM information_schema.tables
+      WHERE table_schema = 'public' AND table_name = 'tenants'
+    ) AS exists
+  `);
+
+  if (!tenantCheck.rows[0].exists) {
+    console.log('\n🔐 Applying multi-tenancy migration...');
+    try {
+      await pool.query(MIGRATION_V2);
+      console.log('✅ Multi-tenancy enabled.');
+    } catch (e) {
+      console.error('❌ Migration error:', (e as Error).message);
+      await pool.end();
+      process.exit(1);
+    }
+  }
+
+  // ── Apply memory sources migration if needed ──
+  const sourcesCheck = await pool.query(`SELECT to_regclass('public.memory_sources')`);
+  if (!sourcesCheck.rows[0].to_regclass) {
+    console.log('\n📦 Applying memory sources migration...');
+    try {
+      const migrationPath = new URL('./migrations/002-memory-sources.sql', import.meta.url);
+      const sql = await Bun.file(migrationPath).text();
+      await pool.query(sql);
+      console.log('✅ Memory sources tables created.');
+    } catch (e) {
+      console.error('❌ Sources migration error:', (e as Error).message);
+      await pool.end();
+      process.exit(1);
+    }
+  }
+
   // ── Summary ──
   const stats = await pool.query(`
     SELECT
       (SELECT COUNT(*) FROM memory_chunks)     AS chunks,
       (SELECT COUNT(*) FROM entities)          AS entities,
       (SELECT COUNT(*) FROM command_log)       AS commands,
-      (SELECT COUNT(*) FROM ingestion_sources) AS sources
+      (SELECT COUNT(*) FROM ingestion_sources) AS sources,
+      (SELECT COUNT(*) FROM users)             AS users,
+      (SELECT COUNT(*) FROM tenants)           AS tenants,
+      (SELECT COUNT(*) FROM tenant_members)    AS memberships,
+      (SELECT COUNT(*) FROM memory_sources)    AS memory_sources,
+      (SELECT COUNT(*) FROM source_credentials) AS credentials
   `);
   const s = stats.rows[0];
   console.log(`\n📊 Database state:`);
-  console.log(`   memory_chunks:     ${s.chunks}`);
-  console.log(`   entities:          ${s.entities}`);
-  console.log(`   command_log:       ${s.commands}`);
-  console.log(`   ingestion_sources: ${s.sources}`);
+  console.log(`   memory_chunks:      ${s.chunks}`);
+  console.log(`   entities:           ${s.entities}`);
+  console.log(`   command_log:        ${s.commands}`);
+  console.log(`   ingestion_sources:  ${s.sources}`);
+  console.log(`   memory_sources:     ${s.memory_sources}`);
+  console.log(`   source_credentials: ${s.credentials}`);
+  console.log(`   users:              ${s.users}`);
+  console.log(`   tenants:            ${s.tenants}`);
+  console.log(`   tenant_members:     ${s.memberships}`);
 
   await pool.end();
 }

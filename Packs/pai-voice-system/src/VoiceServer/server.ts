@@ -51,10 +51,13 @@ if (!ELEVENLABS_API_KEY) {
 // TTS backend selection: "auto" (default), "qwen3" (skip ElevenLabs), "elevenlabs" (skip Qwen3)
 const TTS_BACKEND = (process.env.TTS_BACKEND || 'auto') as 'auto' | 'qwen3' | 'elevenlabs';
 
-// Qwen3-TTS endpoints — cluster (network) and local sidecar
-const QWEN3_CLUSTER_URL = process.env.QWEN3_CLUSTER_URL || 'http://qwen3-tts.infrastructure.svc.cluster.local:8889';
+// Dante TTS gateway — whole-house audio via remote speak endpoint
+const DANTE_TTS_URL = process.env.DANTE_TTS_URL || 'http://plato.local:8770';
+const DANTE_TTS_TOKEN = process.env.DANTE_TTS_TOKEN || '';
+const DANTE_TTS_TIMEOUT = parseInt(process.env.DANTE_TTS_TIMEOUT || '30000');  // 30s — synthesis + playback on remote
+
+// Qwen3-TTS endpoints — local sidecar for fallback when off-site
 const QWEN3_LOCAL_URL = process.env.QWEN3_LOCAL_URL || 'http://localhost:8889';
-const QWEN3_CLUSTER_TIMEOUT = 2000;  // 2s — fail fast to local if cluster unreachable
 const QWEN3_LOCAL_TIMEOUT = 15000;   // 15s — MLX inference on Apple Silicon takes 2-8s depending on text length
 
 // Map ElevenLabs voice IDs to Qwen3 voice reference names
@@ -78,6 +81,51 @@ const QWEN3_VOICE_MAP: Record<string, string> = {
   // NOTE: serena (muZKMsIDGYtIkjjiUS82) and rook (xvHLFjaUEpx4BOf7EiDd)
   // not cloned — ElevenLabs voices deleted/expired. They fall through to ElevenLabs API.
 };
+
+// Speak via Dante TTS gateway — fire-and-forget, plays on remote speakers
+async function speakViaDante(
+  text: string,
+  voice: string,
+  speed: number = 1.0,
+): Promise<void> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), DANTE_TTS_TIMEOUT);
+
+  try {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (DANTE_TTS_TOKEN) {
+      headers['Authorization'] = `Bearer ${DANTE_TTS_TOKEN}`;
+    }
+    const response = await fetch(`${DANTE_TTS_URL}/speak`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ text, voice, speed }),
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Dante TTS error: ${response.status} - ${errorText}`);
+    }
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// Check if Dante TTS gateway is reachable
+async function checkDanteHealth(timeout: number = 2000): Promise<boolean> {
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeout);
+    const response = await fetch(`${DANTE_TTS_URL}/health`, { signal: controller.signal });
+    clearTimeout(timer);
+    if (!response.ok) return false;
+    const data = await response.json() as { status?: string; backendHealthy?: boolean };
+    return data.status === 'ok' && data.backendHealthy === true;
+  } catch {
+    return false;
+  }
+}
 
 // Generate speech using Qwen3-TTS sidecar (returns WAV audio)
 async function generateSpeechQwen3(
@@ -501,16 +549,15 @@ async function sendNotification(
 
     let played = false;
 
-    // --- Tier 1: Cluster Qwen3-TTS (network) ---
+    // --- Tier 1: Dante TTS gateway (whole-house audio) ---
     if (!played && qwen3Voice && TTS_BACKEND !== 'elevenlabs') {
       try {
-        console.log(`[Tier 1] Cluster Qwen3-TTS: voice=${qwen3Voice}, speed=${speed}`);
-        const wavBuffer = await generateSpeechQwen3(spokenMessage, qwen3Voice, QWEN3_CLUSTER_URL, QWEN3_CLUSTER_TIMEOUT, speed);
-        await playAudioWav(wavBuffer, volume);
+        console.log(`[Tier 1] Dante TTS: voice=${qwen3Voice}, speed=${speed}`);
+        await speakViaDante(spokenMessage, qwen3Voice, speed);
         played = true;
-        console.log(`[Tier 1] Success — cluster Qwen3-TTS`);
+        console.log(`[Tier 1] Success — Dante TTS (remote playback)`);
       } catch (err: any) {
-        console.log(`[Tier 1] Cluster Qwen3-TTS unavailable: ${err.message?.substring(0, 80)}`);
+        console.log(`[Tier 1] Dante TTS unavailable: ${err.message?.substring(0, 80)}`);
       }
     }
 
@@ -686,8 +733,8 @@ const server = serve({
     }
 
     if (url.pathname === "/health") {
-      const [clusterHealthy, localHealthy] = await Promise.all([
-        checkQwen3Health(QWEN3_CLUSTER_URL),
+      const [danteHealthy, localHealthy] = await Promise.all([
+        checkDanteHealth(),
         checkQwen3Health(QWEN3_LOCAL_URL),
       ]);
 
@@ -697,7 +744,7 @@ const server = serve({
           port: PORT,
           tts_backend: TTS_BACKEND,
           tts_cascade: [
-            { tier: 1, name: "cluster-qwen3", url: QWEN3_CLUSTER_URL, available: clusterHealthy },
+            { tier: 1, name: "dante-tts", url: DANTE_TTS_URL, available: danteHealthy },
             { tier: 2, name: "local-qwen3", url: QWEN3_LOCAL_URL, available: localHealthy },
             { tier: 3, name: "elevenlabs", available: !!ELEVENLABS_API_KEY },
             { tier: 4, name: "macos-say", available: true },
@@ -721,8 +768,8 @@ const server = serve({
 
 console.log(`Voice Server running on port ${PORT}`);
 console.log(`TTS backend: ${TTS_BACKEND}`);
-console.log(`TTS cascade: cluster-qwen3 → local-qwen3 → elevenlabs → macos-say`);
-console.log(`Qwen3 cluster: ${QWEN3_CLUSTER_URL}`);
+console.log(`TTS cascade: dante-tts → local-qwen3 → elevenlabs → macos-say`);
+console.log(`Dante TTS: ${DANTE_TTS_URL}`);
 console.log(`Qwen3 local: ${QWEN3_LOCAL_URL}`);
 console.log(`Qwen3 voices: ${Object.values(QWEN3_VOICE_MAP).join(', ')}`);
 console.log(`ElevenLabs: ${ELEVENLABS_API_KEY ? 'configured' : 'not configured'}`);
@@ -731,6 +778,6 @@ console.log(`POST to http://localhost:${PORT}/notify`);
 
 // Check Qwen3-TTS availability at startup (non-blocking)
 Promise.all([
-  checkQwen3Health(QWEN3_CLUSTER_URL).then(ok => console.log(`Qwen3 cluster: ${ok ? 'reachable' : 'unreachable'}`)),
+  checkDanteHealth().then(ok => console.log(`Dante TTS: ${ok ? 'reachable' : 'unreachable'}`)),
   checkQwen3Health(QWEN3_LOCAL_URL).then(ok => console.log(`Qwen3 local: ${ok ? 'reachable' : 'unreachable'}`)),
 ]);

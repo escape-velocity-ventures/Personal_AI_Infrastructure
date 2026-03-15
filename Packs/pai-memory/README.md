@@ -363,6 +363,134 @@ Agents on different machines connect via the LoadBalancer service IP (or VPN/tun
 
 ---
 
+## Multi-Tenancy
+
+PAI Memory supports multi-tenant isolation with PostgreSQL Row-Level Security (RLS). Users can belong to multiple tenants (organizations or personal workspaces), and memory chunks are scoped to tenants with fine-grained access control.
+
+### Concepts
+
+- **Users**: Individual people identified by handle (e.g., `benjamin`). Users can belong to multiple tenants.
+- **Tenants**: Organizations (`type: organization`) or personal workspaces (`type: personal`). Each tenant has a unique slug (e.g., `escape-velocity`).
+- **Members**: Users who belong to a tenant, with roles:
+  - `owner` — full control over tenant, members, and data
+  - `admin` — manage members and data
+  - `member` — read/write data
+  - `reader` — read-only access
+- **Scopes**: Memory chunks have a scope within a tenant:
+  - `personal` — private to the author
+  - `org` — shared across the entire tenant
+  - `team` — shared with a specific team (future)
+
+### Migration
+
+The multi-tenancy migration runs automatically when you run `setup.ts` if the `tenants` table doesn't exist. For existing databases:
+
+```bash
+# Run setup (applies migration if needed)
+bun run src/setup.ts
+
+# Backfill existing data into tenant structure
+bun run src/migrations/backfill-tenants.ts
+```
+
+The backfill script:
+1. Creates a personal tenant for each distinct `agent_id` in `memory_chunks`
+2. Creates users for authors of chunks
+3. Links chunks/commands/entities to the appropriate tenant
+4. Preserves backward compatibility (NULL `tenant_id` is visible to all users during transition)
+
+### Authentication
+
+The memory API supports two authentication modes:
+
+1. **API Key** (legacy): `Authorization: Bearer <MEMORY_API_KEY>`
+2. **JWT** (multi-tenant): `Authorization: Bearer <JWT>`
+
+JWTs contain user identity and tenant memberships. Set `MEMORY_JWT_SECRET` environment variable to enable JWT auth.
+
+#### JWT Format
+
+```json
+{
+  "sub": "benjamin",
+  "user_id": "550e8400-e29b-41d4-a716-446655440000",
+  "tenants": [
+    {
+      "id": "660e8400-e29b-41d4-a716-446655440000",
+      "slug": "escape-velocity",
+      "role": "owner"
+    }
+  ]
+}
+```
+
+#### Generating a Test Token
+
+```bash
+MEMORY_JWT_SECRET=your-secret bun run -e "
+  import { generateToken } from './src/jwt-utils';
+  console.log(await generateToken('your-secret', {
+    userId: '550e8400-e29b-41d4-a716-446655440000',
+    handle: 'benjamin',
+    tenants: [{
+      id: '660e8400-e29b-41d4-a716-446655440000',
+      slug: 'escape-velocity',
+      role: 'owner'
+    }]
+  }));
+"
+```
+
+Or generate the secret:
+
+```bash
+openssl rand -base64 32
+```
+
+### New Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/me` | Current user profile and tenant memberships |
+| `GET` | `/tenants` | List all tenants the user belongs to |
+| `GET` | `/tenants/:slug` | Get tenant details |
+| `GET` | `/tenants/:slug/members` | List tenant members (requires owner/admin) |
+| `POST` | `/tenants/:slug/members` | Add a member (requires owner/admin) |
+| `DELETE` | `/tenants/:slug/members/:userId` | Remove a member (requires owner) |
+| `POST` | `/promote/:userId` | Promote user to tenant admin/owner |
+
+### Scoped Queries
+
+All existing endpoints (`/search`, `/remember`, `/entity`, etc.) automatically filter results by tenant membership. Set the `X-Tenant-Slug` header to specify which tenant context to use:
+
+```bash
+curl -H "Authorization: Bearer $JWT" \
+     -H "X-Tenant-Slug: escape-velocity" \
+     https://memory-api.escape-velocity-ventures.org/search \
+     -d '{"query": "kubernetes deployment"}'
+```
+
+If `X-Tenant-Slug` is omitted, the user's `default_tenant_id` is used.
+
+### Row-Level Security (RLS)
+
+RLS policies enforce tenant isolation at the database level. Even with direct database access, users can only see data in their tenants. Key policies:
+
+- `memory_chunks`: Users see chunks in their tenants + NULL `tenant_id` (backward compat)
+- `command_log`: Users see commands in their tenants + NULL `tenant_id`
+- `entities`: Users see entities in their tenants + NULL `tenant_id`
+- `tenant_members`: Users see their own memberships + all members if owner/admin
+
+**Important**: RLS is bypassed for superusers and table owners. The `memory` database role must NOT be a superuser for RLS to take effect.
+
+To set the current user context in queries (done automatically by the API):
+
+```sql
+SET LOCAL app.current_user_id = '550e8400-e29b-41d4-a716-446655440000';
+```
+
+---
+
 ## Configuration Reference
 
 | Variable | Default | Description |
@@ -373,3 +501,4 @@ Agents on different machines connect via the LoadBalancer service IP (or VPN/tun
 | `embeddingModel` | `nomic-embed-text` | Must produce 768-dim vectors |
 | `agentId` | `main` | Namespace for this agent's writes |
 | `bootstrapTtlSeconds` | `300` | How long to cache cold-start context |
+| `MEMORY_JWT_SECRET` | — | JWT signing secret (enables multi-tenant auth) |

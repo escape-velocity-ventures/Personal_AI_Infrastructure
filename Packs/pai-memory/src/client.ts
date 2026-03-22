@@ -59,13 +59,17 @@ export class MemoryClient {
     };
     this.onEmbed = config.onEmbed;
     this.pool    = new Pool({ connectionString: config.pgUrl });
-    this.redis   = createClient({ url: config.redisUrl }) as RedisClientType;
+    const reconnectStrategy = (retries: number) => Math.min(retries * 100, 3000);
+    this.redis   = createClient({ url: config.redisUrl, socket: { reconnectStrategy } }) as RedisClientType;
     this.redisSub = this.redis.duplicate() as RedisClientType;
   }
 
   async connect(): Promise<void> {
     if (this.connected) return;
     this.redis.on('error', (e: Error) => console.error('[memory:redis]', e.message));
+    this.redisSub.on('error', (e: Error) => console.error('[memory:redis:sub]', e.message));
+    this.redis.on('ready', () => console.log('[memory:redis] connected'));
+    this.redisSub.on('ready', () => console.log('[memory:redis:sub] connected'));
     await this.redis.connect();
     await this.redisSub.connect();
     this.connected = true;

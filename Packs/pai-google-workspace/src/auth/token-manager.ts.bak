@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync, existsSync, chmodSync, mkdirSync } from "fs";
+import { readFileSync, writeFileSync, existsSync, chmodSync } from "fs";
 import type { GoogleTokens, MultiAccountTokenStorage, TokenResponse, GoogleUserInfo } from "./types";
 
 const PAI_DIR = process.env.PAI_DIR || `${process.env.HOME}/.config/pai`;
@@ -36,10 +36,6 @@ function loadStorage(): MultiAccountTokenStorage {
 }
 
 function saveStorage(storage: MultiAccountTokenStorage): void {
-  // Ensure directory exists
-  if (!existsSync(PAI_DIR)) {
-    mkdirSync(PAI_DIR, { recursive: true, mode: 0o700 });
-  }
   writeFileSync(TOKEN_FILE, JSON.stringify(storage, null, 2));
   chmodSync(TOKEN_FILE, 0o600); // Owner read/write only
 }

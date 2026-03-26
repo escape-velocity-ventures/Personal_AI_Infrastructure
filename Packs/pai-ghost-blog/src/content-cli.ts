@@ -36,6 +36,16 @@ const WORK_DIR = join(MEMORY_DIR, "WORK");
 // Falls back to CONTENT_DIR/postmortems for backward compatibility
 const PM_DIR = process.env.POSTMORTEM_DIR
   || join(CONTENT_DIR, "postmortems");
+
+// Warn if env vars aren't configured — silent fallback to ~/.claude caused PM-066
+if (!process.env.BLOG_CONTENT_DIR) {
+  console.error("⚠️  BLOG_CONTENT_DIR not set — using ~/.claude/MEMORY/WORK");
+  console.error("   Set in settings.json: \"BLOG_CONTENT_DIR\": \"/path/to/blog-content\"");
+}
+if (!process.env.POSTMORTEM_DIR) {
+  console.error("⚠️  POSTMORTEM_DIR not set — using fallback path");
+  console.error("   Set in settings.json: \"POSTMORTEM_DIR\": \"/path/to/postmortems\"");
+}
 const PM_INDEX = join(PM_DIR, "POSTMORTEM-INDEX.md");
 
 const BLOG_DIR = join(CONTENT_DIR, "blog");

@@ -51,6 +51,18 @@ interface VoiceEvent {
 const VOICE_LOG_PATH = paiPath('MEMORY', 'VOICE', 'voice-events.jsonl');
 const CURRENT_WORK_PATH = paiPath('MEMORY', 'STATE', 'current-work.json');
 
+// Words TTS engines mispronounce — map display spelling to phonetic spelling
+const PRONUNCIATIONS: Record<string, string> = {
+  'Cybill': 'Sybill',
+};
+
+function fixPronunciation(text: string): string {
+  for (const [word, spoken] of Object.entries(PRONUNCIATIONS)) {
+    text = text.replaceAll(word, spoken);
+  }
+  return text;
+}
+
 function getActiveWorkDir(): string | null {
   try {
     if (!existsSync(CURRENT_WORK_PATH)) return null;
@@ -154,6 +166,9 @@ export async function handleVoice(parsed: ParsedTranscript, sessionId: string): 
     console.error('[Voice] Skipping - message too short or empty');
     return;
   }
+
+  // Fix pronunciation for words TTS engines mispronounce
+  voiceCompletion = fixPronunciation(voiceCompletion);
 
   // Get voice settings from DA identity in settings.json
   const voiceId = DA_IDENTITY.mainDAVoiceID;

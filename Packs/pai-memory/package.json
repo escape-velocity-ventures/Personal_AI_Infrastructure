@@ -23,10 +23,12 @@
   },
   "exports": {
     ".": "./src/client.ts",
-    "./types": "./src/types.ts"
+    "./types": "./src/types.ts",
+    "./integrations/nanoclaw": "./src/integrations/nanoclaw-writeback.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.27.1",
+    "@slack/web-api": "^7.15.0",
     "hono": "^4.6.0",
     "jose": "^6.0.0",
     "pg": "^8.13.0",

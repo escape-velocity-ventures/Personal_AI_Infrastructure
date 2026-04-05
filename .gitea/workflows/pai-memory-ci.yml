@@ -47,5 +47,6 @@ jobs:
       image-name: pai-memory-api
       context: Packs/pai-memory
       dockerfile: Packs/pai-memory/Dockerfile
+      platforms: linux/arm64
     secrets:
       registry-token: ${{ secrets.CI_TOKEN }}

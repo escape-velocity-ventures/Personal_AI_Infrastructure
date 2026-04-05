@@ -60,7 +60,7 @@ const DANTE_TTS_TIMEOUT = parseInt(process.env.DANTE_TTS_TIMEOUT || '30000');  /
 const QWEN3_LOCAL_URL = process.env.QWEN3_LOCAL_URL || 'http://localhost:8889';
 const QWEN3_LOCAL_TIMEOUT = 15000;   // 15s — MLX inference on Apple Silicon takes 2-8s depending on text length
 
-// Map ElevenLabs voice IDs to Qwen3 voice reference names
+// Map ElevenLabs voice IDs → Qwen3 voice reference names
 const QWEN3_VOICE_MAP: Record<string, string> = {
   // --- Primary voices ---
   'odyUrTN5HMVKujvVAgWW': 'aurelia',     // Aurelia (DA)
@@ -81,6 +81,11 @@ const QWEN3_VOICE_MAP: Record<string, string> = {
   // NOTE: serena (muZKMsIDGYtIkjjiUS82) and rook (xvHLFjaUEpx4BOf7EiDd)
   // not cloned — ElevenLabs voices deleted/expired. They fall through to ElevenLabs API.
 };
+
+// Reverse map: Qwen3 friendly names → ElevenLabs voice IDs (for tier 3 fallback)
+const ELEVENLABS_VOICE_MAP: Record<string, string> = Object.fromEntries(
+  Object.entries(QWEN3_VOICE_MAP).map(([elevenId, qwenName]) => [qwenName, elevenId])
+);
 
 // Speak via Dante TTS gateway — fire-and-forget, plays on remote speakers
 async function speakViaDante(
@@ -524,7 +529,9 @@ async function sendNotification(
   if (voiceEnabled) {
     const voice = voiceId || DEFAULT_VOICE_ID;
     const spokenMessage = applyPronunciations(safeMessage);
-    const qwen3Voice = QWEN3_VOICE_MAP[voice];
+    // Resolve Qwen3 voice: check if voice is already a Qwen3 name, then try ElevenLabs ID map
+    const qwen3VoiceNames = new Set(Object.values(QWEN3_VOICE_MAP));
+    const qwen3Voice = qwen3VoiceNames.has(voice) ? voice : QWEN3_VOICE_MAP[voice];
 
     // Resolve prosody for ElevenLabs (used as fallback)
     const voiceConfigEntry = getVoiceConfig(voice);
@@ -577,8 +584,10 @@ async function sendNotification(
     // --- Tier 3: ElevenLabs API ---
     if (!played && ELEVENLABS_API_KEY && TTS_BACKEND !== 'qwen3') {
       try {
-        console.log(`[Tier 3] ElevenLabs: voice=${voice}, speed=${speed}, stability=${settings.stability}`);
-        const audioBuffer = await generateSpeech(spokenMessage, voice, prosody);
+        // Resolve friendly name → ElevenLabs voice ID (e.g. 'aurelia' → 'odyUrTN5HMVKujvVAgWW')
+        const elevenVoice = ELEVENLABS_VOICE_MAP[voice] || voice;
+        console.log(`[Tier 3] ElevenLabs: voice=${elevenVoice}${elevenVoice !== voice ? ` (from ${voice})` : ''}, speed=${speed}, stability=${settings.stability}`);
+        const audioBuffer = await generateSpeech(spokenMessage, elevenVoice, prosody);
         await playAudio(audioBuffer, volume);
         played = true;
         console.log(`[Tier 3] Success — ElevenLabs`);

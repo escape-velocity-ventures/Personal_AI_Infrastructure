@@ -38,37 +38,71 @@ import { execSync } from "child_process";
 const GHOST_URL =
   process.env.GHOST_URL || "https://blog.escape-velocity-ventures.org";
 
-// Cloudflare Access credentials (for bypassing Zero Trust protection on /ghost/*)
-interface CloudflareAccessCreds {
-  clientId: string;
-  clientSecret: string;
-}
+// Cloudflare Access auth (for bypassing Zero Trust protection on /ghost/*)
+// Two methods: service token (client-id/secret headers) or access token (OIDC JWT)
+type CloudflareAccess =
+  | { type: 'service-token'; clientId: string; clientSecret: string }
+  | { type: 'access-token'; token: string };
 
-function getCloudflareAccessCreds(): CloudflareAccessCreds | null {
-  // 1. Check environment variables
+function getCloudflareAccessCreds(): CloudflareAccess | null {
+  // 1. Check environment variables (service token)
   if (process.env.CF_ACCESS_CLIENT_ID && process.env.CF_ACCESS_CLIENT_SECRET) {
     return {
+      type: 'service-token',
       clientId: process.env.CF_ACCESS_CLIENT_ID,
       clientSecret: process.env.CF_ACCESS_CLIENT_SECRET,
     };
   }
 
-  // 2. Try Kubernetes secret
+  // 2. Try Kubernetes secret (on-network)
   try {
     const clientId = execSync(
       "kubectl get secret cloudflare-ghost-access-token -n infrastructure -o jsonpath='{.data.client-id}' 2>/dev/null | base64 -d",
-      { encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] }
+      { encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"], timeout: 5000 }
     ).trim();
     const clientSecret = execSync(
       "kubectl get secret cloudflare-ghost-access-token -n infrastructure -o jsonpath='{.data.client-secret}' 2>/dev/null | base64 -d",
-      { encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] }
+      { encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"], timeout: 5000 }
     ).trim();
 
     if (clientId && clientSecret) {
-      return { clientId, clientSecret };
+      return { type: 'service-token', clientId, clientSecret };
     }
   } catch {
-    // Fall through - CF Access may not be configured
+    // Fall through — not on cluster network
+  }
+
+  // 3. Try 1Password (off-network, op CLI authenticated)
+  try {
+    const clientId = execSync(
+      'op item get a4etx2qaknqyamilvlhr3pmag4 --vault tb-ev2-local --fields client-id --reveal',
+      { encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"], timeout: 5000 }
+    ).trim();
+    const clientSecret = execSync(
+      'op item get a4etx2qaknqyamilvlhr3pmag4 --vault tb-ev2-local --fields client-secret --reveal',
+      { encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"], timeout: 5000 }
+    ).trim();
+
+    if (clientId && clientSecret && !clientId.startsWith('[')) {
+      return { type: 'service-token', clientId, clientSecret };
+    }
+  } catch {
+    // Fall through — 1Password not available
+  }
+
+  // 4. Try cloudflared access token (off-network, browser OIDC)
+  // Uses cached JWT from prior `cloudflared access login`. If no cached token,
+  // user must run: cloudflared access login https://blog.escape-velocity-ventures.org
+  try {
+    const token = execSync(
+      `cloudflared access token "${GHOST_URL}"`,
+      { encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"], timeout: 5000 }
+    ).trim();
+    if (token && token.includes(".")) {
+      return { type: 'access-token', token };
+    }
+  } catch {
+    // cloudflared not installed or no cached token
   }
 
   return null;
@@ -138,8 +172,8 @@ function generateToken(key: string): string {
 // API Helpers
 // =============================================================================
 
-// Cache Cloudflare Access credentials for the session
-let cfAccessCreds: CloudflareAccessCreds | null | undefined;
+// Cache Cloudflare Access auth for the session
+let cfAccessCreds: CloudflareAccess | null | undefined;
 
 function getHeaders(token: string, contentType?: string): Record<string, string> {
   const headers: Record<string, string> = {
@@ -156,8 +190,12 @@ function getHeaders(token: string, contentType?: string): Record<string, string>
   }
 
   if (cfAccessCreds) {
-    headers["CF-Access-Client-Id"] = cfAccessCreds.clientId;
-    headers["CF-Access-Client-Secret"] = cfAccessCreds.clientSecret;
+    if (cfAccessCreds.type === 'service-token') {
+      headers["CF-Access-Client-Id"] = cfAccessCreds.clientId;
+      headers["CF-Access-Client-Secret"] = cfAccessCreds.clientSecret;
+    } else {
+      headers["cf-access-token"] = cfAccessCreds.token;
+    }
   }
 
   return headers;

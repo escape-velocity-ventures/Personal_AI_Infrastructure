@@ -288,6 +288,69 @@ export function createMcpServer(apiUrl: string, defaultToken: string): McpServer
     },
   );
 
+  // ── Event Bus ────────────────────────────────────────────────────────
+
+  server.tool(
+    'engram_event_publish',
+    'Publish a handoff event to the Engram event bus. Events are persisted (queryable) and published to Redis (real-time). Used for agent-to-agent coordination in the autonomous pipeline.',
+    {
+      type: z.string().describe('Event type: BEAD_CREATED, REVIEW_REQUESTED, REVIEW_COMPLETED, DEPLOY_COMPLETE, ALERT_RECEIVED, ALERT_RESOLVED, ESCALATE_HUMAN, etc.'),
+      source: z.string().describe('Agent role publishing the event: tinkerbelle, cybill, aurelia, blades, sprint-agent'),
+      urgency: z.enum(['immediate', 'normal']).optional().describe('Event urgency (default: normal). Immediate events notify on-duty agents directly.'),
+      beadId: z.string().optional().describe('Bead ID this event relates to (e.g., oncall-a3f8b2c1)'),
+      payload: z.record(z.unknown()).optional().describe('Event payload — structured data for the consuming agent'),
+    },
+    async (args, extra: Extra) => {
+      try {
+        const res = await api('/events', tok(extra), {
+          method: 'POST',
+          body: JSON.stringify({
+            type: args.type,
+            source: args.source,
+            urgency: args.urgency ?? 'normal',
+            beadId: args.beadId,
+            payload: args.payload ?? {},
+          }),
+        });
+        if (!res.ok) return err(`Event publish failed: ${res.status} ${await res.text()}`);
+        return ok(await res.json());
+      } catch (e) {
+        return err(`Event publish error: ${(e as Error).message}`);
+      }
+    },
+  );
+
+  server.tool(
+    'engram_event_list',
+    'List recent handoff events from the Engram event bus. Use `since` timestamp for polling — get events since your last check. Returns events sorted newest-first.',
+    {
+      type: z.string().optional().describe('Filter by event type (e.g., BEAD_CREATED)'),
+      source: z.string().optional().describe('Filter by source agent (e.g., tinkerbelle)'),
+      urgency: z.enum(['immediate', 'normal']).optional().describe('Filter by urgency level'),
+      beadId: z.string().optional().describe('Filter by bead ID'),
+      since: z.string().optional().describe('ISO timestamp — only return events after this time (polling cursor)'),
+      limit: z.number().optional().describe('Max events to return (default: 50)'),
+    },
+    async (args, extra: Extra) => {
+      try {
+        const params = new URLSearchParams();
+        if (args.type) params.set('type', args.type);
+        if (args.source) params.set('source', args.source);
+        if (args.urgency) params.set('urgency', args.urgency);
+        if (args.beadId) params.set('beadId', args.beadId);
+        if (args.since) params.set('since', args.since);
+        if (args.limit !== undefined) params.set('limit', String(args.limit));
+
+        const qs = params.toString();
+        const res = await api(`/events${qs ? `?${qs}` : ''}`, tok(extra));
+        if (!res.ok) return err(`Event list failed: ${res.status} ${await res.text()}`);
+        return ok(await res.json());
+      } catch (e) {
+        return err(`Event list error: ${(e as Error).message}`);
+      }
+    },
+  );
+
   // ── Resources ─────────────────────────────────────────────────────────
 
   server.resource(

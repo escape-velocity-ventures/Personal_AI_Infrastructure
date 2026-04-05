@@ -172,6 +172,47 @@ export interface PromoteOptions {
   toTenantId: string;
 }
 
+// ── Event Bus ─────────────────────────────────────────────────────────
+
+export type HandoffEventType =
+  | 'ALERT_RECEIVED'
+  | 'SERVICE_RESTORED'
+  | 'BEAD_CREATED'
+  | 'BEAD_DISPATCHED'
+  | 'REVIEW_REQUESTED'
+  | 'REVIEW_COMPLETED'
+  | 'HARDEN_TRIGGERED'
+  | 'PR_MERGED'
+  | 'DEPLOY_COMPLETE'
+  | 'ALERT_RESOLVED'
+  | 'ESCALATE_HUMAN';
+
+export type AgentRole = 'tinkerbelle' | 'cybill' | 'aurelia' | 'blades' | 'sprint-agent';
+export type EventUrgency = 'immediate' | 'normal';
+
+export interface HandoffEvent {
+  type: HandoffEventType;
+  source: AgentRole | string;
+  urgency: EventUrgency;
+  beadId?: string;
+  payload: Record<string, unknown>;
+}
+
+export interface StoredEvent extends HandoffEvent {
+  id: string;
+  timestamp: string;
+  tenantId?: string;
+}
+
+export interface EventFilter {
+  type?: HandoffEventType;
+  source?: string;
+  urgency?: EventUrgency;
+  beadId?: string;
+  since?: string;
+  limit?: number;
+}
+
 // Source types
 export type SourceType = 'git_repo' | 'local_path' | 'upload' | 'claude_memory';
 export type AuthType = 'pat' | 'ssh_key' | 'deploy_key';

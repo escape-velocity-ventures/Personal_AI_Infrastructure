@@ -19,6 +19,7 @@ import { createClient, type RedisClientType } from 'redis';
 import type {
   MemoryChunk, WriteMemoryOptions, UpdateMemoryOptions, SearchOptions,
   Entity, CommandEntry, PatternResult, MemoryClientConfig, PoolStats,
+  HandoffEvent, StoredEvent, EventFilter,
 } from './types';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -684,6 +685,82 @@ export class MemoryClient {
   async getSessionState(sessionId: string): Promise<Record<string, unknown>> {
     const raw = await this.redis.hGetAll(`session:${sessionId}`);
     return Object.fromEntries(Object.entries(raw).map(([k, v]) => [k, JSON.parse(v)]));
+  }
+
+  // ─── Event Bus ─────────────────────────────────────────────────────────────
+
+  /**
+   * Publish a handoff event. Persists as a memory chunk AND publishes to Redis
+   * for real-time notification. Events are stored with sourceType='event' and
+   * tagged with ['event', type, source] for filtering.
+   */
+  async publishEvent(event: HandoffEvent): Promise<StoredEvent> {
+    const content = JSON.stringify(event);
+    const tags = ['event', event.type, event.source];
+    if (event.beadId) tags.push(`bead:${event.beadId}`);
+    if (event.urgency === 'immediate') tags.push('urgent');
+
+    const id = await this.remember(content, {
+      sourceType: 'event',
+      memoryType: 'episodic',
+      tags,
+      decayClass: 'ephemeral',
+      // Events expire after 7 days — they're coordination signals, not permanent knowledge
+      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+    });
+
+    const timestamp = new Date().toISOString();
+    const stored: StoredEvent = { ...event, id, timestamp };
+
+    // Real-time notification via Redis
+    await this.redis.publish(`event:${event.type}`, JSON.stringify(stored));
+
+    return stored;
+  }
+
+  /**
+   * List recent events matching filters. Polling-based — agents call this
+   * with a `since` cursor to get new events since their last check.
+   */
+  async listEvents(filters: EventFilter = {}): Promise<StoredEvent[]> {
+    const conditions = ["source_type = 'event'"];
+    const params: unknown[] = [];
+
+    if (filters.type) {
+      params.push(`%"type":"${filters.type}"%`);
+      conditions.push(`content LIKE $${params.length}`);
+    }
+    if (filters.source) {
+      params.push(`%"source":"${filters.source}"%`);
+      conditions.push(`content LIKE $${params.length}`);
+    }
+    if (filters.beadId) {
+      params.push(`bead:${filters.beadId}`);
+      conditions.push(`$${params.length} = ANY(tags)`);
+    }
+    if (filters.urgency === 'immediate') {
+      conditions.push(`'urgent' = ANY(tags)`);
+    }
+    if (filters.since) {
+      params.push(filters.since);
+      conditions.push(`created_at > $${params.length}`);
+    }
+
+    const limit = filters.limit ?? 50;
+    params.push(limit);
+
+    const result = await this.pool.query<{ id: string; content: string; created_at: Date }>(
+      `SELECT id, content, created_at FROM memory_chunks
+       WHERE ${conditions.join(' AND ')}
+       ORDER BY created_at DESC
+       LIMIT $${params.length}`,
+      params,
+    );
+
+    return result.rows.map(row => {
+      const event = JSON.parse(row.content) as HandoffEvent;
+      return { ...event, id: row.id, timestamp: row.created_at.toISOString() };
+    });
   }
 
   // ─── Pub/Sub ───────────────────────────────────────────────────────────────

@@ -392,6 +392,34 @@ app.put('/session/:id', async (c) => {
   return c.json({ id, status: 'saved' });
 });
 
+// ─── Event Bus ──────────────────────────────────────────────────────────────
+
+app.post('/events', async (c) => {
+  const body = await c.req.json();
+  const { type, source, urgency, beadId, payload } = body;
+  if (!type)   return c.json({ error: 'type is required' }, 400);
+  if (!source) return c.json({ error: 'source is required' }, 400);
+
+  const event = { type, source, urgency: urgency ?? 'normal', beadId, payload: payload ?? {} };
+  const stored = await mem.publishEvent(event);
+  return c.json(stored, 201);
+});
+
+app.get('/events', async (c) => {
+  const filters = {
+    type: c.req.query('type') as any,
+    source: c.req.query('source'),
+    urgency: c.req.query('urgency') as any,
+    beadId: c.req.query('beadId'),
+    since: c.req.query('since'),
+    limit: c.req.query('limit') ? parseInt(c.req.query('limit')!, 10) : undefined,
+  };
+  // Remove undefined keys
+  const cleaned = Object.fromEntries(Object.entries(filters).filter(([, v]) => v !== undefined));
+  const events = await mem.listEvents(cleaned);
+  return c.json({ events, count: events.length });
+});
+
 // ─── Promotion ──────────────────────────────────────────────────────────────
 
 app.post('/promote', async (c) => {

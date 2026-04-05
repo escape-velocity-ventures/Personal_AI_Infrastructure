@@ -1,0 +1,51 @@
+# PAI Memory (Engram) — CI + Container Build
+#
+# Runs tests on PR/push, builds multi-arch container image on push to main.
+# Uses TinkerBelle reusable container build workflow for image.
+#
+# Triggers only on changes to Packs/pai-memory/
+
+name: Engram CI
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'Packs/pai-memory/**'
+  push:
+    branches: [main]
+    paths:
+      - 'Packs/pai-memory/**'
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    defaults:
+      run:
+        working-directory: Packs/pai-memory
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Run tests
+        run: bun test
+
+  build-image:
+    name: Build Container Image
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    uses: escape-velocity-ventures/TinkerBelle/.gitea/workflows/reusable-container-build.yml@main
+    with:
+      image-name: pai-memory-api
+      context: Packs/pai-memory
+      dockerfile: Packs/pai-memory/Dockerfile
+    secrets:
+      registry-token: ${{ secrets.CI_TOKEN }}

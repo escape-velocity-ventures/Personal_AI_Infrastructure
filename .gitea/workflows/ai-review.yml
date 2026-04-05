@@ -1,0 +1,27 @@
+# AI Code Review — PAI (Gitea Actions)
+# Triggers Cybill review on every PR.
+#
+# Requires repo secrets: ANTHROPIC_API_KEY, CI_TOKEN, CYBILL_TOKEN (org-level)
+
+name: AI Code Review
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'PR number to review'
+        required: true
+        type: string
+
+jobs:
+  ai-review:
+    name: AI Code Review
+    uses: escape-velocity-ventures/TinkerBelle/.gitea/workflows/reusable-ai-review.yml@main
+    with:
+      pr-number: ${{ github.event.pull_request.number || github.event.inputs.pr_number }}
+    secrets:
+      anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+      gitea-token: ${{ secrets.CYBILL_TOKEN }}
+      review-token: ${{ secrets.CYBILL_TOKEN }}

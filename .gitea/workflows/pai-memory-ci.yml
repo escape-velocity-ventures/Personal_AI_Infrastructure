@@ -16,6 +16,7 @@ on:
     branches: [main]
     paths:
       - 'Packs/pai-memory/**'
+  workflow_dispatch:
 
 jobs:
   test:
@@ -41,7 +42,7 @@ jobs:
   build-image:
     name: Build Container Image
     needs: test
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main'
     uses: escape-velocity-ventures/TinkerBelle/.gitea/workflows/reusable-container-build.yml@main
     with:
       image-name: pai-memory-api

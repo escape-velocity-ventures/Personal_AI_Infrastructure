@@ -12,6 +12,7 @@
 import type {
   SocialBackend,
   SocialCredentials,
+  SocialMedia,
   SocialPost,
   SocialResult,
   SocialMetrics,
@@ -54,6 +55,7 @@ export class TwitterBackend implements SocialBackend {
     }
 
     return {
+      success: true,
       platform: "twitter",
       postId: res.data.id,
       url: `https://x.com/i/status/${res.data.id}`,
@@ -148,6 +150,7 @@ export class TwitterBackend implements SocialBackend {
     }
 
     return {
+      success: true,
       platform: "twitter",
       postId: firstId,
       url: `https://x.com/i/status/${firstId}`,
@@ -156,7 +159,7 @@ export class TwitterBackend implements SocialBackend {
   }
 
   private async uploadMedia(
-    media: { url: string; alt?: string }[]
+    media: SocialMedia[]
   ): Promise<string[]> {
     const ids: string[] = [];
     for (const item of media) {

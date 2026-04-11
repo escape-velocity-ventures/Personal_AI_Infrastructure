@@ -12,6 +12,7 @@
 import type {
   SocialBackend,
   SocialCredentials,
+  SocialMedia,
   SocialPost,
   SocialResult,
   SocialMetrics,
@@ -74,6 +75,7 @@ export class LinkedInBackend implements SocialBackend {
     const activityId = postId.replace("urn:li:share:", "").replace("urn:li:ugcPost:", "");
 
     return {
+      success: true,
       platform: "linkedin",
       postId,
       url: `https://www.linkedin.com/feed/update/${postId}`,
@@ -148,7 +150,7 @@ export class LinkedInBackend implements SocialBackend {
   }
 
   private async uploadMedia(
-    media: { url: string; alt?: string }[]
+    media: SocialMedia[]
   ): Promise<string[]> {
     const assets: string[] = [];
     for (const item of media) {

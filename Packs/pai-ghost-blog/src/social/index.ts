@@ -6,13 +6,19 @@ import { $ } from "bun";
 import type { SocialBackend, SocialCredentials } from "./types.js";
 import { TwitterBackend } from "./twitter.js";
 import { LinkedInBackend } from "./linkedin.js";
+import { InstagramBackend } from "./instagram.js";
+import { FacebookBackend } from "./facebook.js";
+import { TikTokBackend } from "./tiktok.js";
 
-export { type SocialBackend, type SocialCredentials, type SocialPost, type SocialResult, type SocialMetrics } from "./types.js";
+export { type SocialBackend, type SocialCredentials, type SocialMedia, type SocialPost, type SocialResult, type SocialMetrics } from "./types.js";
 
-// Platform registry
+// Platform registry — all 5 social backends
 const BACKENDS: Record<string, () => SocialBackend> = {
   twitter: () => new TwitterBackend(),
   linkedin: () => new LinkedInBackend(),
+  instagram: () => new InstagramBackend(),
+  facebook: () => new FacebookBackend(),
+  tiktok: () => new TikTokBackend(),
 };
 
 /** Secret name and key mappings per platform */
@@ -24,6 +30,18 @@ const CREDENTIAL_MAP: Record<string, { secret: string; keys: { accessToken: stri
   linkedin: {
     secret: "social-credentials",
     keys: { accessToken: "LINKEDIN_ACCESS_TOKEN", refreshToken: "LINKEDIN_REFRESH_TOKEN" },
+  },
+  instagram: {
+    secret: "social-credentials",
+    keys: { accessToken: "INSTAGRAM_ACCESS_TOKEN", refreshToken: "INSTAGRAM_REFRESH_TOKEN" },
+  },
+  facebook: {
+    secret: "social-credentials",
+    keys: { accessToken: "FACEBOOK_ACCESS_TOKEN", refreshToken: "FACEBOOK_REFRESH_TOKEN" },
+  },
+  tiktok: {
+    secret: "social-credentials",
+    keys: { accessToken: "TIKTOK_ACCESS_TOKEN", refreshToken: "TIKTOK_REFRESH_TOKEN" },
   },
 };
 

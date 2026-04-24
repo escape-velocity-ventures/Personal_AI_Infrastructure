@@ -12,6 +12,8 @@ const SCOPES = [
   "https://www.googleapis.com/auth/documents", // Google Docs read/write
   "https://www.googleapis.com/auth/spreadsheets", // Google Sheets read/write
   "https://www.googleapis.com/auth/userinfo.email", // Added for account identification
+  "https://www.googleapis.com/auth/admin.directory.group", // Google Groups management
+  "https://www.googleapis.com/auth/admin.directory.group.member", // Group member management
 ];
 
 export function getAuthUrl(): string {

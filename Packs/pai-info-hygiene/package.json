@@ -22,6 +22,7 @@
     "triangulate": "bun run src/analysis/cli.ts triangulate",
     "neutralize": "bun run src/analysis/cli.ts neutralize",
     "sources": "bun run src/analysis/cli.ts sources",
+    "analyze-url": "bun run src/analyze-url.ts",
     "test": "bun test"
   },
   "dependencies": {

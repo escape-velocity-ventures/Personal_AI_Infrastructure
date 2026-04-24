@@ -79,3 +79,7 @@ credentials/
 .claude/.pai-sync-history
 package-lock.json
 Packs/pai-info-hygiene/info-hygiene.db
+
+# Dolt database files (added by bd init)
+.dolt/
+*.db

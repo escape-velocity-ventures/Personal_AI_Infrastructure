@@ -2,26 +2,27 @@
 /**
  * Session JSONL Ingester
  *
- * Parses Claude Code .jsonl session files and populates command_log.
+ * Parses Claude Code .jsonl session files and populates command_log via Engram API.
  * Captures tool calls, their results, surrounding reasoning, and user prompt context.
  *
  * Usage:
  *   bun run ingest-sessions.ts [--dir ~/.claude/projects] [--machine plato] [--agent main] [--dry-run]
  *
- * Designed to run on any machine and ship logs to the shared pgvector DB.
- * Safe to re-run — skips already-ingested sessions via ingestion_sources.
+ * Designed to run on any machine and ship logs to the Engram API.
+ * Safe to re-run — skips already-ingested sessions via local tracking file.
  */
 
-import { Pool } from 'pg';
-import { readdir, readFile, stat } from 'fs/promises';
+import { readdir, readFile, stat, writeFile } from 'fs/promises';
+import { readFileSync, existsSync, mkdirSync } from 'fs';
 import { join, basename } from 'path';
 
 // ─── Config ─────────────────────────────────────────────────────────────────
 
-const PG_URL = 'postgresql://memory:memory-ev-2026@192.168.4.124:5432/memory';
-const OLLAMA_URL = 'http://localhost:11434/api/embeddings';
-const EMBEDDING_MODEL = 'nomic-embed-text';
+const ENGRAM_URL = process.env.ENGRAM_API_URL || process.env.MEMORY_API_URL || 'https://engram.escape-velocity-ventures.org';
+const ENGRAM_KEY = process.env.ENGRAM_API_KEY || process.env.MEMORY_API_KEY || '';
 const DEFAULT_PROJECTS_DIR = `${process.env.HOME}/.claude/projects`;
+const TRACKING_DIR = join(process.env.HOME || '', '.claude', 'history');
+const TRACKING_FILE = join(TRACKING_DIR, 'ingested-sessions.json');
 
 // ─── CLI Args ────────────────────────────────────────────────────────────────
 
@@ -30,7 +31,7 @@ const dryRun = args.includes('--dry-run');
 const singleFile = args.find(a => a.startsWith('--file='))?.split('=')[1];
 const projectsDir = args.find(a => a.startsWith('--dir='))?.split('=')[1] ?? DEFAULT_PROJECTS_DIR;
 const machineId = args.find(a => a.startsWith('--machine='))?.split('=')[1] ?? process.env.HOSTNAME ?? 'unknown';
-const agentId = args.find(a => a.startsWith('--agent='))?.split('=')[1] ?? 'main';
+const agentId = args.find(a => a.startsWith('--agent='))?.split('=')[1] ?? process.env.ENGRAM_AGENT_ID ?? process.env.PAI_AGENT_ID ?? 'main';
 
 // ─── JSONL Types ─────────────────────────────────────────────────────────────
 
@@ -74,21 +75,57 @@ interface ParsedCommand {
   exitCode?: number;
 }
 
-// ─── Embedding ───────────────────────────────────────────────────────────────
+// ─── Engram API ──────────────────────────────────────────────────────────────
 
-async function generateEmbedding(text: string): Promise<number[] | null> {
+function getHeaders(): Record<string, string> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (ENGRAM_KEY) headers['Authorization'] = `Bearer ${ENGRAM_KEY}`;
+  return headers;
+}
+
+async function postTurn(turn: Record<string, unknown>): Promise<boolean> {
   try {
-    const response = await fetch(OLLAMA_URL, {
+    const response = await fetch(`${ENGRAM_URL}/turns`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: EMBEDDING_MODEL, prompt: text.slice(0, 4000) }),
+      headers: getHeaders(),
+      body: JSON.stringify(turn),
+      signal: AbortSignal.timeout(10000),
     });
-    if (!response.ok) return null;
-    const data = await response.json() as { embedding: number[] };
-    return data.embedding;
+    return response.ok;
   } catch {
-    return null;
+    return false;
   }
+}
+
+async function postCommand(cmd: Record<string, unknown>): Promise<boolean> {
+  try {
+    const response = await fetch(`${ENGRAM_URL}/commands`, {
+      method: 'POST',
+      headers: getHeaders(),
+      body: JSON.stringify(cmd),
+      signal: AbortSignal.timeout(5000),
+    });
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
+// ─── Ingestion Tracking ──────────────────────────────────────────────────────
+
+function loadIngestedPaths(): Set<string> {
+  try {
+    if (existsSync(TRACKING_FILE)) {
+      const data = JSON.parse(readFileSync(TRACKING_FILE, 'utf-8'));
+      return new Set(data.ingested || []);
+    }
+  } catch { /* start fresh */ }
+  return new Set();
+}
+
+async function saveIngestedPaths(paths: Set<string>): Promise<void> {
+  if (!existsSync(TRACKING_DIR)) mkdirSync(TRACKING_DIR, { recursive: true });
+  await writeFile(TRACKING_FILE, JSON.stringify({ ingested: [...paths] }, null, 2));
 }
 
 // ─── JSONL Parser ─────────────────────────────────────────────────────────────
@@ -198,16 +235,71 @@ function parseSession(lines: string[], filePath: string): ParsedCommand[] {
   return commands;
 }
 
+interface ParsedTurn {
+  sessionId: string;
+  turnNumber: number;
+  role: 'user' | 'assistant';
+  content: string;
+  ts: string;
+  projectPath?: string;
+}
+
+function parseConversationTurns(lines: string[], filePath: string): ParsedTurn[] {
+  const entries: JEntry[] = [];
+  for (const line of lines) {
+    if (!line.trim()) continue;
+    try { entries.push(JSON.parse(line)); } catch { /* skip */ }
+  }
+
+  const turns: ParsedTurn[] = [];
+  let turnNumber = 0;
+
+  for (const entry of entries) {
+    if (entry.type !== 'user' && entry.type !== 'assistant') continue;
+
+    const content = entry.message?.content;
+    if (!content) continue;
+
+    let text: string;
+    if (typeof content === 'string') {
+      text = content;
+    } else if (Array.isArray(content)) {
+      // Extract only text blocks — skip tool_use/tool_result
+      text = content
+        .filter(b => b.type === 'text')
+        .map(b => b.text ?? '')
+        .join('\n')
+        .trim();
+    } else {
+      continue;
+    }
+
+    if (!text) continue;
+
+    // Strip system-reminder tags
+    text = text.replace(/<system-reminder>[\s\S]*?<\/system-reminder>/g, '').trim();
+    if (!text || text.length < 5) continue;
+
+    // Truncate very long turns (>8K chars) to keep DB reasonable
+    if (text.length > 8000) text = text.slice(0, 8000) + '\n[truncated]';
+
+    turns.push({
+      sessionId: entry.sessionId ?? basename(filePath, '.jsonl'),
+      turnNumber: turnNumber++,
+      role: entry.type === 'user' ? 'user' : 'assistant',
+      content: text,
+      ts: entry.timestamp ?? new Date().toISOString(),
+      projectPath: entry.cwd,
+    });
+  }
+
+  return turns;
+}
+
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 async function main() {
-  const pool = new Pool({ connectionString: PG_URL });
-
-  // Get already-ingested session files
-  const ingested = await pool.query<{ source_path: string }>(
-    `SELECT source_path FROM ingestion_sources WHERE source_path LIKE '%.jsonl'`
-  );
-  const ingestedPaths = new Set(ingested.rows.map(r => r.source_path));
+  const ingestedPaths = loadIngestedPaths();
 
   // Single-file mode (--file=<path>) — used by the Stop hook
   let newFiles: string[];
@@ -242,19 +334,19 @@ async function main() {
 
   if (newFiles.length === 0) {
     console.log('✅ Nothing new to ingest.');
-    await pool.end();
     return;
   }
 
   if (dryRun) {
     console.log('\n🔍 Dry run — new files:');
     for (const f of newFiles.slice(0, 10)) console.log(`  ${f}`);
-    await pool.end();
     return;
   }
 
   let totalCommands = 0;
+  let totalTurns = 0;
   let totalFiles = 0;
+  let errors = 0;
 
   for (const filePath of newFiles) {
     const raw = await readFile(filePath, 'utf-8').catch(() => null);
@@ -262,71 +354,67 @@ async function main() {
 
     const lines = raw.split('\n');
     const commands = parseSession(lines, filePath);
+    const turns = parseConversationTurns(lines, filePath);
 
-    if (commands.length === 0) {
-      // Mark as ingested even if empty (no tool calls)
-      await pool.query(
-        `INSERT INTO ingestion_sources (source_path, last_hash, chunk_count)
-         VALUES ($1, 'empty', 0)
-         ON CONFLICT (source_path) DO NOTHING`,
-        [filePath]
-      );
+    if (commands.length === 0 && turns.length === 0) {
+      ingestedPaths.add(filePath);
       continue;
     }
 
-    process.stdout.write(`  ${basename(filePath)} — ${commands.length} commands...`);
+    process.stdout.write(`  ${basename(filePath)} — ${commands.length} cmds, ${turns.length} turns...`);
 
-    // Insert all commands for this session
+    // Post commands to Engram API
     for (const cmd of commands) {
-      const embedText = [cmd.commandText, cmd.description, cmd.reasoning].filter(Boolean).join(' ');
-      const embedding = await generateEmbedding(embedText);
-      const embeddingVal = embedding ? `[${embedding.join(',')}]` : null;
-
-      await pool.query(`
-        INSERT INTO command_log
-          (agent_id, session_id, machine_id, project_path, git_branch, ts,
-           tool_name, command_text, description, user_prompt, reasoning,
-           outcome, result_text, exit_code, embedding)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15::vector)
-        ON CONFLICT DO NOTHING
-      `, [
-        agentId, cmd.sessionId, machineId, cmd.cwd, cmd.gitBranch ?? null,
-        cmd.ts, cmd.toolName, cmd.commandText, cmd.description ?? null,
-        cmd.userPrompt ?? null, cmd.reasoning ?? null,
-        cmd.outcome ?? 'unknown', cmd.resultText ?? null, cmd.exitCode ?? null,
-        embeddingVal,
-      ]);
+      const ok = await postCommand({
+        agentId: agentId,
+        sessionId: cmd.sessionId,
+        machineId: machineId,
+        projectPath: cmd.cwd,
+        gitBranch: cmd.gitBranch ?? null,
+        ts: cmd.ts,
+        toolName: cmd.toolName,
+        commandText: cmd.commandText,
+        description: cmd.description ?? null,
+        userPrompt: cmd.userPrompt ?? null,
+        reasoning: cmd.reasoning ?? null,
+        outcome: cmd.outcome ?? 'unknown',
+        resultText: cmd.resultText ?? null,
+        exitCode: cmd.exitCode ?? null,
+      });
+      if (!ok) errors++;
     }
 
-    // Mark file as ingested
-    await pool.query(
-      `INSERT INTO ingestion_sources (source_path, last_hash, chunk_count)
-       VALUES ($1, $2, $3)
-       ON CONFLICT (source_path) DO UPDATE SET
-         last_hash = $2, chunk_count = $3, last_ingested = NOW()`,
-      [filePath, lines.length.toString(), commands.length]
-    );
+    // Post conversation turns in parallel batches (fan out to multiple Ollama pods)
+    const CONCURRENCY = 3;
+    for (let i = 0; i < turns.length; i += CONCURRENCY) {
+      const batch = turns.slice(i, i + CONCURRENCY);
+      const results = await Promise.allSettled(batch.map(t => postTurn({
+        sessionId: t.sessionId,
+        turnNumber: t.turnNumber,
+        role: t.role,
+        content: t.content,
+        agentId: agentId,
+        machineId: machineId,
+        projectPath: t.projectPath ?? null,
+        ts: t.ts,
+      })));
+      for (const r of results) {
+        if (r.status === 'fulfilled' && r.value) totalTurns++;
+        else errors++;
+      }
+    }
 
+    ingestedPaths.add(filePath);
     totalCommands += commands.length;
     totalFiles++;
     console.log(' ✓');
   }
 
-  console.log(`\n✅ Ingested ${totalCommands} commands from ${totalFiles} sessions`);
+  // Persist tracking
+  await saveIngestedPaths(ingestedPaths);
 
-  // Quick summary
-  const summary = await pool.query(`
-    SELECT tool_name, COUNT(*) as count,
-           SUM(CASE WHEN outcome = 'error' THEN 1 ELSE 0 END) as errors
-    FROM command_log
-    GROUP BY tool_name ORDER BY count DESC LIMIT 10
-  `);
-  console.log('\n📊 Top tools in command_log:');
-  for (const row of summary.rows) {
-    console.log(`   ${row.tool_name.padEnd(20)} ${row.count} calls (${row.errors} errors)`);
-  }
-
-  await pool.end();
+  console.log(`\n✅ Ingested ${totalCommands} commands + ${totalTurns} turns from ${totalFiles} sessions` +
+    (errors > 0 ? ` (${errors} errors)` : ''));
 }
 
 main().catch(err => { console.error('Fatal:', err); process.exit(1); });

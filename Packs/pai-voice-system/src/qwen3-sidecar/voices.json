@@ -1,0 +1,24 @@
+{
+  "_comment": "Qwen3-TTS voice-design prompts, keyed by the friendly voice name the voice server sends (QWEN3_VOICE_MAP in server.ts). 'instruct' is a natural-language description of the desired voice; no reference audio required.",
+  "default": {
+    "instruct": "Warm, articulate adult voice, calm and confident, natural American accent, measured conversational pace."
+  },
+  "aurelia": {
+    "instruct": "Warm, articulate adult female voice, calm and self-assured, natural American accent, thoughtful measured pace, subtle friendly energy."
+  },
+  "tinkerbelle": {
+    "instruct": "Bright, quick, playful adult female voice, energetic and clever, natural American accent, slightly faster pace, mischievous warmth."
+  },
+  "cybill": {
+    "instruct": "Cool, precise adult female voice, dry and analytical, natural American accent, even measured pace, understated authority."
+  },
+  "will": {
+    "instruct": "Steady, grounded adult male voice, clear and practical, natural American accent, even pace."
+  },
+  "researcher": {
+    "instruct": "Curious, precise adult voice, thoughtful and articulate, natural American accent, measured pace."
+  },
+  "analyst": {
+    "instruct": "Neutral, crisp adult voice, factual and composed, natural American accent, even pace."
+  }
+}

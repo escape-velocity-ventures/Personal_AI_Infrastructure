@@ -507,7 +507,8 @@ async function sendNotification(
   message: string,
   voiceEnabled = true,
   voiceId: string | null = null,
-  requestProsody?: Partial<ProsodySettings>
+  requestProsody?: Partial<ProsodySettings>,
+  persona: string | null = null
 ) {
   // Validate and sanitize inputs
   const titleValidation = validateInput(title);
@@ -529,9 +530,15 @@ async function sendNotification(
   if (voiceEnabled) {
     const voice = voiceId || DEFAULT_VOICE_ID;
     const spokenMessage = applyPronunciations(safeMessage);
-    // Resolve Qwen3 voice: check if voice is already a Qwen3 name, then try ElevenLabs ID map
+    // Resolve Qwen3 voice name. The persona name (e.g. "cybill") is authoritative:
+    // personas can share an ElevenLabs voice_id, so the id alone can't distinguish them.
+    // The sidecar clones by persona name (refs/<persona>.wav) and falls back to
+    // description-based design when it has no reference. Fall back to the
+    // ElevenLabs-ID → name map only when no persona was supplied.
     const qwen3VoiceNames = new Set(Object.values(QWEN3_VOICE_MAP));
-    const qwen3Voice = qwen3VoiceNames.has(voice) ? voice : QWEN3_VOICE_MAP[voice];
+    const qwen3Voice = (persona && persona.trim())
+      ? persona.trim().toLowerCase()
+      : (qwen3VoiceNames.has(voice) ? voice : QWEN3_VOICE_MAP[voice]);
 
     // Resolve prosody for ElevenLabs (used as fallback)
     const voiceConfigEntry = getVoiceConfig(voice);
@@ -676,6 +683,7 @@ const server = serve({
         const message = data.message || "Task completed";
         const voiceEnabled = data.voice_enabled !== false;
         const voiceId = data.voice_id || data.voice_name || null; // Support both voice_id and voice_name
+        const persona = typeof data.voice === 'string' ? data.voice : null; // Persona name (authoritative for Qwen3 routing)
 
         // Accept prosody settings directly in request (for custom agents)
         // Also accept volume at top level for convenience
@@ -691,7 +699,7 @@ const server = serve({
 
         console.log(`Notification: "${title}" - "${message}" (voice: ${voiceEnabled}, voiceId: ${voiceId || DEFAULT_VOICE_ID})`);
 
-        await sendNotification(title, message, voiceEnabled, voiceId, voiceSettings);
+        await sendNotification(title, message, voiceEnabled, voiceId, voiceSettings, persona);
 
         return new Response(
           JSON.stringify({ status: "success", message: "Notification sent" }),

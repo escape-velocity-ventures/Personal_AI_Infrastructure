@@ -3,10 +3,16 @@
  * Voice Server - Personal AI Voice notification server
  *
  * TTS cascade (configurable via TTS_BACKEND env var):
- *   1. Cluster Qwen3-TTS (network, 2s timeout)
- *   2. Local Qwen3-TTS sidecar (localhost:8889, 5s timeout)
- *   3. ElevenLabs API
- *   4. macOS say (fallback)
+ *   1. Dante TTS gateway    — synthesise AND play remotely (whole-house audio)
+ *   2. Cluster Qwen3-TTS    — GPU synthesis on the cluster, playback HERE (2s timeout)
+ *   3. Local Qwen3-TTS      — MLX synthesis on this Mac, playback HERE (15s timeout)
+ *   4. ElevenLabs API
+ *   5. macOS say (last resort)
+ *
+ * Tiers 2 and 3 differ from tier 1 by WHERE the audio plays, not just where it is
+ * synthesised — Dante is for whole-house sound, 2 and 3 are for this machine's
+ * own speakers. Tier 2 exists so a laptop can use the cluster GPU without needing
+ * a local model, and fall through to tier 3 when off-network.
  */
 
 import { serve } from "bun";
@@ -56,7 +62,16 @@ const DANTE_TTS_URL = process.env.DANTE_TTS_URL || 'http://plato.local:8770';
 const DANTE_TTS_TOKEN = process.env.DANTE_TTS_TOKEN || '';
 const DANTE_TTS_TIMEOUT = parseInt(process.env.DANTE_TTS_TIMEOUT || '30000');  // 30s — synthesis + playback on remote
 
-// Qwen3-TTS endpoints — local sidecar for fallback when off-site
+// Qwen3-TTS endpoints — cluster GPU engine first, local MLX sidecar as fallback.
+//
+// The cluster default is the kube-vip VIP, NOT the in-cluster DNS name. Every
+// consumer of this server is a Mac outside the cluster, where
+// qwen3-tts.infrastructure.svc.cluster.local is NXDOMAIN — so the tier could
+// never fire. The VIP is what dante-tts already targets and is LAN-reachable
+// (verified 2026-08-05: /health -> 200, device cuda:0). Off-LAN it fails in
+// QWEN3_CLUSTER_TIMEOUT and drops to the local sidecar, which is the point.
+const QWEN3_CLUSTER_URL = process.env.QWEN3_CLUSTER_URL || 'http://192.168.7.11:8889';
+const QWEN3_CLUSTER_TIMEOUT = 2000;  // 2s — fail fast to local if cluster unreachable
 const QWEN3_LOCAL_URL = process.env.QWEN3_LOCAL_URL || 'http://localhost:8889';
 const QWEN3_LOCAL_TIMEOUT = 15000;   // 15s — MLX inference on Apple Silicon takes 2-8s depending on text length
 
@@ -575,42 +590,58 @@ async function sendNotification(
       }
     }
 
-    // --- Tier 2: Local Qwen3-TTS sidecar ---
+    // --- Tier 2: Cluster Qwen3-TTS (GPU synthesis, LOCAL playback) ---
+    // Distinct from Dante above: Dante synthesises AND plays remotely (whole-house).
+    // This synthesises on the cluster GPU and plays on THIS machine — the right
+    // behaviour for a laptop that wants its own audio without its own inference.
     if (!played && qwen3Voice && TTS_BACKEND !== 'elevenlabs') {
       try {
-        console.log(`[Tier 2] Local Qwen3-TTS: voice=${qwen3Voice}, speed=${speed}`);
-        const wavBuffer = await generateSpeechQwen3(spokenMessage, qwen3Voice, QWEN3_LOCAL_URL, QWEN3_LOCAL_TIMEOUT, speed);
+        console.log(`[Tier 2] Cluster Qwen3-TTS: voice=${qwen3Voice}, speed=${speed}`);
+        const wavBuffer = await generateSpeechQwen3(spokenMessage, qwen3Voice, QWEN3_CLUSTER_URL, QWEN3_CLUSTER_TIMEOUT, speed);
         await playAudioWav(wavBuffer, volume);
         played = true;
-        console.log(`[Tier 2] Success — local Qwen3-TTS`);
+        console.log(`[Tier 2] Success — cluster Qwen3-TTS`);
       } catch (err: any) {
-        console.log(`[Tier 2] Local Qwen3-TTS failed: ${err.message?.substring(0, 80)}`);
+        console.log(`[Tier 2] Cluster Qwen3-TTS unavailable: ${err.message?.substring(0, 80)}`);
       }
     }
 
-    // --- Tier 3: ElevenLabs API ---
+    // --- Tier 3: Local Qwen3-TTS sidecar ---
+    if (!played && qwen3Voice && TTS_BACKEND !== 'elevenlabs') {
+      try {
+        console.log(`[Tier 3] Local Qwen3-TTS: voice=${qwen3Voice}, speed=${speed}`);
+        const wavBuffer = await generateSpeechQwen3(spokenMessage, qwen3Voice, QWEN3_LOCAL_URL, QWEN3_LOCAL_TIMEOUT, speed);
+        await playAudioWav(wavBuffer, volume);
+        played = true;
+        console.log(`[Tier 3] Success — local Qwen3-TTS`);
+      } catch (err: any) {
+        console.log(`[Tier 3] Local Qwen3-TTS failed: ${err.message?.substring(0, 80)}`);
+      }
+    }
+
+    // --- Tier 4: ElevenLabs API ---
     if (!played && ELEVENLABS_API_KEY && TTS_BACKEND !== 'qwen3') {
       try {
         // Resolve friendly name → ElevenLabs voice ID (e.g. 'aurelia' → 'odyUrTN5HMVKujvVAgWW')
         const elevenVoice = ELEVENLABS_VOICE_MAP[voice] || voice;
-        console.log(`[Tier 3] ElevenLabs: voice=${elevenVoice}${elevenVoice !== voice ? ` (from ${voice})` : ''}, speed=${speed}, stability=${settings.stability}`);
+        console.log(`[Tier 4] ElevenLabs: voice=${elevenVoice}${elevenVoice !== voice ? ` (from ${voice})` : ''}, speed=${speed}, stability=${settings.stability}`);
         const audioBuffer = await generateSpeech(spokenMessage, elevenVoice, prosody);
         await playAudio(audioBuffer, volume);
         played = true;
-        console.log(`[Tier 3] Success — ElevenLabs`);
+        console.log(`[Tier 4] Success — ElevenLabs`);
       } catch (err: any) {
-        console.error(`[Tier 3] ElevenLabs failed: ${err.message?.substring(0, 80)}`);
+        console.error(`[Tier 4] ElevenLabs failed: ${err.message?.substring(0, 80)}`);
       }
     }
 
-    // --- Tier 4: macOS say (last resort) ---
+    // --- Tier 5: macOS say (last resort) ---
     if (!played) {
       try {
-        console.log(`[Tier 4] macOS say fallback`);
+        console.log(`[Tier 5] macOS say fallback`);
         await speakWithSay(spokenMessage);
         played = true;
       } catch (sayError) {
-        console.error("[Tier 4] macOS say also failed:", sayError);
+        console.error("[Tier 5] macOS say also failed:", sayError);
       }
     }
   }
@@ -750,8 +781,9 @@ const server = serve({
     }
 
     if (url.pathname === "/health") {
-      const [danteHealthy, localHealthy] = await Promise.all([
+      const [danteHealthy, clusterHealthy, localHealthy] = await Promise.all([
         checkDanteHealth(),
+        checkQwen3Health(QWEN3_CLUSTER_URL),
         checkQwen3Health(QWEN3_LOCAL_URL),
       ]);
 
@@ -762,9 +794,10 @@ const server = serve({
           tts_backend: TTS_BACKEND,
           tts_cascade: [
             { tier: 1, name: "dante-tts", url: DANTE_TTS_URL, available: danteHealthy },
-            { tier: 2, name: "local-qwen3", url: QWEN3_LOCAL_URL, available: localHealthy },
-            { tier: 3, name: "elevenlabs", available: !!ELEVENLABS_API_KEY },
-            { tier: 4, name: "macos-say", available: true },
+            { tier: 2, name: "cluster-qwen3", url: QWEN3_CLUSTER_URL, available: clusterHealthy },
+            { tier: 3, name: "local-qwen3", url: QWEN3_LOCAL_URL, available: localHealthy },
+            { tier: 4, name: "elevenlabs", available: !!ELEVENLABS_API_KEY },
+            { tier: 5, name: "macos-say", available: true },
           ],
           default_voice_id: DEFAULT_VOICE_ID,
           qwen3_voices: Object.values(QWEN3_VOICE_MAP),
@@ -785,8 +818,9 @@ const server = serve({
 
 console.log(`Voice Server running on port ${PORT}`);
 console.log(`TTS backend: ${TTS_BACKEND}`);
-console.log(`TTS cascade: dante-tts → local-qwen3 → elevenlabs → macos-say`);
+console.log(`TTS cascade: dante-tts → cluster-qwen3 → local-qwen3 → elevenlabs → macos-say`);
 console.log(`Dante TTS: ${DANTE_TTS_URL}`);
+console.log(`Qwen3 cluster: ${QWEN3_CLUSTER_URL}`);
 console.log(`Qwen3 local: ${QWEN3_LOCAL_URL}`);
 console.log(`Qwen3 voices: ${Object.values(QWEN3_VOICE_MAP).join(', ')}`);
 console.log(`ElevenLabs: ${ELEVENLABS_API_KEY ? 'configured' : 'not configured'}`);
@@ -796,5 +830,6 @@ console.log(`POST to http://localhost:${PORT}/notify`);
 // Check Qwen3-TTS availability at startup (non-blocking)
 Promise.all([
   checkDanteHealth().then(ok => console.log(`Dante TTS: ${ok ? 'reachable' : 'unreachable'}`)),
+  checkQwen3Health(QWEN3_CLUSTER_URL).then(ok => console.log(`Qwen3 cluster: ${ok ? 'reachable' : 'unreachable'}`)),
   checkQwen3Health(QWEN3_LOCAL_URL).then(ok => console.log(`Qwen3 local: ${ok ? 'reachable' : 'unreachable'}`)),
 ]);

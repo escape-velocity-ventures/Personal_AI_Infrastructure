@@ -28,7 +28,7 @@ bd sync               # Sync with git
    git push
    git status  # MUST show "up to date with origin"
    ```
-5. **Clean up** - Clear stashes, prune remote branches
+5. **Clean up** - Prune remote branches. **Never clear a stash you have not inspected** — untracked files live only in `stash@{N}^3` and are destroyed with no trace on drop. Inspect before discarding.
 6. **Verify** - All changes committed AND pushed
 7. **Hand off** - Provide context for next session
 

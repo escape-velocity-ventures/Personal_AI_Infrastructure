@@ -28,6 +28,129 @@ export interface GoogleApiOptions {
   account?: string; // Account email for multi-account support
 }
 
+export interface MimeMessageOptions {
+  to: string;
+  subject: string;
+  body: string;
+  htmlBody?: string;
+  attachments?: { filename: string; content: Buffer }[];
+  cc?: string;
+  bcc?: string;
+}
+
+function randomBoundary(tag: string): string {
+  return `${tag}_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+}
+
+/**
+ * RFC 2045 caps encoded lines at 76 characters. Gmail tolerates a single
+ * multi-megabyte base64 line, but other receivers and gateways do not, so
+ * wrap it rather than relying on that leniency.
+ */
+function wrapBase64(data: string): string {
+  return (data.match(/.{1,76}/g) ?? []).join("\r\n");
+}
+
+/**
+ * Quote a filename for Content-Disposition. An unescaped double quote in a
+ * filename would otherwise terminate the parameter early and corrupt the header.
+ */
+function quoteFilename(filename: string): string {
+  return filename.replace(/[\\"]/g, "\\$&");
+}
+
+/**
+ * Build a base64url-encoded RFC 2822 message for the Gmail API's `raw` field.
+ *
+ * Structure depends on what was asked for:
+ *   text only                      -> text/plain
+ *   text + html                    -> multipart/alternative
+ *   text (+ html) + attachments    -> multipart/mixed [ alternative-or-plain, ...files ]
+ *
+ * Shared by messages.send and drafts.create so the two cannot drift.
+ */
+export function buildMimeMessage(opts: MimeMessageOptions): string {
+  const { to, subject, body, htmlBody, attachments = [], cc, bcc } = opts;
+
+  const headers: string[] = [`To: ${to}`];
+  if (cc) headers.push(`Cc: ${cc}`);
+  if (bcc) headers.push(`Bcc: ${bcc}`);
+  // Encode the subject so non-ASCII (em dashes, accents) survives transit.
+  const needsEncoding = /[^\x20-\x7E]/.test(subject);
+  headers.push(
+    `Subject: ${
+      needsEncoding
+        ? `=?UTF-8?B?${Buffer.from(subject, "utf-8").toString("base64")}?=`
+        : subject
+    }`
+  );
+  headers.push("MIME-Version: 1.0");
+
+  // The body, as either a single part or a multipart/alternative block.
+  const bodyLines: string[] = [];
+  let bodyContentType: string;
+
+  if (htmlBody) {
+    const altBoundary = randomBoundary("alt");
+    bodyContentType = `multipart/alternative; boundary="${altBoundary}"`;
+    bodyLines.push(
+      `--${altBoundary}`,
+      "Content-Type: text/plain; charset=utf-8",
+      "Content-Transfer-Encoding: base64",
+      "",
+      wrapBase64(Buffer.from(body, "utf-8").toString("base64")),
+      `--${altBoundary}`,
+      "Content-Type: text/html; charset=utf-8",
+      "Content-Transfer-Encoding: base64",
+      "",
+      wrapBase64(Buffer.from(htmlBody, "utf-8").toString("base64")),
+      `--${altBoundary}--`
+    );
+  } else {
+    bodyContentType = "text/plain; charset=utf-8";
+    bodyLines.push(wrapBase64(Buffer.from(body, "utf-8").toString("base64")));
+  }
+
+  let lines: string[];
+
+  if (attachments.length === 0) {
+    lines = [
+      ...headers,
+      `Content-Type: ${bodyContentType}`,
+      ...(htmlBody ? [] : ["Content-Transfer-Encoding: base64"]),
+      "",
+      ...bodyLines,
+    ];
+  } else {
+    const mixedBoundary = randomBoundary("mixed");
+    lines = [
+      ...headers,
+      `Content-Type: multipart/mixed; boundary="${mixedBoundary}"`,
+      "",
+      `--${mixedBoundary}`,
+      `Content-Type: ${bodyContentType}`,
+      ...(htmlBody ? [] : ["Content-Transfer-Encoding: base64"]),
+      "",
+      ...bodyLines,
+    ];
+
+    for (const attachment of attachments) {
+      lines.push(
+        `--${mixedBoundary}`,
+        `Content-Type: ${getMimeType(attachment.filename)}; name="${quoteFilename(attachment.filename)}"`,
+        `Content-Disposition: attachment; filename="${quoteFilename(attachment.filename)}"`,
+        "Content-Transfer-Encoding: base64",
+        "",
+        wrapBase64(attachment.content.toString("base64"))
+      );
+    }
+
+    lines.push(`--${mixedBoundary}--`);
+  }
+
+  return Buffer.from(lines.join("\r\n"), "utf-8").toString("base64url");
+}
+
 export async function googleApi<T>(
   endpoint: string,
   options: GoogleApiOptions = {}
@@ -152,40 +275,10 @@ function createGmailHelpers(account?: string) {
       to: string,
       subject: string,
       body: string,
-      attachments: { filename: string; content: Buffer }[]
+      attachments: { filename: string; content: Buffer }[],
+      htmlBody?: string
     ) {
-      const boundary = `boundary_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-
-      const parts: string[] = [
-        `To: ${to}`,
-        `Subject: ${subject}`,
-        `MIME-Version: 1.0`,
-        `Content-Type: multipart/mixed; boundary="${boundary}"`,
-        "",
-        `--${boundary}`,
-        "Content-Type: text/plain; charset=utf-8",
-        "",
-        body,
-      ];
-
-      for (const attachment of attachments) {
-        const mimeType = getMimeType(attachment.filename);
-        const base64Content = attachment.content.toString("base64");
-
-        parts.push(
-          `--${boundary}`,
-          `Content-Type: ${mimeType}`,
-          `Content-Disposition: attachment; filename="${attachment.filename}"`,
-          "Content-Transfer-Encoding: base64",
-          "",
-          base64Content
-        );
-      }
-
-      parts.push(`--${boundary}--`);
-
-      const email = parts.join("\r\n");
-      const encoded = Buffer.from(email).toString("base64url");
+      const encoded = buildMimeMessage({ to, subject, body, htmlBody, attachments });
 
       interface SendResponse {
         id: string;
@@ -195,6 +288,36 @@ function createGmailHelpers(account?: string) {
       return googleApi<SendResponse>("/gmail/v1/users/me/messages/send", {
         method: "POST",
         body: { raw: encoded },
+        account,
+      });
+    },
+
+    /**
+     * Create a Gmail draft. Same shape as send/sendWithAttachment, but the
+     * message lands in Drafts for a human to review and send.
+     *
+     * This is the correct default for outbound mail a person is accountable
+     * for — client comms in particular. `gmail.modify` covers drafts.create,
+     * so this needs no additional OAuth scope.
+     */
+    async createDraft(opts: {
+      to: string;
+      subject: string;
+      body: string;
+      htmlBody?: string;
+      attachments?: { filename: string; content: Buffer }[];
+      cc?: string;
+      bcc?: string;
+    }) {
+      const encoded = buildMimeMessage(opts);
+
+      interface DraftResponse {
+        id: string;
+        message: { id: string; threadId: string };
+      }
+      return googleApi<DraftResponse>("/gmail/v1/users/me/drafts", {
+        method: "POST",
+        body: { message: { raw: encoded } },
         account,
       });
     },

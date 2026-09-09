@@ -149,6 +149,73 @@ async function main() {
       break;
     }
 
+    case "draft": {
+      const to = parsed.to;
+      const subject = parsed.subject;
+      const attachmentPaths = multiple.attachment || [];
+
+      // Bodies may be given inline or read from a file. --body-file is the
+      // sane path for anything longer than a sentence, and the only one that
+      // survives shell quoting of real prose.
+      const body = parsed["body-file"]
+        ? readFileSync(parsed["body-file"], "utf-8")
+        : parsed.body;
+      const htmlBody = parsed["html-body-file"]
+        ? readFileSync(parsed["html-body-file"], "utf-8")
+        : parsed["html-body"];
+
+      if (!to || !subject || !body) {
+        console.error(
+          "Usage: bun run gmail draft --to <email> --subject <subject>\n" +
+            "                          (--body <text> | --body-file <path>)\n" +
+            "                          [--html-body <html> | --html-body-file <path>]\n" +
+            "                          [--cc <email>] [--bcc <email>]\n" +
+            "                          [--attachment <file>]... [--account EMAIL]"
+        );
+        process.exit(1);
+      }
+
+      const attachments: { filename: string; content: Buffer }[] = [];
+      for (const filePath of attachmentPaths) {
+        if (!existsSync(filePath)) {
+          console.error(`Attachment not found: ${filePath}`);
+          process.exit(1);
+        }
+        const content = readFileSync(filePath);
+        attachments.push({ filename: basename(filePath), content });
+        console.log(
+          `Attaching: ${basename(filePath)} (${(content.length / 1024).toFixed(0)} KB)`
+        );
+      }
+
+      // Gmail's own cap is 25MB on the encoded message; base64 inflates by ~4/3.
+      const totalBytes = attachments.reduce((sum, a) => sum + a.content.length, 0);
+      if (totalBytes * 1.37 > 25 * 1024 * 1024) {
+        console.error(
+          `Attachments total ${(totalBytes / 1024 / 1024).toFixed(1)} MB, which exceeds ` +
+            `Gmail's 25MB limit once base64-encoded. Upload to Drive and link instead.`
+        );
+        process.exit(1);
+      }
+
+      const result = await gm.createDraft({
+        to,
+        subject,
+        body,
+        htmlBody,
+        attachments,
+        cc: parsed.cc,
+        bcc: parsed.bcc,
+      });
+
+      console.log(
+        `\nDraft created (NOT sent). Draft ID: ${result.id}` +
+          `${attachments.length ? ` — ${attachments.length} attachment(s)` : ""}`
+      );
+      console.log("Review and send it from Gmail.");
+      break;
+    }
+
     case "labels": {
       const labels = await gm.listLabels();
       console.log("Gmail Labels:");
@@ -168,14 +235,23 @@ async function main() {
       console.log("Commands:");
       console.log("  search <query> [--max N]     Search messages");
       console.log("  read <messageId>             Read a message");
-      console.log("  send --to --subject --body   Send an email");
+      console.log("  send --to --subject --body   Send an email immediately");
+      console.log("       [--attachment <file>]   Attach file (can repeat)");
+      console.log("  draft --to --subject --body  Create a draft for review (does NOT send)");
+      console.log("       [--body-file <path>]    Read the body from a file");
+      console.log("       [--html-body-file <p>]  Read a formatted HTML body from a file");
+      console.log("       [--cc] [--bcc]          Additional recipients");
       console.log("       [--attachment <file>]   Attach file (can repeat)");
       console.log("  labels                       List labels");
       console.log("");
       console.log("Examples:");
       console.log("  gmail send --to user@example.com --subject 'Hello' --body 'Message'");
       console.log("  gmail send --to user@example.com --subject 'Report' --body 'See attached' --attachment report.pdf");
-      console.log("  gmail send --to user@example.com --subject 'Files' --body 'Multiple' --attachment a.pdf --attachment b.png");
+      console.log("  gmail draft --to client@example.com --subject 'Proposal' \\");
+      console.log("    --body-file email.txt --attachment a.pdf --attachment b.pdf");
+      console.log("");
+      console.log("Prefer `draft` over `send` for anything a person is accountable for —");
+      console.log("it puts a human between the machine and the recipient.");
       break;
   }
 }

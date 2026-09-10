@@ -28,6 +28,48 @@ export interface GoogleApiOptions {
   account?: string; // Account email for multi-account support
 }
 
+/**
+ * A node in a Gmail message's MIME tree. Recursive: `multipart/*` parts carry
+ * their children in `parts`. Attachments are leaves with a `filename` and an
+ * `attachmentId` in place of inline `data`.
+ */
+export interface MessagePart {
+  partId?: string;
+  mimeType?: string;
+  filename?: string;
+  headers?: { name: string; value: string }[];
+  body?: { data?: string; size?: number; attachmentId?: string };
+  parts?: MessagePart[];
+}
+
+/** Flatten a MIME tree to the leaves that are actual file attachments. */
+export function collectAttachments(
+  part: MessagePart | undefined
+): { filename: string; mimeType: string; size: number }[] {
+  if (!part) return [];
+  const found: { filename: string; mimeType: string; size: number }[] = [];
+  const walk = (p: MessagePart) => {
+    if (p.filename) {
+      found.push({
+        filename: p.filename,
+        mimeType: p.mimeType ?? "application/octet-stream",
+        size: p.body?.size ?? 0,
+      });
+    }
+    (p.parts ?? []).forEach(walk);
+  };
+  walk(part);
+  return found;
+}
+
+/** Read a header off a MIME part, case-insensitively. */
+export function header(part: MessagePart | undefined, name: string): string {
+  return (
+    part?.headers?.find((h) => h.name.toLowerCase() === name.toLowerCase())
+      ?.value ?? ""
+  );
+}
+
 export interface MimeMessageOptions {
   to: string;
   subject: string;
@@ -318,6 +360,81 @@ function createGmailHelpers(account?: string) {
       return googleApi<DraftResponse>("/gmail/v1/users/me/drafts", {
         method: "POST",
         body: { message: { raw: encoded } },
+        account,
+      });
+    },
+
+    /**
+     * List drafts. Needed because drafts are NOT reachable through the
+     * messages search path — `messages.list` does not index them under
+     * `is:draft` or `in:drafts`, so gmail search returns nothing for a draft
+     * that demonstrably exists. They live behind their own endpoint.
+     */
+    async listDrafts(maxResults = 10) {
+      interface DraftsResponse {
+        drafts?: { id: string; message: { id: string; threadId: string } }[];
+        resultSizeEstimate?: number;
+      }
+      const result = await googleApi<DraftsResponse>("/gmail/v1/users/me/drafts", {
+        params: { maxResults },
+        account,
+      });
+      return result.drafts || [];
+    },
+
+    /** Fetch one draft in full, including its MIME part tree. */
+    async getDraft(id: string) {
+      interface DraftResponse {
+        id: string;
+        message: {
+          id: string;
+          threadId: string;
+          labelIds?: string[];
+          snippet?: string;
+          payload: MessagePart;
+        };
+      }
+      return googleApi<DraftResponse>(`/gmail/v1/users/me/drafts/${id}`, {
+        params: { format: "full" },
+        account,
+      });
+    },
+
+    /**
+     * Replace a draft's content. Gmail's PUT semantics replace the ENTIRE
+     * message — there is no partial update — so anything not re-supplied is
+     * gone. The CLI guards against silently dropping attachments; see the
+     * draft-update command.
+     */
+    async updateDraft(
+      id: string,
+      opts: {
+        to: string;
+        subject: string;
+        body: string;
+        htmlBody?: string;
+        attachments?: { filename: string; content: Buffer }[];
+        cc?: string;
+        bcc?: string;
+      }
+    ) {
+      const encoded = buildMimeMessage(opts);
+
+      interface DraftResponse {
+        id: string;
+        message: { id: string; threadId: string };
+      }
+      return googleApi<DraftResponse>(`/gmail/v1/users/me/drafts/${id}`, {
+        method: "PUT",
+        body: { message: { raw: encoded } },
+        account,
+      });
+    },
+
+    /** Permanently delete a draft. Not a trash — this does not come back. */
+    async deleteDraft(id: string) {
+      return googleApi<unknown>(`/gmail/v1/users/me/drafts/${id}`, {
+        method: "DELETE",
         account,
       });
     },

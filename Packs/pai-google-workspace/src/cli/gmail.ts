@@ -6,10 +6,34 @@ import { basename } from "path";
 const command = process.argv[2];
 const args = process.argv.slice(3);
 
+// Handle --help anywhere in the command line
+if (process.argv.includes("--help") || process.argv.includes("-h") || !command) {
+  console.log("Usage: bun run gmail <command> [options]");
+  console.log("");
+  console.log("Global Options:");
+  console.log("  --account EMAIL          Use specific Google account");
+  console.log("  --help, -h               Show this help message");
+  console.log("");
+  console.log("Commands:");
+  console.log("  search <query> [--max N]     Search messages");
+  console.log("  read <messageId>             Read a message");
+  console.log("  send --to --subject --body   Send an email");
+  console.log("       [--attachment <file>]   Attach file (can repeat)");
+  console.log("  labels                       List labels");
+  console.log("");
+  console.log("Examples:");
+  console.log("  gmail send --to user@example.com --subject 'Hello' --body 'Message'");
+  console.log("  gmail send --to user@example.com --subject 'Report' --body 'See attached' --attachment report.pdf");
+  console.log("  gmail send --to user@example.com --subject 'Files' --body 'Multiple' --attachment a.pdf --attachment b.png");
+  process.exit(0);
+}
+
 interface ParsedArgs {
   single: Record<string, string>;
   multiple: Record<string, string[]>;
 }
+
+const BOOLEAN_FLAGS = new Set(["help", "h"]);
 
 function parseArgs(args: string[]): ParsedArgs {
   const single: Record<string, string> = {};
@@ -18,6 +42,10 @@ function parseArgs(args: string[]): ParsedArgs {
   for (let i = 0; i < args.length; i++) {
     if (args[i].startsWith("--")) {
       const key = args[i].slice(2);
+
+      // Skip boolean flags without consuming the next arg
+      if (BOOLEAN_FLAGS.has(key)) continue;
+
       const value = args[i + 1] || "";
 
       // Keys that support multiple values
@@ -160,23 +188,9 @@ async function main() {
     }
 
     default:
-      console.log("Usage: bun run gmail <command> [options]");
-      console.log("");
-      console.log("Global Options:");
-      console.log("  --account EMAIL          Use specific Google account");
-      console.log("");
-      console.log("Commands:");
-      console.log("  search <query> [--max N]     Search messages");
-      console.log("  read <messageId>             Read a message");
-      console.log("  send --to --subject --body   Send an email");
-      console.log("       [--attachment <file>]   Attach file (can repeat)");
-      console.log("  labels                       List labels");
-      console.log("");
-      console.log("Examples:");
-      console.log("  gmail send --to user@example.com --subject 'Hello' --body 'Message'");
-      console.log("  gmail send --to user@example.com --subject 'Report' --body 'See attached' --attachment report.pdf");
-      console.log("  gmail send --to user@example.com --subject 'Files' --body 'Multiple' --attachment a.pdf --attachment b.png");
-      break;
+      console.error(`Unknown command: ${command}`);
+      console.error("Run 'bun run gmail --help' for usage.");
+      process.exit(1);
   }
 }
 

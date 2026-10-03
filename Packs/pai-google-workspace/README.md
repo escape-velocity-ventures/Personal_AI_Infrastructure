@@ -27,9 +27,9 @@ Gmail / Calendar / Drive
 ## Quick Start
 
 ```bash
-# 1. Add credentials to .env
-echo "GOOGLE_CLIENT_ID=your-client-id" >> $PAI_DIR/.env
-echo "GOOGLE_CLIENT_SECRET=your-client-secret" >> $PAI_DIR/.env
+# 1. Put your Google Cloud OAuth client's ID and secret in ~/.env, as the
+#    GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET variables (see "Where settings
+#    are found" below for other accepted files).
 
 # 2. Authenticate
 bun run auth login
@@ -37,6 +37,15 @@ bun run auth login
 # 3. Test
 bun run gmail search "is:unread"
 ```
+
+### Where settings are found
+
+`src/lib/config.ts` resolves settings the same way however the process was started (terminal, Claude Code, MCP server):
+
+- **OAuth client:** a non-empty value in the process environment wins. Otherwise the first **non-empty** value from these files, in order: `$PAI_GOOGLE_ENV_FILE`, `~/.env`, `$PAI_DIR/.env`, `~/.config/pai/.env`, `~/.claude/.env`. An empty value in one file never hides a real value in another.
+- **Token file:** `$PAI_GOOGLE_TOKEN_FILE` if set. Otherwise the first that exists of `$PAI_DIR/.google-tokens.json`, `~/.claude/.google-tokens.json`, `~/.config/pai/.google-tokens.json`. For a first login, it's created under `$PAI_DIR` (or `~/.config/pai`).
+
+Values are never printed. If the client is missing, the error lists the files that were checked.
 
 ## MCP Tools
 

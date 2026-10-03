@@ -1,6 +1,7 @@
 import { serve } from "bun";
 import type { GoogleTokens, TokenResponse } from "./types";
 import { saveTokens, getTokenPath, fetchUserInfo } from "./token-manager";
+import { getOAuthClient, missingClientMessage } from "../lib/config";
 
 const PORT = parseInt(process.env.GOOGLE_OAUTH_PORT || "9876");
 const REDIRECT_URI = `http://localhost:${PORT}/callback`;
@@ -15,9 +16,9 @@ const SCOPES = [
 ];
 
 export function getAuthUrl(): string {
-  const clientId = process.env.GOOGLE_CLIENT_ID;
+  const { id: clientId } = getOAuthClient();
   if (!clientId) {
-    throw new Error("Missing GOOGLE_CLIENT_ID in environment");
+    throw new Error(missingClientMessage());
   }
 
   const params = new URLSearchParams({
@@ -33,11 +34,10 @@ export function getAuthUrl(): string {
 }
 
 async function exchangeCodeForTokens(code: string): Promise<GoogleTokens> {
-  const clientId = process.env.GOOGLE_CLIENT_ID;
-  const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+  const { id: clientId, key: clientSecret } = getOAuthClient();
 
   if (!clientId || !clientSecret) {
-    throw new Error("Missing GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET");
+    throw new Error(missingClientMessage());
   }
 
   const response = await fetch("https://oauth2.googleapis.com/token", {

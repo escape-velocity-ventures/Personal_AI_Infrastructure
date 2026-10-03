@@ -1,8 +1,9 @@
-import { readFileSync, writeFileSync, existsSync, chmodSync } from "fs";
+import { readFileSync, writeFileSync, existsSync, chmodSync, mkdirSync } from "fs";
 import type { GoogleTokens, MultiAccountTokenStorage, TokenResponse, GoogleUserInfo } from "./types";
+import { resolveTokenPath, tokenDir, getOAuthClient, missingClientMessage } from "../lib/config";
 
-const PAI_DIR = process.env.PAI_DIR || `${process.env.HOME}/.config/pai`;
-const TOKEN_FILE = `${PAI_DIR}/.google-tokens.json`;
+// Resolved launch-independently (Claude Code vs terminal); see src/lib/config.ts.
+const TOKEN_FILE = resolveTokenPath();
 const TOKEN_REFRESH_BUFFER = 5 * 60 * 1000; // Refresh 5 minutes before expiry
 
 export function getTokenPath(): string {
@@ -36,6 +37,10 @@ function loadStorage(): MultiAccountTokenStorage {
 }
 
 function saveStorage(storage: MultiAccountTokenStorage): void {
+  const dir = tokenDir(TOKEN_FILE);
+  if (!existsSync(dir)) {
+    mkdirSync(dir, { recursive: true, mode: 0o700 });
+  }
   writeFileSync(TOKEN_FILE, JSON.stringify(storage, null, 2));
   chmodSync(TOKEN_FILE, 0o600); // Owner read/write only
 }
@@ -125,11 +130,10 @@ export async function fetchUserInfo(accessToken: string): Promise<GoogleUserInfo
 }
 
 export async function refreshAccessToken(tokens: GoogleTokens, account?: string): Promise<GoogleTokens> {
-  const clientId = process.env.GOOGLE_CLIENT_ID;
-  const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+  const { id: clientId, key: clientSecret } = getOAuthClient();
 
   if (!clientId || !clientSecret) {
-    throw new Error("Missing GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET in environment");
+    throw new Error(missingClientMessage());
   }
 
   const response = await fetch("https://oauth2.googleapis.com/token", {

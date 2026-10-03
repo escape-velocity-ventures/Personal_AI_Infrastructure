@@ -2,12 +2,11 @@
 # PAI Google Workspace - Management Script
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PAI_DIR="${PAI_DIR:-$HOME/.config/pai}"
 
-# Load environment
-if [ -f "$PAI_DIR/.env" ]; then
-  export $(grep -v '^#' "$PAI_DIR/.env" | xargs)
-fi
+# Credentials and the token file are resolved by src/lib/config.ts, the same way
+# however the session was launched (terminal vs Claude Code). The old
+# `export $(... | xargs)` loader broke on values with spaces and let EMPTY
+# values in $PAI_DIR/.env override real ones (pai-config-81cn), so it was removed.
 
 case "$1" in
   auth)

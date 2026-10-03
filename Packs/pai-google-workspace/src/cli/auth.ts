@@ -8,6 +8,7 @@ import {
   setDefaultAccount,
   getDefaultAccount,
 } from "../auth/token-manager";
+import { getOAuthClient, missingClientMessage } from "../lib/config";
 
 const command = process.argv[2];
 const args = process.argv.slice(3);
@@ -30,14 +31,10 @@ async function main() {
 
   switch (command) {
     case "login": {
-      const clientId = process.env.GOOGLE_CLIENT_ID;
-      const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+      const { id: clientId, key: clientSecret } = getOAuthClient();
 
       if (!clientId || !clientSecret) {
-        console.error("Missing Google credentials in environment.");
-        console.error("Add these to your .env file:");
-        console.error("  GOOGLE_CLIENT_ID=your-client-id");
-        console.error("  GOOGLE_CLIENT_SECRET=your-client-secret");
+        console.error(missingClientMessage());
         process.exit(1);
       }
 

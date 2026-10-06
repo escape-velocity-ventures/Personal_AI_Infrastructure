@@ -706,79 +706,143 @@ ${"─".repeat(60)}
 // Postmortem Template
 // =============================================================================
 
-function generatePostmortemTemplate(
+/**
+ * Build the body of a new postmortem.
+ *
+ * The canonical template is TinkerBelle-config's `postmortems/TEMPLATE.md` (the
+ * Google SRE format, standard for every PM from 2026-06-10). `PM_DIR` already
+ * points at that directory whenever `POSTMORTEM_DIR` is set, so when the
+ * canonical file is on disk we fill IT in rather than keeping a second copy
+ * here.
+ *
+ * Why: two copies of one template in two repos guarantee drift, and these had
+ * drifted. The inline copy omitted `Trigger`, `Detection` and `Supporting
+ * Information` outright, renamed `Root Causes`, and dropped the `Authors` and
+ * `Affected services` header fields (pai-config-51xc). CLAUDE.md's
+ * single-source-of-truth rule is the general form: one fact, one place.
+ *
+ * The inline fallback below now mirrors TEMPLATE.md section for section, so a
+ * run without the canonical file on disk is not itself a divergence.
+ */
+export function generatePostmortemTemplate(
   title: string,
   pmNumber: string,
   severity: string
 ): string {
   const date = new Date().toISOString().split("T")[0];
+  const canonical = join(PM_DIR, "TEMPLATE.md");
 
-  return `# ${title}
+  if (existsSync(canonical)) {
+    try {
+      return fillCanonicalTemplate(
+        readFileSync(canonical, "utf-8"),
+        title,
+        pmNumber,
+        severity,
+        date
+      );
+    } catch {
+      // Unreadable canonical template: fall through to the inline copy rather
+      // than failing the create. A PM filed from the fallback is still valid.
+    }
+  }
 
-**Postmortem ID:** ${pmNumber}
-**Date:** ${date}
-**Severity:** ${severity}
-**Status:** Draft
+  return inlinePostmortemTemplate(title, pmNumber, severity, date);
+}
 
----
+/**
+ * Fill TEMPLATE.md's placeholders without restructuring it.
+ *
+ * Labels are preserved and only values replaced, so this stays correct across
+ * TEMPLATE.md edits -- including the `PM number:` -> `PM ID:` rename that
+ * retires the sequential scheme (TinkerBelle-config#1372). `Authors` and
+ * `Affected services` are deliberately left as placeholders: the filer supplies
+ * them, and a wrong author is worse than a blank one.
+ */
+export function fillCanonicalTemplate(
+  template: string,
+  title: string,
+  pmNumber: string,
+  severity: string,
+  date: string
+): string {
+  let out = template;
+
+  out = out.replace(/^#\s+Postmortem:.*$/m, `# Postmortem: ${title}`);
+
+  // Drop the "delete this quote block when filing" instructions -- the first
+  // contiguous run of quote lines, and only if it is actually that block (the
+  // Action Items and Timeline sections have quote blocks that must survive).
+  out = out.replace(/^(?:>.*(?:\n|$))+\n?/m, (block) =>
+    /Delete this quote block when filing/.test(block) ? "" : block
+  );
+
+  out = out.replace(/^(-\s+\*\*PM (?:number|ID):\*\*).*$/m, `$1 ${pmNumber}`);
+  out = out.replace(/^(-\s+\*\*Date:\*\*).*$/m, `$1 ${date}`);
+  out = out.replace(/^(-\s+\*\*Status:\*\*).*$/m, "$1 Draft");
+  out = out.replace(/^(-\s+\*\*Severity:\*\*).*$/m, `$1 ${severity}`);
+
+  return out.replace(/\s+$/, "") + "\n";
+}
+
+/** Fallback when the canonical TEMPLATE.md is not on disk. Mirrors it. */
+function inlinePostmortemTemplate(
+  title: string,
+  pmNumber: string,
+  severity: string,
+  date: string
+): string {
+  return `# Postmortem: ${title}
+
+- **PM ID:** ${pmNumber}
+- **Date:** ${date}  (incident date)
+- **Authors:** <names / personas>
+- **Status:** Draft
+- **Severity:** ${severity}
+- **Affected services:** <service(s) / namespaces>
 
 ## Summary
-
-[One paragraph summary of what happened]
-
-## Timeline
-
-| Time | Event |
-|------|-------|
-| T+0 | [Initial event] |
-| T+N | [Subsequent events] |
-
-## Root Cause Analysis
-
-[What was the underlying cause?]
-
-1. **Primary cause:**
-2. **Contributing factors:**
+<2-3 sentences: what happened, the blast radius, and how it was resolved.>
 
 ## Impact
+<Who/what was affected and how much -- users, requests, data, duration, SLO burn. Quantify.>
 
-- [User impact]
-- [System impact]
-- [Data impact]
+## Root Causes
+<The chain of conditions that allowed the incident, not just the proximate trigger. There is usually more than one.>
+
+## Trigger
+<The specific event that set the incident in motion (deploy, config change, traffic spike, hardware fault, ...).>
+
+## Detection
+<How it was discovered -- which alert fired, or a human report? How long from start to detection? Slow or manual detection is an action item.>
 
 ## Resolution
-
-[How was it fixed?]
-
-## Lessons Learned
-
-### What went well
--
-
-### What went wrong
--
-
-### Where we got lucky
--
+<What actually restored service, in order. Distinguish mitigation from fix.>
 
 ## Action Items
+> Every item gets an owner, a type, and a tracking bead.
 
-| Action | Owner | Status |
-|--------|-------|--------|
-| [Preventive measure] | | Pending |
+| Action item | Type (mitigate / prevent / process) | Owner | Bead / Status |
+|---|---|---|---|
+| <what to do> | prevent | <owner> | <bead-id> \u00b7 open |
 
----
+## Lessons Learned
+**What went well**
+- <things that worked>
 
-## Remediation Verification
+**What went wrong**
+- <gaps, missing alerts, bad assumptions>
 
-- [ ] Root cause addressed
-- [ ] Monitoring added
-- [ ] Documentation updated
-- [ ] Team notified
+**Where we got lucky**
+- <near-misses that could have been far worse>
 
----
+## Timeline
+> All times with timezone. Start before the trigger, end at "all-clear".
 
-*Created: ${date}*
+- \`${date} HH:MM TZ\` — <event>
+
+## Supporting Information
+<Links: dashboards, alert definitions, relevant PRs/commits, related PMs, graphs.>
 `;
 }
 
@@ -3070,4 +3134,10 @@ async function main(): Promise<void> {
   }
 }
 
-main();
+// Only run the CLI when executed directly. Without this guard the module runs
+// main() on import, which is why nothing in this file could be unit-tested
+// (pai-config-51xc). `bun run content-cli.ts` and the bin entry both set
+// import.meta.main, so invocation behaviour is unchanged.
+if (import.meta.main) {
+  main();
+}

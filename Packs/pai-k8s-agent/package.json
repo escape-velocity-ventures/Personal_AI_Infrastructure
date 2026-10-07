@@ -12,7 +12,7 @@
   },
   "dependencies": {
     "pai-llm-provider": "file:../pai-llm-provider",
-    "@modelcontextprotocol/sdk": "^1.0.0",
+    "@modelcontextprotocol/sdk": "^1.31.0",
     "ws": "^8.18.0",
     "redis": "^4.7.0",
     "uuid": "^11.0.0"

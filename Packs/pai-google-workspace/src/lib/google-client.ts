@@ -1,4 +1,6 @@
 import { getValidAccessToken } from "../auth/token-manager";
+import { encodeHeader, encodeBody, replyHeaders, replySubject, replyReferences, type ReplyOptions } from "./mime";
+export type { ReplyOptions } from "./mime";
 import { getMimeType } from "./mime-types";
 
 const RATE_LIMIT_WINDOW = 100 * 1000; // 100 seconds
@@ -125,13 +127,16 @@ function createGmailHelpers(account?: string) {
       });
     },
 
-    async send(to: string, subject: string, body: string) {
+    async send(to: string, subject: string, body: string, reply?: ReplyOptions) {
       const email = [
         `To: ${to}`,
-        `Subject: ${subject}`,
+        `Subject: ${encodeHeader(subject)}`,
+        ...replyHeaders(reply),
+        "MIME-Version: 1.0",
         "Content-Type: text/plain; charset=utf-8",
+        "Content-Transfer-Encoding: base64",
         "",
-        body,
+        encodeBody(body),
       ].join("\r\n");
 
       const encoded = Buffer.from(email).toString("base64url");
@@ -143,7 +148,7 @@ function createGmailHelpers(account?: string) {
       }
       return googleApi<SendResponse>("/gmail/v1/users/me/messages/send", {
         method: "POST",
-        body: { raw: encoded },
+        body: reply?.threadId ? { raw: encoded, threadId: reply.threadId } : { raw: encoded },
         account,
       });
     },
@@ -152,20 +157,23 @@ function createGmailHelpers(account?: string) {
       to: string,
       subject: string,
       body: string,
-      attachments: { filename: string; content: Buffer }[]
+      attachments: { filename: string; content: Buffer }[],
+      reply?: ReplyOptions
     ) {
       const boundary = `boundary_${Date.now()}_${Math.random().toString(36).slice(2)}`;
 
       const parts: string[] = [
         `To: ${to}`,
-        `Subject: ${subject}`,
+        `Subject: ${encodeHeader(subject)}`,
+        ...replyHeaders(reply),
         `MIME-Version: 1.0`,
         `Content-Type: multipart/mixed; boundary="${boundary}"`,
         "",
         `--${boundary}`,
         "Content-Type: text/plain; charset=utf-8",
+        "Content-Transfer-Encoding: base64",
         "",
-        body,
+        encodeBody(body),
       ];
 
       for (const attachment of attachments) {
@@ -194,9 +202,29 @@ function createGmailHelpers(account?: string) {
       }
       return googleApi<SendResponse>("/gmail/v1/users/me/messages/send", {
         method: "POST",
-        body: { raw: encoded },
+        body: reply?.threadId ? { raw: encoded, threadId: reply.threadId } : { raw: encoded },
         account,
       });
+    },
+
+    // Threading for a reply to messageId, plus the default "Re:" subject.
+    // Shared by the CLI and the MCP tool so they can't drift apart.
+    async replyTo(messageId: string): Promise<{ reply: ReplyOptions; subject: string }> {
+      const original = await this.getMessage(messageId);
+      const header = (name: string) =>
+        original.payload.headers.find((h) => h.name.toLowerCase() === name.toLowerCase())?.value || "";
+      const messageIdHeader = header("Message-ID");
+      if (!messageIdHeader) {
+        throw new Error(`Message ${messageId} has no Message-ID header; cannot thread a reply.`);
+      }
+      return {
+        reply: {
+          threadId: original.threadId,
+          inReplyTo: messageIdHeader,
+          references: replyReferences(header("References"), messageIdHeader),
+        },
+        subject: replySubject(header("Subject")),
+      };
     },
 
     async listLabels() {

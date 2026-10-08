@@ -1,5 +1,5 @@
 #!/usr/bin/env bun
-import { gmail, forAccount } from "../lib/google-client";
+import { gmail, forAccount, type ReplyOptions } from "../lib/google-client";
 import { readFileSync, existsSync } from "fs";
 import { basename } from "path";
 
@@ -19,12 +19,15 @@ if (process.argv.includes("--help") || process.argv.includes("-h") || !command) 
   console.log("  read <messageId>             Read a message");
   console.log("  send --to --subject --body   Send an email");
   console.log("       [--attachment <file>]   Attach file (can repeat)");
+  console.log("       [--reply-to <messageId>] Reply in that message's thread;");
+  console.log("                                --subject defaults to \"Re: <original>\"");
   console.log("  labels                       List labels");
   console.log("");
   console.log("Examples:");
   console.log("  gmail send --to user@example.com --subject 'Hello' --body 'Message'");
   console.log("  gmail send --to user@example.com --subject 'Report' --body 'See attached' --attachment report.pdf");
   console.log("  gmail send --to user@example.com --subject 'Files' --body 'Multiple' --attachment a.pdf --attachment b.png");
+  console.log("  gmail send --to user@example.com --reply-to 1a1188d82faf4140 --body 'Following up'");
   process.exit(0);
 }
 
@@ -144,12 +147,20 @@ async function main() {
 
     case "send": {
       const to = parsed.to;
-      const subject = parsed.subject;
+      let subject = parsed.subject;
       const body = parsed.body;
       const attachmentPaths = multiple.attachment || [];
+      const replyToId = parsed["reply-to"];
+      let reply: ReplyOptions | undefined;
+
+      if (replyToId) {
+        const resolved = await gm.replyTo(replyToId);
+        reply = resolved.reply;
+        subject = subject || resolved.subject;
+      }
 
       if (!to || !subject || !body) {
-        console.error("Usage: bun run gmail send --to <email> --subject <subject> --body <body> [--attachment <file>]... [--account EMAIL]");
+        console.error("Usage: bun run gmail send --to <email> (--subject <subject> | --reply-to <messageId>) --body <body> [--attachment <file>]... [--account EMAIL]");
         process.exit(1);
       }
 
@@ -168,11 +179,11 @@ async function main() {
           console.log(`Attaching: ${filename} (${content.length} bytes)`);
         }
 
-        const result = await gm.sendWithAttachment(to, subject, body, attachments);
+        const result = await gm.sendWithAttachment(to, subject, body, attachments, reply);
         console.log(`Email sent with ${attachments.length} attachment(s)! Message ID: ${result.id}`);
       } else {
-        const result = await gm.send(to, subject, body);
-        console.log(`Email sent! Message ID: ${result.id}`);
+        const result = await gm.send(to, subject, body, reply);
+        console.log(`Email sent! Message ID: ${result.id}${reply ? ` (thread ${result.threadId})` : ""}`);
       }
       break;
     }

@@ -1,4 +1,4 @@
-import { gmail, forAccount } from "../../lib/google-client";
+import { gmail, forAccount, type ReplyOptions } from "../../lib/google-client";
 import type { ToolDefinition } from "../types";
 
 const accountProperty = {
@@ -45,7 +45,7 @@ export const gmailTools: ToolDefinition[] = [
   },
   {
     name: "gmail_send",
-    description: "Send an email via Gmail",
+    description: "Send an email via Gmail, optionally as a threaded reply",
     inputSchema: {
       type: "object",
       properties: {
@@ -55,15 +55,21 @@ export const gmailTools: ToolDefinition[] = [
         },
         subject: {
           type: "string",
-          description: "Email subject",
+          // Not in `required`: it is optional when replyTo is set. The handler
+          // rejects a send with neither, so callers see that as a tool error.
+          description: "Email subject. REQUIRED unless replyTo is set, in which case it defaults to \"Re: <original subject>\"",
         },
         body: {
           type: "string",
           description: "Email body (plain text)",
         },
+        replyTo: {
+          type: "string",
+          description: "Gmail message ID to reply to; the email is threaded under it",
+        },
         ...accountProperty,
       },
-      required: ["to", "subject", "body"],
+      required: ["to", "body"],
     },
   },
   {
@@ -170,11 +176,22 @@ export async function handleGmailTool(
 
     case "gmail_send": {
       const to = args.to as string;
-      const subject = args.subject as string;
+      let subject = args.subject as string | undefined;
       const body = args.body as string;
+      const replyToId = args.replyTo as string | undefined;
 
-      const result = await gm.send(to, subject, body);
-      return { success: true, messageId: result.id };
+      let reply: ReplyOptions | undefined;
+      if (replyToId) {
+        const resolved = await gm.replyTo(replyToId);
+        reply = resolved.reply;
+        subject = subject || resolved.subject;
+      }
+      if (!subject) {
+        throw new Error("subject is required unless replyTo is set");
+      }
+
+      const result = await gm.send(to, subject, body, reply);
+      return { success: true, messageId: result.id, threadId: result.threadId };
     }
 
     case "gmail_labels": {

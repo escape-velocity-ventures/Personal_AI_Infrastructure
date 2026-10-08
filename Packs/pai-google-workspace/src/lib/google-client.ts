@@ -1,4 +1,6 @@
 import { getValidAccessToken } from "../auth/token-manager";
+import { encodeHeader, encodeBody, replyHeaders, replySubject, replyReferences, type ReplyOptions } from "./mime";
+export type { ReplyOptions } from "./mime";
 import { getMimeType } from "./mime-types";
 
 const RATE_LIMIT_WINDOW = 100 * 1000; // 100 seconds
@@ -93,28 +95,6 @@ function withAccount(account?: string) {
   };
 }
 
-// Threading options for replies: Gmail places the message in threadId, and
-// recipients' clients thread it via In-Reply-To/References.
-export interface ReplyOptions {
-  threadId?: string;
-  inReplyTo?: string;
-  references?: string;
-}
-
-// RFC 2047: non-ASCII header values must be encoded or clients show mojibake.
-function encodeHeader(value: string): string {
-  return /^[\x00-\x7F]*$/.test(value)
-    ? value
-    : `=?UTF-8?B?${Buffer.from(value, "utf-8").toString("base64")}?=`;
-}
-
-function replyHeaders(reply?: ReplyOptions): string[] {
-  const headers: string[] = [];
-  if (reply?.inReplyTo) headers.push(`In-Reply-To: ${reply.inReplyTo}`);
-  if (reply?.references) headers.push(`References: ${reply.references}`);
-  return headers;
-}
-
 // Gmail API helpers
 function createGmailHelpers(account?: string) {
   return {
@@ -154,8 +134,9 @@ function createGmailHelpers(account?: string) {
         ...replyHeaders(reply),
         "MIME-Version: 1.0",
         "Content-Type: text/plain; charset=utf-8",
+        "Content-Transfer-Encoding: base64",
         "",
-        body,
+        encodeBody(body),
       ].join("\r\n");
 
       const encoded = Buffer.from(email).toString("base64url");
@@ -190,8 +171,9 @@ function createGmailHelpers(account?: string) {
         "",
         `--${boundary}`,
         "Content-Type: text/plain; charset=utf-8",
+        "Content-Transfer-Encoding: base64",
         "",
-        body,
+        encodeBody(body),
       ];
 
       for (const attachment of attachments) {
@@ -235,14 +217,13 @@ function createGmailHelpers(account?: string) {
       if (!messageIdHeader) {
         throw new Error(`Message ${messageId} has no Message-ID header; cannot thread a reply.`);
       }
-      const originalSubject = header("Subject");
       return {
         reply: {
           threadId: original.threadId,
           inReplyTo: messageIdHeader,
-          references: [header("References"), messageIdHeader].filter(Boolean).join(" "),
+          references: replyReferences(header("References"), messageIdHeader),
         },
-        subject: /^re:/i.test(originalSubject) ? originalSubject : `Re: ${originalSubject}`,
+        subject: replySubject(header("Subject")),
       };
     },
 

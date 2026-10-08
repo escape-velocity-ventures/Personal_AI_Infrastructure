@@ -1,6 +1,4 @@
 import { gmail, forAccount, type ReplyOptions } from "../../lib/google-client";
-import { readFileSync, existsSync } from "fs";
-import { basename } from "path";
 import type { ToolDefinition } from "../types";
 
 const accountProperty = {
@@ -47,7 +45,7 @@ export const gmailTools: ToolDefinition[] = [
   },
   {
     name: "gmail_send",
-    description: "Send an email via Gmail, optionally as a threaded reply and/or with attachments",
+    description: "Send an email via Gmail, optionally as a threaded reply",
     inputSchema: {
       type: "object",
       properties: {
@@ -57,7 +55,9 @@ export const gmailTools: ToolDefinition[] = [
         },
         subject: {
           type: "string",
-          description: "Email subject (optional when replyTo is set; defaults to \"Re: <original>\")",
+          // Not in `required`: it is optional when replyTo is set. The handler
+          // rejects a send with neither, so callers see that as a tool error.
+          description: "Email subject. REQUIRED unless replyTo is set, in which case it defaults to \"Re: <original subject>\"",
         },
         body: {
           type: "string",
@@ -66,11 +66,6 @@ export const gmailTools: ToolDefinition[] = [
         replyTo: {
           type: "string",
           description: "Gmail message ID to reply to; the email is threaded under it",
-        },
-        attachments: {
-          type: "array",
-          items: { type: "string" },
-          description: "Local file paths to attach",
         },
         ...accountProperty,
       },
@@ -184,7 +179,6 @@ export async function handleGmailTool(
       let subject = args.subject as string | undefined;
       const body = args.body as string;
       const replyToId = args.replyTo as string | undefined;
-      const attachmentPaths = (args.attachments as string[] | undefined) || [];
 
       let reply: ReplyOptions | undefined;
       if (replyToId) {
@@ -194,15 +188,6 @@ export async function handleGmailTool(
       }
       if (!subject) {
         throw new Error("subject is required unless replyTo is set");
-      }
-
-      if (attachmentPaths.length > 0) {
-        const attachments = attachmentPaths.map((filePath) => {
-          if (!existsSync(filePath)) throw new Error(`Attachment not found: ${filePath}`);
-          return { filename: basename(filePath), content: readFileSync(filePath) };
-        });
-        const result = await gm.sendWithAttachment(to, subject, body, attachments, reply);
-        return { success: true, messageId: result.id, threadId: result.threadId, attachments: attachments.length };
       }
 
       const result = await gm.send(to, subject, body, reply);

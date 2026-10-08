@@ -93,6 +93,28 @@ function withAccount(account?: string) {
   };
 }
 
+// Threading options for replies: Gmail places the message in threadId, and
+// recipients' clients thread it via In-Reply-To/References.
+export interface ReplyOptions {
+  threadId?: string;
+  inReplyTo?: string;
+  references?: string;
+}
+
+// RFC 2047: non-ASCII header values must be encoded or clients show mojibake.
+function encodeHeader(value: string): string {
+  return /^[\x00-\x7F]*$/.test(value)
+    ? value
+    : `=?UTF-8?B?${Buffer.from(value, "utf-8").toString("base64")}?=`;
+}
+
+function replyHeaders(reply?: ReplyOptions): string[] {
+  const headers: string[] = [];
+  if (reply?.inReplyTo) headers.push(`In-Reply-To: ${reply.inReplyTo}`);
+  if (reply?.references) headers.push(`References: ${reply.references}`);
+  return headers;
+}
+
 // Gmail API helpers
 function createGmailHelpers(account?: string) {
   return {
@@ -125,10 +147,12 @@ function createGmailHelpers(account?: string) {
       });
     },
 
-    async send(to: string, subject: string, body: string) {
+    async send(to: string, subject: string, body: string, reply?: ReplyOptions) {
       const email = [
         `To: ${to}`,
-        `Subject: ${subject}`,
+        `Subject: ${encodeHeader(subject)}`,
+        ...replyHeaders(reply),
+        "MIME-Version: 1.0",
         "Content-Type: text/plain; charset=utf-8",
         "",
         body,
@@ -143,7 +167,7 @@ function createGmailHelpers(account?: string) {
       }
       return googleApi<SendResponse>("/gmail/v1/users/me/messages/send", {
         method: "POST",
-        body: { raw: encoded },
+        body: reply?.threadId ? { raw: encoded, threadId: reply.threadId } : { raw: encoded },
         account,
       });
     },
@@ -152,13 +176,15 @@ function createGmailHelpers(account?: string) {
       to: string,
       subject: string,
       body: string,
-      attachments: { filename: string; content: Buffer }[]
+      attachments: { filename: string; content: Buffer }[],
+      reply?: ReplyOptions
     ) {
       const boundary = `boundary_${Date.now()}_${Math.random().toString(36).slice(2)}`;
 
       const parts: string[] = [
         `To: ${to}`,
-        `Subject: ${subject}`,
+        `Subject: ${encodeHeader(subject)}`,
+        ...replyHeaders(reply),
         `MIME-Version: 1.0`,
         `Content-Type: multipart/mixed; boundary="${boundary}"`,
         "",
@@ -194,7 +220,7 @@ function createGmailHelpers(account?: string) {
       }
       return googleApi<SendResponse>("/gmail/v1/users/me/messages/send", {
         method: "POST",
-        body: { raw: encoded },
+        body: reply?.threadId ? { raw: encoded, threadId: reply.threadId } : { raw: encoded },
         account,
       });
     },

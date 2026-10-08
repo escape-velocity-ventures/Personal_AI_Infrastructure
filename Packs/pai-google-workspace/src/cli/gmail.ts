@@ -1,5 +1,5 @@
 #!/usr/bin/env bun
-import { gmail, forAccount } from "../lib/google-client";
+import { gmail, forAccount, type ReplyOptions } from "../lib/google-client";
 import { readFileSync, existsSync } from "fs";
 import { basename } from "path";
 
@@ -19,12 +19,15 @@ if (process.argv.includes("--help") || process.argv.includes("-h") || !command) 
   console.log("  read <messageId>             Read a message");
   console.log("  send --to --subject --body   Send an email");
   console.log("       [--attachment <file>]   Attach file (can repeat)");
+  console.log("       [--reply-to <messageId>] Reply in that message's thread;");
+  console.log("                                --subject defaults to \"Re: <original>\"");
   console.log("  labels                       List labels");
   console.log("");
   console.log("Examples:");
   console.log("  gmail send --to user@example.com --subject 'Hello' --body 'Message'");
   console.log("  gmail send --to user@example.com --subject 'Report' --body 'See attached' --attachment report.pdf");
   console.log("  gmail send --to user@example.com --subject 'Files' --body 'Multiple' --attachment a.pdf --attachment b.png");
+  console.log("  gmail send --to user@example.com --reply-to 1a1188d82faf4140 --body 'Following up'");
   process.exit(0);
 }
 
@@ -144,12 +147,36 @@ async function main() {
 
     case "send": {
       const to = parsed.to;
-      const subject = parsed.subject;
+      let subject = parsed.subject;
       const body = parsed.body;
       const attachmentPaths = multiple.attachment || [];
+      const replyToId = parsed["reply-to"];
+      let reply: ReplyOptions | undefined;
+
+      if (replyToId) {
+        // Thread the reply under the original: same threadId for Gmail, and
+        // In-Reply-To/References so recipients' clients thread it too.
+        const original = await gm.getMessage(replyToId);
+        const header = (name: string) =>
+          original.payload.headers.find((h) => h.name.toLowerCase() === name.toLowerCase())?.value || "";
+        const messageIdHeader = header("Message-ID");
+        if (!messageIdHeader) {
+          console.error(`Message ${replyToId} has no Message-ID header; cannot thread a reply.`);
+          process.exit(1);
+        }
+        reply = {
+          threadId: original.threadId,
+          inReplyTo: messageIdHeader,
+          references: [header("References"), messageIdHeader].filter(Boolean).join(" "),
+        };
+        if (!subject) {
+          const originalSubject = header("Subject");
+          subject = /^re:/i.test(originalSubject) ? originalSubject : `Re: ${originalSubject}`;
+        }
+      }
 
       if (!to || !subject || !body) {
-        console.error("Usage: bun run gmail send --to <email> --subject <subject> --body <body> [--attachment <file>]... [--account EMAIL]");
+        console.error("Usage: bun run gmail send --to <email> (--subject <subject> | --reply-to <messageId>) --body <body> [--attachment <file>]... [--account EMAIL]");
         process.exit(1);
       }
 
@@ -168,11 +195,11 @@ async function main() {
           console.log(`Attaching: ${filename} (${content.length} bytes)`);
         }
 
-        const result = await gm.sendWithAttachment(to, subject, body, attachments);
+        const result = await gm.sendWithAttachment(to, subject, body, attachments, reply);
         console.log(`Email sent with ${attachments.length} attachment(s)! Message ID: ${result.id}`);
       } else {
-        const result = await gm.send(to, subject, body);
-        console.log(`Email sent! Message ID: ${result.id}`);
+        const result = await gm.send(to, subject, body, reply);
+        console.log(`Email sent! Message ID: ${result.id}${reply ? ` (thread ${result.threadId})` : ""}`);
       }
       break;
     }

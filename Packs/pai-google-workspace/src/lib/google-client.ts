@@ -225,6 +225,27 @@ function createGmailHelpers(account?: string) {
       });
     },
 
+    // Threading for a reply to messageId, plus the default "Re:" subject.
+    // Shared by the CLI and the MCP tool so they can't drift apart.
+    async replyTo(messageId: string): Promise<{ reply: ReplyOptions; subject: string }> {
+      const original = await this.getMessage(messageId);
+      const header = (name: string) =>
+        original.payload.headers.find((h) => h.name.toLowerCase() === name.toLowerCase())?.value || "";
+      const messageIdHeader = header("Message-ID");
+      if (!messageIdHeader) {
+        throw new Error(`Message ${messageId} has no Message-ID header; cannot thread a reply.`);
+      }
+      const originalSubject = header("Subject");
+      return {
+        reply: {
+          threadId: original.threadId,
+          inReplyTo: messageIdHeader,
+          references: [header("References"), messageIdHeader].filter(Boolean).join(" "),
+        },
+        subject: /^re:/i.test(originalSubject) ? originalSubject : `Re: ${originalSubject}`,
+      };
+    },
+
     async listLabels() {
       interface LabelsResponse {
         labels: { id: string; name: string; type: string }[];

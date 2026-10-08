@@ -154,25 +154,9 @@ async function main() {
       let reply: ReplyOptions | undefined;
 
       if (replyToId) {
-        // Thread the reply under the original: same threadId for Gmail, and
-        // In-Reply-To/References so recipients' clients thread it too.
-        const original = await gm.getMessage(replyToId);
-        const header = (name: string) =>
-          original.payload.headers.find((h) => h.name.toLowerCase() === name.toLowerCase())?.value || "";
-        const messageIdHeader = header("Message-ID");
-        if (!messageIdHeader) {
-          console.error(`Message ${replyToId} has no Message-ID header; cannot thread a reply.`);
-          process.exit(1);
-        }
-        reply = {
-          threadId: original.threadId,
-          inReplyTo: messageIdHeader,
-          references: [header("References"), messageIdHeader].filter(Boolean).join(" "),
-        };
-        if (!subject) {
-          const originalSubject = header("Subject");
-          subject = /^re:/i.test(originalSubject) ? originalSubject : `Re: ${originalSubject}`;
-        }
+        const resolved = await gm.replyTo(replyToId);
+        reply = resolved.reply;
+        subject = subject || resolved.subject;
       }
 
       if (!to || !subject || !body) {

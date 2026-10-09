@@ -1,5 +1,5 @@
 #!/usr/bin/env bun
-import { gmail, forAccount, type ReplyOptions } from "../lib/google-client";
+import { gmail, forAccount, type ReplyOptions, type AddressOptions } from "../lib/google-client";
 import { readFileSync, existsSync } from "fs";
 import { basename } from "path";
 
@@ -21,6 +21,9 @@ if (process.argv.includes("--help") || process.argv.includes("-h") || !command) 
   console.log("       [--attachment <file>]   Attach file (can repeat)");
   console.log("       [--reply-to <messageId>] Reply in that message's thread;");
   console.log("                                --subject defaults to \"Re: <original>\"");
+  console.log("       [--cc <addr>] [--bcc <addr>]  Extra recipients (each can repeat)");
+  console.log("       [--reply-to-address <addr>]   Reply-To header (can repeat); not the");
+  console.log("                                     same as --reply-to, which threads");
   console.log("  labels                       List labels");
   console.log("");
   console.log("Examples:");
@@ -37,6 +40,7 @@ interface ParsedArgs {
 }
 
 const BOOLEAN_FLAGS = new Set(["help", "h"]);
+const MULTI_FLAGS = new Set(["attachment", "cc", "bcc", "reply-to-address"]);
 
 function parseArgs(args: string[]): ParsedArgs {
   const single: Record<string, string> = {};
@@ -52,7 +56,7 @@ function parseArgs(args: string[]): ParsedArgs {
       const value = args[i + 1] || "";
 
       // Keys that support multiple values
-      if (key === "attachment") {
+      if (MULTI_FLAGS.has(key)) {
         if (!multiple[key]) multiple[key] = [];
         multiple[key].push(value);
       } else {
@@ -151,6 +155,11 @@ async function main() {
       const body = parsed.body;
       const attachmentPaths = multiple.attachment || [];
       const replyToId = parsed["reply-to"];
+      const addr: AddressOptions = {
+        cc: multiple.cc,
+        bcc: multiple.bcc,
+        replyTo: multiple["reply-to-address"],
+      };
       let reply: ReplyOptions | undefined;
 
       if (replyToId) {
@@ -160,7 +169,7 @@ async function main() {
       }
 
       if (!to || !subject || !body) {
-        console.error("Usage: bun run gmail send --to <email> (--subject <subject> | --reply-to <messageId>) --body <body> [--attachment <file>]... [--account EMAIL]");
+        console.error("Usage: bun run gmail send --to <email> (--subject <subject> | --reply-to <messageId>) --body <body> [--attachment <file>]... [--cc <addr>]... [--bcc <addr>]... [--reply-to-address <addr>]... [--account EMAIL]");
         process.exit(1);
       }
 
@@ -179,10 +188,10 @@ async function main() {
           console.log(`Attaching: ${filename} (${content.length} bytes)`);
         }
 
-        const result = await gm.sendWithAttachment(to, subject, body, attachments, reply);
+        const result = await gm.sendWithAttachment(to, subject, body, attachments, reply, addr);
         console.log(`Email sent with ${attachments.length} attachment(s)! Message ID: ${result.id}`);
       } else {
-        const result = await gm.send(to, subject, body, reply);
+        const result = await gm.send(to, subject, body, reply, addr);
         console.log(`Email sent! Message ID: ${result.id}${reply ? ` (thread ${result.threadId})` : ""}`);
       }
       break;

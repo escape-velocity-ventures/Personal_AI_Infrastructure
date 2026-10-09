@@ -1,5 +1,14 @@
-import { gmail, forAccount, type ReplyOptions } from "../../lib/google-client";
+import { gmail, forAccount, type ReplyOptions, type AddressOptions } from "../../lib/google-client";
 import type { ToolDefinition } from "../types";
+
+// MCP clients don't all honour the array schema; accept one address as a plain
+// string too, and reject anything else rather than failing deep in the send.
+function addressArg(name: string, v: unknown): string[] | undefined {
+  if (v === undefined || v === null) return undefined;
+  if (typeof v === "string") return [v];
+  if (Array.isArray(v) && v.every((x) => typeof x === "string")) return v;
+  throw new Error(`${name} must be a string or an array of strings`);
+}
 
 const accountProperty = {
   account: {
@@ -66,6 +75,21 @@ export const gmailTools: ToolDefinition[] = [
         replyTo: {
           type: "string",
           description: "Gmail message ID to reply to; the email is threaded under it",
+        },
+        cc: {
+          type: "array",
+          items: { type: "string" },
+          description: "Cc recipients, one address per entry",
+        },
+        bcc: {
+          type: "array",
+          items: { type: "string" },
+          description: "Bcc recipients, one address per entry",
+        },
+        replyToAddress: {
+          type: "array",
+          items: { type: "string" },
+          description: "Reply-To header addresses, one per entry (where replies go; unrelated to replyTo, which threads)",
         },
         ...accountProperty,
       },
@@ -190,7 +214,12 @@ export async function handleGmailTool(
         throw new Error("subject is required unless replyTo is set");
       }
 
-      const result = await gm.send(to, subject, body, reply);
+      const addr: AddressOptions = {
+        cc: addressArg("cc", args.cc),
+        bcc: addressArg("bcc", args.bcc),
+        replyTo: addressArg("replyToAddress", args.replyToAddress),
+      };
+      const result = await gm.send(to, subject, body, reply, addr);
       return { success: true, messageId: result.id, threadId: result.threadId };
     }
 

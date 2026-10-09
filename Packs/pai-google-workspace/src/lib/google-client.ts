@@ -1,6 +1,6 @@
 import { getValidAccessToken } from "../auth/token-manager";
-import { encodeHeader, encodeBody, replyHeaders, replySubject, replyReferences, type ReplyOptions } from "./mime";
-export type { ReplyOptions } from "./mime";
+import { attachmentDisposition, encodeBody, messageHeaders, replySubject, replyReferences, type ReplyOptions, type AddressOptions } from "./mime";
+export type { ReplyOptions, AddressOptions } from "./mime";
 import { getMimeType } from "./mime-types";
 
 const RATE_LIMIT_WINDOW = 100 * 1000; // 100 seconds
@@ -127,11 +127,9 @@ function createGmailHelpers(account?: string) {
       });
     },
 
-    async send(to: string, subject: string, body: string, reply?: ReplyOptions) {
+    async send(to: string, subject: string, body: string, reply?: ReplyOptions, addr?: AddressOptions) {
       const email = [
-        `To: ${to}`,
-        `Subject: ${encodeHeader(subject)}`,
-        ...replyHeaders(reply),
+        ...messageHeaders(to, subject, addr, reply),
         "MIME-Version: 1.0",
         "Content-Type: text/plain; charset=utf-8",
         "Content-Transfer-Encoding: base64",
@@ -158,14 +156,13 @@ function createGmailHelpers(account?: string) {
       subject: string,
       body: string,
       attachments: { filename: string; content: Buffer }[],
-      reply?: ReplyOptions
+      reply?: ReplyOptions,
+      addr?: AddressOptions
     ) {
       const boundary = `boundary_${Date.now()}_${Math.random().toString(36).slice(2)}`;
 
       const parts: string[] = [
-        `To: ${to}`,
-        `Subject: ${encodeHeader(subject)}`,
-        ...replyHeaders(reply),
+        ...messageHeaders(to, subject, addr, reply),
         `MIME-Version: 1.0`,
         `Content-Type: multipart/mixed; boundary="${boundary}"`,
         "",
@@ -183,7 +180,7 @@ function createGmailHelpers(account?: string) {
         parts.push(
           `--${boundary}`,
           `Content-Type: ${mimeType}`,
-          `Content-Disposition: attachment; filename="${attachment.filename}"`,
+          attachmentDisposition(attachment.filename),
           "Content-Transfer-Encoding: base64",
           "",
           base64Content

@@ -2,6 +2,7 @@ import { getValidAccessToken } from "../auth/token-manager";
 import { encodeHeader, encodeBody, replyHeaders, replySubject, replyReferences, type ReplyOptions } from "./mime";
 export type { ReplyOptions } from "./mime";
 import { getMimeType } from "./mime-types";
+import { contentRequest, driveErrorMessage } from "./drive-content";
 
 const RATE_LIMIT_WINDOW = 100 * 1000; // 100 seconds
 const MAX_REQUESTS = 100;
@@ -371,16 +372,25 @@ function createDriveHelpers(account?: string) {
     },
 
     async readContent(fileId: string) {
+      // Google-native files (Docs, Sheets, Slides) can't be downloaded with
+      // alt=media; contentRequest() routes them to the export endpoint.
+      const meta = await googleApi<{ mimeType: string }>(`/drive/v3/files/${encodeURIComponent(fileId)}`, {
+        params: { fields: "mimeType" },
+        account,
+      });
+      const req = contentRequest(fileId, meta.mimeType);
+      if (req.kind === "unsupported") {
+        throw new Error(`Failed to read file: ${req.reason}`);
+      }
+
+      await waitForRateLimit();
       const accessToken = await getValidAccessToken(account);
-      const response = await fetch(
-        `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,
-        {
-          headers: { Authorization: `Bearer ${accessToken}` },
-        }
-      );
+      const response = await fetch(req.url, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
 
       if (!response.ok) {
-        throw new Error(`Failed to read file: ${response.status}`);
+        throw new Error(`Failed to read file: ${driveErrorMessage(response.status, await response.text())}`);
       }
 
       return response.text();

@@ -91,11 +91,14 @@ function getCloudflareAccessCreds(): CloudflareAccess | null {
   }
 
   // 4. Try cloudflared access token (off-network, browser OIDC)
-  // Uses cached JWT from prior `cloudflared access login`. If no cached token,
-  // user must run: cloudflared access login https://blog.escape-velocity-ventures.org
+  // Uses cached JWT from prior `cloudflared access login`. The Access
+  // application protects /ghost, not the site root: asking for the root's
+  // token fails with "failed to find Access application" even when logged in.
+  // If no cached token, the user must run:
+  //   cloudflared access login https://blog.escape-velocity-ventures.org/ghost
   try {
     const token = execSync(
-      `cloudflared access token "${GHOST_URL}"`,
+      `cloudflared access token -app="${GHOST_URL}/ghost"`,
       { encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"], timeout: 5000 }
     ).trim();
     if (token && token.includes(".")) {

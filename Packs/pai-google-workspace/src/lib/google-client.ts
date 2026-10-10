@@ -1,6 +1,8 @@
 import { getValidAccessToken } from "../auth/token-manager";
 import { attachmentDisposition, encodeBody, messageHeaders, replySubject, replyReferences, type ReplyOptions, type AddressOptions } from "./mime";
 export type { ReplyOptions, AddressOptions } from "./mime";
+import type { Filter } from "./filters";
+export type { Filter, FilterSpec } from "./filters";
 import { getMimeType } from "./mime-types";
 
 const RATE_LIMIT_WINDOW = 100 * 1000; // 100 seconds
@@ -230,6 +232,28 @@ function createGmailHelpers(account?: string) {
       }
       const result = await googleApi<LabelsResponse>("/gmail/v1/users/me/labels", { account });
       return result.labels;
+    },
+
+    // Filters (users.settings.filters). Creating or deleting one needs the
+    // gmail.settings.basic scope; listing works with gmail.modify too.
+    async listFilters(): Promise<Filter[]> {
+      const result = await googleApi<{ filter?: Filter[] }>("/gmail/v1/users/me/settings/filters", { account });
+      return result.filter ?? [];
+    },
+
+    async createFilter(filter: Filter): Promise<Filter> {
+      return googleApi<Filter>("/gmail/v1/users/me/settings/filters", {
+        method: "POST",
+        body: { criteria: filter.criteria, action: filter.action },
+        account,
+      });
+    },
+
+    async deleteFilter(id: string): Promise<void> {
+      await googleApi<unknown>(`/gmail/v1/users/me/settings/filters/${encodeURIComponent(id)}`, {
+        method: "DELETE",
+        account,
+      });
     },
   };
 }

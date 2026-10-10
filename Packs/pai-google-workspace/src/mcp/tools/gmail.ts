@@ -1,4 +1,5 @@
 import { gmail, forAccount, type ReplyOptions, type AddressOptions } from "../../lib/google-client";
+import { buildFilter, describeFilter, type FilterSpec } from "../../lib/filters";
 import type { ToolDefinition } from "../types";
 
 // MCP clients don't all honour the array schema; accept one address as a plain
@@ -94,6 +95,45 @@ export const gmailTools: ToolDefinition[] = [
         ...accountProperty,
       },
       required: ["to", "body"],
+    },
+  },
+  {
+    name: "gmail_filters_list",
+    description: "List Gmail filters, with label IDs shown as names",
+    inputSchema: { type: "object", properties: { ...accountProperty } },
+  },
+  {
+    name: "gmail_filter_create",
+    description:
+      "Create a Gmail filter. Needs at least one criterion and one action. Labels must already exist. Forwarding and trash are not supported. Set dryRun to preview without creating.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        from: { type: "string" },
+        to: { type: "string" },
+        subject: { type: "string" },
+        query: { type: "string", description: "Gmail search query, e.g. 'list:news.example.com'" },
+        negatedQuery: { type: "string" },
+        hasAttachment: { type: "boolean" },
+        labels: { type: "array", items: { type: "string" }, description: "Existing label NAMES to apply" },
+        archive: { type: "boolean", description: "Skip the inbox" },
+        markRead: { type: "boolean" },
+        star: { type: "boolean" },
+        important: { type: "boolean" },
+        neverImportant: { type: "boolean" },
+        neverSpam: { type: "boolean" },
+        dryRun: { type: "boolean", description: "Return the filter that would be created, without creating it" },
+        ...accountProperty,
+      },
+    },
+  },
+  {
+    name: "gmail_filter_delete",
+    description: "Delete a Gmail filter by ID",
+    inputSchema: {
+      type: "object",
+      properties: { filterId: { type: "string" }, ...accountProperty },
+      required: ["filterId"],
     },
   },
   {
@@ -221,6 +261,41 @@ export async function handleGmailTool(
       };
       const result = await gm.send(to, subject, body, reply, addr);
       return { success: true, messageId: result.id, threadId: result.threadId };
+    }
+
+    case "gmail_filters_list": {
+      const [filters, labels] = await Promise.all([gm.listFilters(), gm.listLabels()]);
+      return filters.map((f) => ({ id: f.id, summary: describeFilter(f, labels), criteria: f.criteria, action: f.action }));
+    }
+
+    case "gmail_filter_create": {
+      const spec: FilterSpec = {
+        from: args.from as string | undefined,
+        to: args.to as string | undefined,
+        subject: args.subject as string | undefined,
+        query: args.query as string | undefined,
+        negatedQuery: args.negatedQuery as string | undefined,
+        hasAttachment: args.hasAttachment === true,
+        labels: addressArg("labels", args.labels),
+        archive: args.archive === true,
+        markRead: args.markRead === true,
+        star: args.star === true,
+        important: args.important === true,
+        neverImportant: args.neverImportant === true,
+        neverSpam: args.neverSpam === true,
+      };
+      const labels = await gm.listLabels();
+      const filter = buildFilter(spec, labels); // throws with an actionable message
+      if (args.dryRun === true) return { dryRun: true, summary: describeFilter(filter, labels), filter };
+      const created = await gm.createFilter(filter);
+      return { success: true, id: created.id, summary: describeFilter(created, labels) };
+    }
+
+    case "gmail_filter_delete": {
+      const id = args.filterId as string;
+      if (!id) throw new Error("filterId is required");
+      await gm.deleteFilter(id);
+      return { success: true, deleted: id };
     }
 
     case "gmail_labels": {

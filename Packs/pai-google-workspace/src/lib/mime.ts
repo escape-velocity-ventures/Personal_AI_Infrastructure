@@ -72,9 +72,12 @@ export function messageHeaders(
   addr: AddressOptions = {},
   reply?: ReplyOptions
 ): string[] {
+  // Assert BEFORE trimming: trim() strips CR/LF at the edges, so trimming first
+  // would quietly clean "\r\nBcc: x" into an accepted value instead of refusing
+  // it the way To and Subject do.
   const list = (name: string, values: string[] = []) => {
-    const present = values.map((v) => v.trim()).filter(Boolean);
-    return present.length ? [`${name}: ${present.map((v) => assertHeaderSafe(name, v)).join(", ")}`] : [];
+    const present = values.map((v) => assertHeaderSafe(name, v).trim()).filter(Boolean);
+    return present.length ? [`${name}: ${present.join(", ")}`] : [];
   };
   return [
     `To: ${assertHeaderSafe("To", to)}`,

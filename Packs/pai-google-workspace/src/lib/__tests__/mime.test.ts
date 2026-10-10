@@ -135,6 +135,31 @@ describe("messageHeaders", () => {
   });
 });
 
+describe("messageHeaders: a line break anywhere in a list value is refused, not trimmed away", () => {
+  // Cybill's review of #19: trim() strips CR/LF at the edges, so trimming before
+  // asserting accepted "\r\nBcc: evil" as "Cc: Bcc: evil". Each position, each list.
+  const positions: Record<string, string> = {
+    leading: "\r\nBcc: evil@x.com",
+    trailing: "x@x.com\r\n",
+    "leading LF only": "\nBcc: evil@x.com",
+    "trailing CR only": "x@x.com\r",
+    middle: "x@x.com\r\nBcc: evil@x.com",
+  };
+  for (const [field, name] of [["cc", "Cc"], ["bcc", "Bcc"], ["replyTo", "Reply-To"]] as const) {
+    for (const [where, value] of Object.entries(positions)) {
+      test(`${name}: ${where}`, () => {
+        expect(() => messageHeaders("a@x.com", "S", { [field]: [value] })).toThrow(
+          `${name} must not contain a line break`
+        );
+      });
+    }
+  }
+
+  test("ordinary surrounding spaces are still trimmed", () => {
+    expect(messageHeaders("a@x.com", "S", { cc: ["  c@x.com  "] })).toContain("Cc: c@x.com");
+  });
+});
+
 describe("assertHeaderSafe", () => {
   test("returns the value unchanged when it has no line break", () => {
     expect(assertHeaderSafe("To", "Name <a@x.com>")).toBe("Name <a@x.com>");

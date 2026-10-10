@@ -1,6 +1,8 @@
 import { getValidAccessToken } from "../auth/token-manager";
-import { encodeHeader, encodeBody, replyHeaders, replySubject, replyReferences, type ReplyOptions } from "./mime";
-export type { ReplyOptions } from "./mime";
+import { attachmentDisposition, encodeBody, messageHeaders, type SendAs, replySubject, replyReferences, type ReplyOptions, type AddressOptions } from "./mime";
+export type { ReplyOptions, AddressOptions } from "./mime";
+import type { Filter } from "./filters";
+export type { Filter, FilterSpec } from "./filters";
 import { getMimeType } from "./mime-types";
 
 const RATE_LIMIT_WINDOW = 100 * 1000; // 100 seconds
@@ -127,11 +129,9 @@ function createGmailHelpers(account?: string) {
       });
     },
 
-    async send(to: string, subject: string, body: string, reply?: ReplyOptions) {
+    async send(to: string, subject: string, body: string, reply?: ReplyOptions, addr?: AddressOptions) {
       const email = [
-        `To: ${to}`,
-        `Subject: ${encodeHeader(subject)}`,
-        ...replyHeaders(reply),
+        ...messageHeaders(to, subject, addr, reply),
         "MIME-Version: 1.0",
         "Content-Type: text/plain; charset=utf-8",
         "Content-Transfer-Encoding: base64",
@@ -158,14 +158,13 @@ function createGmailHelpers(account?: string) {
       subject: string,
       body: string,
       attachments: { filename: string; content: Buffer }[],
-      reply?: ReplyOptions
+      reply?: ReplyOptions,
+      addr?: AddressOptions
     ) {
       const boundary = `boundary_${Date.now()}_${Math.random().toString(36).slice(2)}`;
 
       const parts: string[] = [
-        `To: ${to}`,
-        `Subject: ${encodeHeader(subject)}`,
-        ...replyHeaders(reply),
+        ...messageHeaders(to, subject, addr, reply),
         `MIME-Version: 1.0`,
         `Content-Type: multipart/mixed; boundary="${boundary}"`,
         "",
@@ -183,7 +182,7 @@ function createGmailHelpers(account?: string) {
         parts.push(
           `--${boundary}`,
           `Content-Type: ${mimeType}`,
-          `Content-Disposition: attachment; filename="${attachment.filename}"`,
+          attachmentDisposition(attachment.filename),
           "Content-Transfer-Encoding: base64",
           "",
           base64Content
@@ -233,6 +232,35 @@ function createGmailHelpers(account?: string) {
       }
       const result = await googleApi<LabelsResponse>("/gmail/v1/users/me/labels", { account });
       return result.labels;
+    },
+
+    // Send-as identities: the primary address plus any aliases. Readable with
+    // gmail.modify; used to validate a requested From before sending.
+    async listSendAs(): Promise<SendAs[]> {
+      const result = await googleApi<{ sendAs?: SendAs[] }>("/gmail/v1/users/me/settings/sendAs", { account });
+      return result.sendAs ?? [];
+    },
+
+    // Filters (users.settings.filters). Creating or deleting one needs the
+    // gmail.settings.basic scope; listing works with gmail.modify too.
+    async listFilters(): Promise<Filter[]> {
+      const result = await googleApi<{ filter?: Filter[] }>("/gmail/v1/users/me/settings/filters", { account });
+      return result.filter ?? [];
+    },
+
+    async createFilter(filter: Filter): Promise<Filter> {
+      return googleApi<Filter>("/gmail/v1/users/me/settings/filters", {
+        method: "POST",
+        body: { criteria: filter.criteria, action: filter.action },
+        account,
+      });
+    },
+
+    async deleteFilter(id: string): Promise<void> {
+      await googleApi<unknown>(`/gmail/v1/users/me/settings/filters/${encodeURIComponent(id)}`, {
+        method: "DELETE",
+        account,
+      });
     },
   };
 }

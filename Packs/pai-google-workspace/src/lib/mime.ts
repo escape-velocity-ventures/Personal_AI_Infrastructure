@@ -52,6 +52,10 @@ export function replyHeaders(reply?: ReplyOptions): string[] {
 // one address (optionally "Name <addr>"), used verbatim; they are not split on
 // commas, because a display name can contain one.
 export interface AddressOptions {
+  // Full From value, e.g. formatAddress(name, email). Unset means Gmail uses
+  // the account's default send-as. Must be a verified send-as of the account;
+  // resolveFrom() checks that before a send.
+  from?: string;
   cc?: string[];
   bcc?: string[];
   replyTo?: string[];
@@ -80,6 +84,7 @@ export function messageHeaders(
     return present.length ? [`${name}: ${present.join(", ")}`] : [];
   };
   return [
+    ...(addr.from ? [`From: ${assertHeaderSafe("From", addr.from)}`] : []),
     `To: ${assertHeaderSafe("To", to)}`,
     ...list("Cc", addr.cc),
     ...list("Bcc", addr.bcc),
@@ -87,6 +92,41 @@ export function messageHeaders(
     `Subject: ${encodeHeader(assertHeaderSafe("Subject", subject))}`,
     ...replyHeaders(reply),
   ];
+}
+
+// "Display Name <email>" for a header. ASCII names are quoted (a comma or
+// other special in a name would otherwise split the address); non-ASCII names
+// are RFC 2047 encoded. No name gives the bare address.
+export function formatAddress(name: string | undefined, email: string): string {
+  const addr = assertHeaderSafe("From", email).trim(); // assert first, then trim (see list())
+  const n = name === undefined ? "" : assertHeaderSafe("From", name).trim();
+  if (!n) return addr;
+  if (/^[\x20-\x7E]*$/.test(n)) return `"${n.replace(/["\\]/g, "\\$&")}" <${addr}>`;
+  return `${encodeHeader(n)} <${addr}>`;
+}
+
+export interface SendAs {
+  sendAsEmail: string;
+  displayName?: string;
+  isPrimary?: boolean;
+  isDefault?: boolean;
+  verificationStatus?: string; // "accepted" | "pending"; absent on the primary address
+}
+
+// Turn a requested From address into a header value, refusing anything that
+// isn't the account's primary address or a verified send-as alias. Gmail
+// would otherwise quietly rewrite From to the primary address, so the caller
+// would think it sent as X when it sent as Y.
+export function resolveFrom(requested: string, sendAs: SendAs[]): string {
+  const want = requested.trim().toLowerCase();
+  const match = sendAs.find((s) => s.sendAsEmail.toLowerCase() === want);
+  const usable = sendAs.filter((s) => s.isPrimary || s.verificationStatus === "accepted");
+  if (!match || !(match.isPrimary || match.verificationStatus === "accepted")) {
+    throw new Error(
+      `"${requested}" is not a verified send-as address for this account (usable: ${usable.map((s) => s.sendAsEmail).join(", ") || "none"})`
+    );
+  }
+  return formatAddress(match.displayName, match.sendAsEmail);
 }
 
 // Content-Disposition for an attachment. The filename is a header value too:

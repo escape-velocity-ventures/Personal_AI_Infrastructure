@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 import { gmail, forAccount, type ReplyOptions, type AddressOptions } from "../lib/google-client";
 import { buildFilter, describeFilter, type FilterSpec } from "../lib/filters";
+import { resolveFrom } from "../lib/mime";
 import { readFileSync, existsSync } from "fs";
 import { basename } from "path";
 
@@ -22,6 +23,8 @@ if (process.argv.includes("--help") || process.argv.includes("-h") || !command) 
   console.log("       [--attachment <file>]   Attach file (can repeat)");
   console.log("       [--reply-to <messageId>] Reply in that message's thread;");
   console.log("                                --subject defaults to \"Re: <original>\"");
+  console.log("       [--from <addr>]               Send as this address; must be a verified");
+  console.log("                                     send-as of the account (default: its default)");
   console.log("       [--cc <addr>] [--bcc <addr>]  Extra recipients (each can repeat)");
   console.log("       [--reply-to-address <addr>]   Reply-To header (can repeat); not the");
   console.log("                                     same as --reply-to, which threads");
@@ -171,7 +174,17 @@ async function main() {
       const body = parsed.body;
       const attachmentPaths = multiple.attachment || [];
       const replyToId = parsed["reply-to"];
+      let fromHeader: string | undefined;
+      if (parsed.from) {
+        try {
+          fromHeader = resolveFrom(parsed.from, await gm.listSendAs());
+        } catch (e) {
+          console.error(`send: ${(e as Error).message}`);
+          process.exit(1);
+        }
+      }
       const addr: AddressOptions = {
+        from: fromHeader,
         cc: multiple.cc,
         bcc: multiple.bcc,
         replyTo: multiple["reply-to-address"],

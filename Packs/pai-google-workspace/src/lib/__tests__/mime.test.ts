@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { assertHeaderSafe, attachmentDisposition, encodeBody, encodeHeader, messageHeaders, replyHeaders, replyReferences, replySubject } from "../mime";
+import { assertHeaderSafe, attachmentDisposition, encodeBody, encodeHeader, formatAddress, messageHeaders, replyHeaders, replyReferences, replySubject, resolveFrom } from "../mime";
 
 // Minimal RFC 2047 decoder for round-trip checks: drop folding whitespace
 // between encoded-words, decode each, concatenate.
@@ -179,5 +179,48 @@ describe("attachmentDisposition", () => {
   });
   test("a line break in the filename is refused", () => {
     expect(() => attachmentDisposition("x.pdf\r\nContent-Type: text/html")).toThrow("Attachment filename must not contain a line break");
+  });
+});
+
+describe("From", () => {
+  const sendAs = [
+    { sendAsEmail: "aurelia@x.com", displayName: "Escape Velocity Communications", isPrimary: true },
+    { sendAsEmail: "communications@x.com", displayName: "Escape Velocity Communications", isDefault: true, verificationStatus: "accepted" },
+    { sendAsEmail: "pending@x.com", displayName: "Pending", verificationStatus: "pending" },
+  ];
+
+  test("no From header unless one is asked for (Gmail then uses the default send-as)", () => {
+    expect(messageHeaders("a@x.com", "S")[0]).toBe("To: a@x.com");
+  });
+
+  test("From comes first when set", () => {
+    expect(messageHeaders("a@x.com", "S", { from: "communications@x.com" })[0]).toBe("From: communications@x.com");
+  });
+
+  test("resolveFrom uses Gmail's display name for a verified alias, case-insensitively", () => {
+    expect(resolveFrom("Communications@X.com", sendAs)).toBe('"Escape Velocity Communications" <communications@x.com>');
+  });
+
+  test("resolveFrom accepts the primary address, which has no verification status", () => {
+    expect(resolveFrom("aurelia@x.com", sendAs)).toBe('"Escape Velocity Communications" <aurelia@x.com>');
+  });
+
+  test("resolveFrom refuses an unknown address and a pending alias, listing the usable ones", () => {
+    expect(() => resolveFrom("someone@else.com", sendAs)).toThrow("not a verified send-as address");
+    expect(() => resolveFrom("someone@else.com", sendAs)).toThrow("usable: aurelia@x.com, communications@x.com");
+    expect(() => resolveFrom("pending@x.com", sendAs)).toThrow("not a verified send-as address");
+  });
+
+  test("formatAddress quotes ASCII names, escapes quotes, encodes non-ASCII, and handles no name", () => {
+    expect(formatAddress("Lee, Ben", "b@x.com")).toBe('"Lee, Ben" <b@x.com>');
+    expect(formatAddress('Say "hi"', "b@x.com")).toBe('"Say \\"hi\\"" <b@x.com>');
+    expect(formatAddress("Café Crème", "b@x.com")).toMatch(/^=\?UTF-8\?B\?.+\?= <b@x\.com>$/);
+    expect(formatAddress(undefined, " b@x.com ")).toBe("b@x.com");
+  });
+
+  test("a line break in the From name, address or header is refused", () => {
+    expect(() => formatAddress("Ben\r\nBcc: evil@x.com", "b@x.com")).toThrow("From must not contain a line break");
+    expect(() => formatAddress("Ben", "b@x.com\r\n")).toThrow("From must not contain a line break");
+    expect(() => messageHeaders("a@x.com", "S", { from: "\r\nBcc: evil@x.com" })).toThrow("From must not contain a line break");
   });
 });

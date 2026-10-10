@@ -1,5 +1,6 @@
 import { gmail, forAccount, type ReplyOptions, type AddressOptions } from "../../lib/google-client";
 import { buildFilter, describeFilter, type FilterSpec } from "../../lib/filters";
+import { resolveFrom } from "../../lib/mime";
 import type { ToolDefinition } from "../types";
 
 // MCP clients don't all honour the array schema; accept one address as a plain
@@ -76,6 +77,10 @@ export const gmailTools: ToolDefinition[] = [
         replyTo: {
           type: "string",
           description: "Gmail message ID to reply to; the email is threaded under it",
+        },
+        from: {
+          type: "string",
+          description: "Send as this address. Must be the account's primary address or a verified send-as alias; omit to use the account's default send-as",
         },
         cc: {
           type: "array",
@@ -254,7 +259,9 @@ export async function handleGmailTool(
         throw new Error("subject is required unless replyTo is set");
       }
 
+      const fromReq = args.from as string | undefined;
       const addr: AddressOptions = {
+        from: fromReq ? resolveFrom(fromReq, await gm.listSendAs()) : undefined,
         cc: addressArg("cc", args.cc),
         bcc: addressArg("bcc", args.bcc),
         replyTo: addressArg("replyToAddress", args.replyToAddress),

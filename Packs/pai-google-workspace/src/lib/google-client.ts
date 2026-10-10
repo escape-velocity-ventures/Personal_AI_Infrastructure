@@ -1,5 +1,5 @@
 import { getValidAccessToken } from "../auth/token-manager";
-import { attachmentDisposition, encodeBody, messageHeaders, replySubject, replyReferences, type ReplyOptions, type AddressOptions } from "./mime";
+import { attachmentDisposition, encodeBody, messageHeaders, type SendAs, replySubject, replyReferences, type ReplyOptions, type AddressOptions } from "./mime";
 export type { ReplyOptions, AddressOptions } from "./mime";
 import type { Filter } from "./filters";
 export type { Filter, FilterSpec } from "./filters";
@@ -232,6 +232,13 @@ function createGmailHelpers(account?: string) {
       }
       const result = await googleApi<LabelsResponse>("/gmail/v1/users/me/labels", { account });
       return result.labels;
+    },
+
+    // Send-as identities: the primary address plus any aliases. Readable with
+    // gmail.modify; used to validate a requested From before sending.
+    async listSendAs(): Promise<SendAs[]> {
+      const result = await googleApi<{ sendAs?: SendAs[] }>("/gmail/v1/users/me/settings/sendAs", { account });
+      return result.sendAs ?? [];
     },
 
     // Filters (users.settings.filters). Creating or deleting one needs the

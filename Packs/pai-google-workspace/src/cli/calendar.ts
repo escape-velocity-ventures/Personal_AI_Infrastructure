@@ -1,5 +1,8 @@
 #!/usr/bin/env bun
-import { calendar, forAccount } from "../lib/google-client";
+import { calendar, forAccount, type Notify } from "../lib/google-client";
+
+// Flags that take no value.
+const BOOLEAN_FLAGS = new Set(["meet"]);
 
 const command = process.argv[2];
 const args = process.argv.slice(3);
@@ -9,6 +12,10 @@ function parseArgs(args: string[]): Record<string, string> {
   for (let i = 0; i < args.length; i++) {
     if (args[i].startsWith("--")) {
       const key = args[i].slice(2);
+      if (BOOLEAN_FLAGS.has(key)) {
+        result[key] = "true";
+        continue;
+      }
       const value = args[i + 1] || "";
       result[key] = value;
       i++;
@@ -76,23 +83,43 @@ async function main() {
     }
 
     case "create": {
-      const { title, start, end, description, location } = parsed;
+      const { title, start, end, description, location, attendees, notify, timezone, calendar: calendarId } = parsed;
 
       if (!title || !start || !end) {
-        console.error("Usage: bun run calendar create --title <title> --start <iso8601> --end <iso8601> [--description <desc>] [--location <loc>] [--account EMAIL]");
+        console.error("Usage: bun run calendar create --title <title> --start <iso8601> --end <iso8601>");
+        console.error("         [--description <desc>] [--description-file <path>] [--location <loc>]");
+        console.error("         [--attendees <a@x.com,b@y.com> --notify all|externalOnly|none]");
+        console.error("         [--meet] [--timezone <IANA>] [--calendar <id>] [--account EMAIL]");
+        console.error("");
+        console.error("--notify is required with --attendees: 'all' emails them an invite from the account,");
+        console.error("so --notify all/externalOnly also requires --account.");
         console.error("");
         console.error("Example:");
-        console.error('  bun run calendar create --title "Team Meeting" --start "2024-01-15T10:00:00-08:00" --end "2024-01-15T11:00:00-08:00"');
+        console.error('  bun run calendar create --title "Team Meeting" --start "2024-01-15T10:00:00-08:00" --end "2024-01-15T11:00:00-08:00" \\');
+        console.error('    --attendees pat@example.com --notify all --meet');
         process.exit(1);
       }
 
+      const descriptionFile = parsed["description-file"];
       const event = await cal.createEvent(title, start, end, {
-        description,
+        description: descriptionFile ? await Bun.file(descriptionFile).text() : description,
         location,
+        attendees: attendees ? [attendees] : undefined,
+        notify: notify as Notify | undefined,
+        meet: parsed.meet === "true",
+        timeZone: timezone,
+        calendarId,
       });
 
       console.log("Event created!");
-      console.log(JSON.stringify(event, null, 2));
+      console.log(`  ID: ${event.id}`);
+      console.log(`  Start: ${event.start.dateTime || event.start.date}`);
+      console.log(`  End: ${event.end.dateTime || event.end.date}`);
+      if (event.attendees?.length) {
+        console.log(`  Guests: ${event.attendees.map((a) => a.email).join(", ")} (invite email: ${notify})`);
+      }
+      if (event.hangoutLink) console.log(`  Meet: ${event.hangoutLink}`);
+      if (event.htmlLink) console.log(`  Link: ${event.htmlLink}`);
       break;
     }
 
@@ -119,7 +146,7 @@ async function main() {
       console.log("Commands:");
       console.log("  list [--days N] [--calendar ID]  List upcoming events");
       console.log("  get <eventId>                    Get event details");
-      console.log("  create --title --start --end     Create an event");
+      console.log("  create --title --start --end     Create an event (--attendees, --notify, --meet, --timezone)");
       console.log("  freebusy --start --end           Check availability");
       break;
   }

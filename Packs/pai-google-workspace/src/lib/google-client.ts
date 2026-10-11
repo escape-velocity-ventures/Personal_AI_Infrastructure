@@ -3,6 +3,18 @@ import { attachmentDisposition, encodeBody, messageHeaders, type SendAs, replySu
 export type { ReplyOptions, AddressOptions } from "./mime";
 import type { Filter } from "./filters";
 export type { Filter, FilterSpec } from "./filters";
+import { buildEventRequest, requireSender, type EventSpec } from "./calendar-event";
+export type { EventSpec, Notify } from "./calendar-event";
+
+// The fields of a created event that callers report back.
+export interface CreatedEvent {
+  id: string;
+  htmlLink?: string;
+  hangoutLink?: string;
+  start: { dateTime?: string; date?: string; timeZone?: string };
+  end: { dateTime?: string; date?: string; timeZone?: string };
+  attendees?: { email: string; responseStatus?: string }[];
+}
 import { getMimeType } from "./mime-types";
 
 const RATE_LIMIT_WINDOW = 100 * 1000; // 100 seconds
@@ -308,18 +320,15 @@ function createCalendarHelpers(account?: string) {
       summary: string,
       start: string,
       end: string,
-      options: { description?: string; location?: string; calendarId?: string } = {}
+      options: Omit<EventSpec, "summary" | "start" | "end"> & { calendarId?: string } = {}
     ) {
-      const calendarId = options.calendarId || "primary";
-      return googleApi(`/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events`, {
+      const { calendarId = "primary", ...rest } = options;
+      requireSender(rest.notify, account);
+      const { body, params } = buildEventRequest({ summary, start, end, ...rest });
+      return googleApi<CreatedEvent>(`/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events`, {
         method: "POST",
-        body: {
-          summary,
-          start: { dateTime: start },
-          end: { dateTime: end },
-          description: options.description,
-          location: options.location,
-        },
+        body,
+        params,
         account,
       });
     },

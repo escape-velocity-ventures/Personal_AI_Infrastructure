@@ -1,4 +1,4 @@
-import { calendar, forAccount } from "../../lib/google-client";
+import { calendar, forAccount, type Notify } from "../../lib/google-client";
 import type { ToolDefinition } from "../types";
 
 const accountProperty = {
@@ -48,7 +48,8 @@ export const calendarTools: ToolDefinition[] = [
   },
   {
     name: "calendar_create",
-    description: "Create a new calendar event",
+    description:
+      "Create a new calendar event, optionally with guests and a Google Meet link. Inviting guests with notify 'all' emails them from the account's address, so it is outbound contact.",
     inputSchema: {
       type: "object",
       properties: {
@@ -71,6 +72,25 @@ export const calendarTools: ToolDefinition[] = [
         location: {
           type: "string",
           description: "Event location (optional)",
+        },
+        attendees: {
+          type: "array",
+          items: { type: "string" },
+          description: "Guest email addresses (optional)",
+        },
+        notify: {
+          type: "string",
+          enum: ["all", "externalOnly", "none"],
+          description:
+            "Whether guests get an invite email. Required when attendees are given; there is no default. 'all' or 'externalOnly' also require account.",
+        },
+        meet: {
+          type: "boolean",
+          description: "Add a Google Meet link (optional)",
+        },
+        timeZone: {
+          type: "string",
+          description: "IANA time zone, e.g. 'America/Los_Angeles'. Needed if start/end have no UTC offset.",
         },
         calendarId: {
           type: "string",
@@ -152,6 +172,10 @@ export async function handleCalendarTool(
       const event = await cal.createEvent(summary, start, end, {
         description,
         location,
+        attendees: args.attendees as string[] | undefined,
+        notify: args.notify as Notify | undefined,
+        meet: args.meet as boolean | undefined,
+        timeZone: args.timeZone as string | undefined,
         calendarId,
       });
 

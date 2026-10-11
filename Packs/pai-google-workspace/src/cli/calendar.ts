@@ -91,7 +91,8 @@ async function main() {
         console.error("         [--attendees <a@x.com,b@y.com> --notify all|externalOnly|none]");
         console.error("         [--meet] [--timezone <IANA>] [--calendar <id>] [--account EMAIL]");
         console.error("");
-        console.error("--notify is required with --attendees: 'all' emails them an invite from the account.");
+        console.error("--notify is required with --attendees: 'all' emails them an invite from the account,");
+        console.error("so --notify all/externalOnly also requires --account.");
         console.error("");
         console.error("Example:");
         console.error('  bun run calendar create --title "Team Meeting" --start "2024-01-15T10:00:00-08:00" --end "2024-01-15T11:00:00-08:00" \\');

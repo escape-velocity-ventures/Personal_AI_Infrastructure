@@ -81,7 +81,8 @@ export const calendarTools: ToolDefinition[] = [
         notify: {
           type: "string",
           enum: ["all", "externalOnly", "none"],
-          description: "Whether guests get an invite email. Required when attendees are given; there is no default.",
+          description:
+            "Whether guests get an invite email. Required when attendees are given; there is no default. 'all' or 'externalOnly' also require account.",
         },
         meet: {
           type: "boolean",

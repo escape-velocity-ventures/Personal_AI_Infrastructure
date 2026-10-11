@@ -3,7 +3,7 @@ import { attachmentDisposition, encodeBody, messageHeaders, type SendAs, replySu
 export type { ReplyOptions, AddressOptions } from "./mime";
 import type { Filter } from "./filters";
 export type { Filter, FilterSpec } from "./filters";
-import { buildEventRequest, type EventSpec } from "./calendar-event";
+import { buildEventRequest, requireSender, type EventSpec } from "./calendar-event";
 export type { EventSpec, Notify } from "./calendar-event";
 
 // The fields of a created event that callers report back.
@@ -323,6 +323,7 @@ function createCalendarHelpers(account?: string) {
       options: Omit<EventSpec, "summary" | "start" | "end"> & { calendarId?: string } = {}
     ) {
       const { calendarId = "primary", ...rest } = options;
+      requireSender(rest.notify, account);
       const { body, params } = buildEventRequest({ summary, start, end, ...rest });
       return googleApi<CreatedEvent>(`/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events`, {
         method: "POST",

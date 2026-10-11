@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { buildEventRequest, parseAttendees } from "../calendar-event";
+import { buildEventRequest, parseAttendees, requireSender } from "../calendar-event";
 
 const base = { summary: "Check-in", start: "2026-10-11T11:00:00-07:00", end: "2026-10-11T12:00:00-07:00" };
 
@@ -90,5 +90,22 @@ describe("buildEventRequest", () => {
 
   test("a blank title is refused", () => {
     expect(() => buildEventRequest({ ...base, summary: "  " })).toThrow("needs a title");
+  });
+});
+
+describe("requireSender", () => {
+  test("an invite that emails guests must name the sending account", () => {
+    expect(() => requireSender("all", undefined)).toThrow("name it");
+    expect(() => requireSender("externalOnly", "  ")).toThrow("name it");
+  });
+
+  test("a named account is accepted", () => {
+    expect(() => requireSender("all", "ben@example.com")).not.toThrow();
+    expect(() => requireSender("externalOnly", "ben@example.com")).not.toThrow();
+  });
+
+  test("nothing is emailed with notify none or no notify, so the default account is fine", () => {
+    expect(() => requireSender("none", undefined)).not.toThrow();
+    expect(() => requireSender(undefined, undefined)).not.toThrow();
   });
 });

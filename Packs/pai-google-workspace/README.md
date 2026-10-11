@@ -70,7 +70,7 @@ bun run calendar create --title "Check-in" \
   --attendees pat@example.com,sam@example.com --notify all --meet
 ```
 
-`--notify` is required whenever `--attendees` is given, and has no default. `all` emails each guest an invite from the account's address, so it is outbound contact; `none` adds them without an email. Times need a UTC offset, or pass `--timezone America/Los_Angeles` with local times.
+`--notify` is required whenever `--attendees` is given, and has no default. `all` emails each guest an invite from the account's address, so it is outbound contact and also requires `--account`, so the sender is never just the default account; `none` adds them without an email. Times need a UTC offset, or pass `--timezone America/Los_Angeles` with local times.
 
 ## OAuth Scopes
 

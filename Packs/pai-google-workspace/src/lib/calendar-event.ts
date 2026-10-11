@@ -4,7 +4,9 @@
 // Inviting someone is outbound contact: with sendUpdates=all Google emails them
 // from the calendar owner's address. So when there are guests, the caller has to
 // say whether they get an email (notify). There is no default, on purpose: an
-// agent should decide that, not inherit it.
+// agent should decide that, not inherit it. For the same reason, an invite that
+// emails anyone must name the sending account rather than fall back to the
+// default one (requireSender).
 
 export type Notify = "all" | "externalOnly" | "none";
 const NOTIFY: Notify[] = ["all", "externalOnly", "none"];
@@ -46,6 +48,15 @@ export function parseAttendees(input: string | string[] | undefined): string[] {
     out.push(email);
   }
   return out;
+}
+
+// An invite email goes out from the calendar owner's address, so whose address
+// that is must be explicit, not whichever account happens to be the default.
+// notify "none" sends nothing, so it may use the default account.
+export function requireSender(notify: Notify | undefined, account: string | undefined): void {
+  if ((notify === "all" || notify === "externalOnly") && !account?.trim()) {
+    throw new Error(`notify ${notify} emails guests from the calendar's account, so name it: pass account (--account EMAIL)`);
+  }
 }
 
 export function buildEventRequest(spec: EventSpec): EventRequest {

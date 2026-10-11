@@ -55,11 +55,22 @@ Values are never printed. If the client is missing, the error lists the files th
 | `gmail_read` | Read message content |
 | `gmail_send` | Send email |
 | `calendar_list` | List upcoming events |
-| `calendar_create` | Create event |
+| `calendar_create` | Create event, optionally with guests (`attendees` + `notify`) and a Meet link (`meet`) |
 | `calendar_freebusy` | Check availability |
 | `drive_list` | List files |
 | `drive_search` | Search files |
 | `drive_read` | Read file content |
+
+## Calendar invites
+
+```bash
+bun run calendar create --title "Check-in" \
+  --start 2026-10-11T11:00:00-07:00 --end 2026-10-11T12:00:00-07:00 \
+  --description-file agenda.txt \
+  --attendees pat@example.com,sam@example.com --notify all --meet
+```
+
+`--notify` is required whenever `--attendees` is given, and has no default. `all` emails each guest an invite from the account's address, so it is outbound contact; `none` adds them without an email. Times need a UTC offset, or pass `--timezone America/Los_Angeles` with local times.
 
 ## OAuth Scopes
 

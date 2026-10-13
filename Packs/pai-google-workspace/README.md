@@ -61,6 +61,10 @@ Values are never printed. If the client is missing, the error lists the files th
 | `drive_search` | Search files |
 | `drive_read` | Read file content |
 
+## Flags
+
+Address flags take their values whichever way you write them: repeated (`--to a@x.com --to b@y.com`) or as one comma list (`--to "a@x.com, b@y.com"`). They are `--to`, `--cc`, `--bcc` and `--reply-to-address` for gmail, and `--attendees` for calendar. `--attachment` and `--label` can repeat too, one value each. Any other flag given twice is an error, rather than quietly keeping the last value. MCP `gmail_send` takes `to` as a string, a comma list, or an array.
+
 ## Calendar invites
 
 ```bash

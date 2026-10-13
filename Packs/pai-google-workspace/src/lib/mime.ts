@@ -70,8 +70,11 @@ export function assertHeaderSafe(name: string, value: string): string {
 
 // Every header ahead of the MIME ones, in one place so send paths can't drift:
 // To, Cc, Bcc, Reply-To, Subject, then threading. Empty lists add no header.
+// `to` is one value or a list, like Cc: each entry is used verbatim (a comma
+// list in one entry is already valid header syntax), and at least one is
+// required.
 export function messageHeaders(
-  to: string,
+  to: string | string[],
   subject: string,
   addr: AddressOptions = {},
   reply?: ReplyOptions
@@ -83,9 +86,14 @@ export function messageHeaders(
     const present = values.map((v) => assertHeaderSafe(name, v).trim()).filter(Boolean);
     return present.length ? [`${name}: ${present.join(", ")}`] : [];
   };
+  const requiredList = (name: string, value: string | string[]) => {
+    const header = list(name, Array.isArray(value) ? value : [value]);
+    if (!header.length) throw new Error(`${name} needs at least one address`);
+    return header;
+  };
   return [
     ...(addr.from ? [`From: ${assertHeaderSafe("From", addr.from)}`] : []),
-    `To: ${assertHeaderSafe("To", to)}`,
+    ...requiredList("To", to),
     ...list("Cc", addr.cc),
     ...list("Bcc", addr.bcc),
     ...list("Reply-To", addr.replyTo),

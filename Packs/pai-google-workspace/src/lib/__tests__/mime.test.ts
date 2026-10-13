@@ -224,3 +224,30 @@ describe("From", () => {
     expect(() => messageHeaders("a@x.com", "S", { from: "\r\nBcc: evil@x.com" })).toThrow("From must not contain a line break");
   });
 });
+
+describe("messageHeaders: To takes a list, like Cc", () => {
+  // A repeated --to once kept only the last address and sent to one of two
+  // recipients with no error. To now accepts every form a caller would guess.
+  test("an array becomes one To header listing every address", () => {
+    expect(messageHeaders(["a@x.com", "b@y.com"], "S")[0]).toBe("To: a@x.com, b@y.com");
+  });
+
+  test("a comma list in one string passes through verbatim", () => {
+    expect(messageHeaders("a@x.com, b@y.com", "S")[0]).toBe("To: a@x.com, b@y.com");
+  });
+
+  test("a display name containing a comma is not split", () => {
+    expect(messageHeaders(['"Lee, Ben" <b@x.com>', "a@x.com"], "S")[0]).toBe('To: "Lee, Ben" <b@x.com>, a@x.com');
+  });
+
+  test("blank entries are dropped; no address at all is refused", () => {
+    expect(messageHeaders(["a@x.com", " ", ""], "S")[0]).toBe("To: a@x.com");
+    expect(() => messageHeaders([], "S")).toThrow("To needs at least one address");
+    expect(() => messageHeaders("  ", "S")).toThrow("To needs at least one address");
+  });
+
+  test("a line break in any To entry is refused, not trimmed away", () => {
+    expect(() => messageHeaders(["a@x.com", "\r\nBcc: evil@x.com"], "S")).toThrow("To must not contain a line break");
+    expect(() => messageHeaders(["a@x.com\r\n"], "S")).toThrow("To must not contain a line break");
+  });
+});

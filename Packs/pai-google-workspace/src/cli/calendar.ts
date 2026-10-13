@@ -1,28 +1,16 @@
 #!/usr/bin/env bun
 import { calendar, forAccount, type Notify } from "../lib/google-client";
+import { parseArgs } from "../lib/args";
 
 // Flags that take no value.
-const BOOLEAN_FLAGS = new Set(["meet"]);
+const BOOLEAN_FLAGS = ["meet"];
+// Flags that can repeat: `--attendees a --attendees b` invites both, the same
+// as `--attendees a,b`. Any other flag given twice is refused.
+const MULTI_FLAGS = ["attendees"];
 
 const command = process.argv[2];
 const args = process.argv.slice(3);
 
-function parseArgs(args: string[]): Record<string, string> {
-  const result: Record<string, string> = {};
-  for (let i = 0; i < args.length; i++) {
-    if (args[i].startsWith("--")) {
-      const key = args[i].slice(2);
-      if (BOOLEAN_FLAGS.has(key)) {
-        result[key] = "true";
-        continue;
-      }
-      const value = args[i + 1] || "";
-      result[key] = value;
-      i++;
-    }
-  }
-  return result;
-}
 
 function formatDate(dateStr: string | undefined): string {
   if (!dateStr) return "N/A";
@@ -35,7 +23,14 @@ function getCalendarClient(account?: string) {
 }
 
 async function main() {
-  const parsed = parseArgs(args);
+  let parsedArgs;
+  try {
+    parsedArgs = parseArgs(args, { booleans: BOOLEAN_FLAGS, multi: MULTI_FLAGS });
+  } catch (e) {
+    console.error((e as Error).message);
+    process.exit(1);
+  }
+  const { single: parsed, multiple } = parsedArgs;
   const account = parsed.account;
   const cal = getCalendarClient(account);
 
@@ -83,12 +78,13 @@ async function main() {
     }
 
     case "create": {
-      const { title, start, end, description, location, attendees, notify, timezone, calendar: calendarId } = parsed;
+      const { title, start, end, description, location, notify, timezone, calendar: calendarId } = parsed;
+      const attendees = multiple.attendees;
 
       if (!title || !start || !end) {
         console.error("Usage: bun run calendar create --title <title> --start <iso8601> --end <iso8601>");
         console.error("         [--description <desc>] [--description-file <path>] [--location <loc>]");
-        console.error("         [--attendees <a@x.com,b@y.com> --notify all|externalOnly|none]");
+        console.error("         [--attendees <a@x.com,b@y.com>]... [--notify all|externalOnly|none]");
         console.error("         [--meet] [--timezone <IANA>] [--calendar <id>] [--account EMAIL]");
         console.error("");
         console.error("--notify is required with --attendees: 'all' emails them an invite from the account,");
@@ -104,7 +100,7 @@ async function main() {
       const event = await cal.createEvent(title, start, end, {
         description: descriptionFile ? await Bun.file(descriptionFile).text() : description,
         location,
-        attendees: attendees ? [attendees] : undefined,
+        attendees,
         notify: notify as Notify | undefined,
         meet: parsed.meet === "true",
         timeZone: timezone,

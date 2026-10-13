@@ -61,8 +61,8 @@ export const gmailTools: ToolDefinition[] = [
       type: "object",
       properties: {
         to: {
-          type: "string",
-          description: "Recipient email address",
+          anyOf: [{ type: "string" }, { type: "array", items: { type: "string" } }],
+          description: "Recipients: one address, a comma-separated list, or an array (one address per entry)",
         },
         subject: {
           type: "string",
@@ -244,7 +244,7 @@ export async function handleGmailTool(
     }
 
     case "gmail_send": {
-      const to = args.to as string;
+      const to = addressArg("to", args.to) ?? [];
       let subject = args.subject as string | undefined;
       const body = args.body as string;
       const replyToId = args.replyTo as string | undefined;

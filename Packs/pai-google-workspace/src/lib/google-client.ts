@@ -141,7 +141,7 @@ function createGmailHelpers(account?: string) {
       });
     },
 
-    async send(to: string, subject: string, body: string, reply?: ReplyOptions, addr?: AddressOptions) {
+    async send(to: string | string[], subject: string, body: string, reply?: ReplyOptions, addr?: AddressOptions) {
       const email = [
         ...messageHeaders(to, subject, addr, reply),
         "MIME-Version: 1.0",
@@ -166,7 +166,7 @@ function createGmailHelpers(account?: string) {
     },
 
     async sendWithAttachment(
-      to: string,
+      to: string | string[],
       subject: string,
       body: string,
       attachments: { filename: string; content: Buffer }[],

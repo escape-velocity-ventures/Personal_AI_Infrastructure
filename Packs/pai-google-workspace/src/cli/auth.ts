@@ -9,25 +9,20 @@ import {
   getDefaultAccount,
 } from "../auth/token-manager";
 import { getOAuthClient, missingClientMessage } from "../lib/config";
+import { parseArgs } from "../lib/args";
 
 const command = process.argv[2];
 const args = process.argv.slice(3);
 
-function parseArgs(args: string[]): Record<string, string> {
-  const result: Record<string, string> = {};
-  for (let i = 0; i < args.length; i++) {
-    if (args[i].startsWith("--")) {
-      const key = args[i].slice(2);
-      const value = args[i + 1] || "";
-      result[key] = value;
-      i++;
-    }
-  }
-  return result;
-}
 
 async function main() {
-  const parsed = parseArgs(args);
+  let parsed: Record<string, string>;
+  try {
+    parsed = parseArgs(args).single;
+  } catch (e) {
+    console.error((e as Error).message);
+    process.exit(1);
+  }
 
   switch (command) {
     case "login": {

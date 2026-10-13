@@ -2,6 +2,7 @@
 import { gmail, forAccount, type ReplyOptions, type AddressOptions } from "../lib/google-client";
 import { buildFilter, describeFilter, type FilterSpec } from "../lib/filters";
 import { resolveFrom } from "../lib/mime";
+import { parseArgs } from "../lib/args";
 import { readFileSync, existsSync } from "fs";
 import { basename } from "path";
 
@@ -19,7 +20,7 @@ if (process.argv.includes("--help") || process.argv.includes("-h") || !command) 
   console.log("Commands:");
   console.log("  search <query> [--max N]     Search messages");
   console.log("  read <messageId>             Read a message");
-  console.log("  send --to --subject --body   Send an email");
+  console.log("  send --to --subject --body   Send an email (--to can repeat, or take a comma list)");
   console.log("       [--attachment <file>]   Attach file (can repeat)");
   console.log("       [--reply-to <messageId>] Reply in that message's thread;");
   console.log("                                --subject defaults to \"Re: <original>\"");
@@ -46,47 +47,15 @@ if (process.argv.includes("--help") || process.argv.includes("-h") || !command) 
   process.exit(0);
 }
 
-interface ParsedArgs {
-  single: Record<string, string>;
-  multiple: Record<string, string[]>;
-}
-
-const BOOLEAN_FLAGS = new Set([
+// Flags that take no value.
+const BOOLEAN_FLAGS = [
   "help", "h",
   // filter-create actions and options
   "archive", "mark-read", "star", "important", "never-important", "never-spam", "has-attachment", "dry-run",
-]);
-const MULTI_FLAGS = new Set(["attachment", "cc", "bcc", "reply-to-address", "label"]);
-
-function parseArgs(args: string[]): ParsedArgs {
-  const single: Record<string, string> = {};
-  const multiple: Record<string, string[]> = {};
-
-  for (let i = 0; i < args.length; i++) {
-    if (args[i].startsWith("--")) {
-      const key = args[i].slice(2);
-
-      // Boolean flags: record as "true" without consuming the next arg
-      if (BOOLEAN_FLAGS.has(key)) {
-        single[key] = "true";
-        continue;
-      }
-
-      const value = args[i + 1] || "";
-
-      // Keys that support multiple values
-      if (MULTI_FLAGS.has(key)) {
-        if (!multiple[key]) multiple[key] = [];
-        multiple[key].push(value);
-      } else {
-        single[key] = value;
-      }
-      i++;
-    }
-  }
-
-  return { single, multiple };
-}
+];
+// Flags that can repeat. --to is one: `--to a --to b` sends to both, the same
+// as --cc. Any other flag given twice is refused rather than last-one-wins.
+const MULTI_FLAGS = ["to", "attachment", "cc", "bcc", "reply-to-address", "label"];
 
 function decodeBase64(data: string): string {
   return Buffer.from(data, "base64url").toString("utf-8");
@@ -97,7 +66,14 @@ function getGmailClient(account?: string) {
 }
 
 async function main() {
-  const { single: parsed, multiple } = parseArgs(args);
+  let parsedArgs;
+  try {
+    parsedArgs = parseArgs(args, { booleans: BOOLEAN_FLAGS, multi: MULTI_FLAGS });
+  } catch (e) {
+    console.error((e as Error).message);
+    process.exit(1);
+  }
+  const { single: parsed, multiple } = parsedArgs;
   const account = parsed.account;
   const gm = getGmailClient(account);
 
@@ -169,7 +145,7 @@ async function main() {
     }
 
     case "send": {
-      const to = parsed.to;
+      const to = (multiple.to || []).map((t) => t.trim()).filter(Boolean);
       let subject = parsed.subject;
       const body = parsed.body;
       const attachmentPaths = multiple.attachment || [];
@@ -197,8 +173,8 @@ async function main() {
         subject = subject || resolved.subject;
       }
 
-      if (!to || !subject || !body) {
-        console.error("Usage: bun run gmail send --to <email> (--subject <subject> | --reply-to <messageId>) --body <body> [--attachment <file>]... [--cc <addr>]... [--bcc <addr>]... [--reply-to-address <addr>]... [--account EMAIL]");
+      if (!to.length || !subject || !body) {
+        console.error("Usage: bun run gmail send --to <email>... (--subject <subject> | --reply-to <messageId>) --body <body> [--attachment <file>]... [--cc <addr>]... [--bcc <addr>]... [--reply-to-address <addr>]... [--account EMAIL]");
         process.exit(1);
       }
 
@@ -237,9 +213,13 @@ async function main() {
     }
 
     case "filter-create": {
+      if ((multiple.to?.length ?? 0) > 1) {
+        console.error("filter-create: give one --to (a filter matches a single recipient criterion)");
+        process.exit(1);
+      }
       const spec: FilterSpec = {
         from: parsed.from,
-        to: parsed.to,
+        to: multiple.to?.[0],
         subject: parsed.subject,
         query: parsed.query,
         negatedQuery: parsed["negated-query"],

@@ -1,21 +1,10 @@
 #!/usr/bin/env bun
 import { drive, docs, forAccount } from "../lib/google-client";
+import { parseArgs } from "../lib/args";
 
 const command = process.argv[2];
 const args = process.argv.slice(3);
 
-function parseArgs(args: string[]): Record<string, string> {
-  const result: Record<string, string> = {};
-  for (let i = 0; i < args.length; i++) {
-    if (args[i].startsWith("--")) {
-      const key = args[i].slice(2);
-      const value = args[i + 1] || "";
-      result[key] = value;
-      i++;
-    }
-  }
-  return result;
-}
 
 function formatSize(bytes: string | undefined): string {
   if (!bytes) return "-";
@@ -49,7 +38,13 @@ function getDocsClient(account?: string) {
 }
 
 async function main() {
-  const parsed = parseArgs(args);
+  let parsed: Record<string, string>;
+  try {
+    parsed = parseArgs(args).single;
+  } catch (e) {
+    console.error((e as Error).message);
+    process.exit(1);
+  }
   const account = parsed.account;
   const drv = getDriveClient(account);
 

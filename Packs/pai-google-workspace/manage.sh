@@ -8,6 +8,13 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # `export $(... | xargs)` loader broke on values with spaces and let EMPTY
 # values in $PAI_DIR/.env override real ones (pai-config-81cn), so it was removed.
 
+# Deprecated in favour of TinkerBelle's tb-google (TinkerBelle-12uu.5). The notice
+# goes to stderr so stdout, which callers parse, is unchanged. `mcp` is exempt: it
+# has no replacement yet (TinkerBelle-12uu.4).
+if [ "$1" != "mcp" ]; then
+  echo "DEPRECATED: pai-google-workspace is replaced by TinkerBelle's tb-google. Run: tb-google ${1:-<service>} ... (same flags). See README.md." >&2
+fi
+
 case "$1" in
   auth)
     echo "Starting Google OAuth flow..."

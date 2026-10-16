@@ -4,6 +4,14 @@ version: 1.0.0
 dependencies: [pai-core-install]
 ---
 
+> **DEPRECATED (2026-10-16). Use `tb-google` from TinkerBelle (`cli/google`) instead.**
+> Every command here has a `tb-google` equivalent with the same flags:
+> `manage.sh gmail|calendar|drive ...` becomes `tb-google gmail|calendar|drive ...`
+> (`tb-google --help` lists them; it also adds `docs`, `sheets` and `meet`, and
+> calendar `update`, `delete` and all-day events, which this pack lacks).
+> The one exception is the MCP server (`manage.sh mcp`), still being ported (TinkerBelle-12uu.4).
+> Cutover and removal of this pack: TinkerBelle-12uu.5. Don't add features here.
+
 # PAI Google Workspace Integration
 
 Full Gmail, Calendar, and Drive integration for PAI via MCP server.
